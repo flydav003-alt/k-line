@@ -20,8 +20,10 @@
   --gold2:    #f5d07a;
   --cyan:     #29c5c5;
   --blue:     #4a9eff;
-  --red:      #ff4d6d;
-  --green:    #00c896;
+  --red:      #ff4d6d;   /* 警告/錯誤語義（保留） */
+  --green:    #00c896;   /* 成功/健康語義（保留） */
+  --up:       #ff4d6d;   /* 台股漲 = 紅 */
+  --dn:       #00c896;   /* 台股跌 = 綠 */
   --text:     #d4dff0;
   --muted:    #4a6080;
   --muted2:   #6a85a8;
@@ -186,8 +188,8 @@ header{
   font-family:var(--mono);font-size:.82rem;
   padding:3px 9px;border-radius:4px;
 }
-.price-chg.up{background:rgba(0,200,150,.12);color:var(--green);}
-.price-chg.dn{background:rgba(255,77,109,.12);color:var(--red);}
+.price-chg.up{background:rgba(255,77,109,.12);color:var(--up);}
+.price-chg.dn{background:rgba(0,200,150,.12);color:var(--dn);}
 .meta-pill{font-size:.75rem;color:var(--muted2);}
 .meta-pill b{color:var(--text);font-weight:500;}
 
@@ -333,16 +335,16 @@ header{
   background:var(--s2);
 }
 .sig:last-child{margin-bottom:0;}
-.sig.bull{border-left-color:var(--green);}
-.sig.bear{border-left-color:var(--red);}
+.sig.bull{border-left-color:var(--up);}
+.sig.bear{border-left-color:var(--dn);}
 .sig.neutral{border-left-color:var(--muted);}
 .sig-tag{
   display:inline-block;font-size:.62rem;padding:1px 6px;
   border-radius:3px;margin-right:6px;font-weight:700;
   vertical-align:middle;font-family:var(--mono);
 }
-.sig.bull  .sig-tag{background:rgba(0,200,150,.18);color:var(--green);}
-.sig.bear  .sig-tag{background:rgba(255,77,109,.18);color:var(--red);}
+.sig.bull  .sig-tag{background:rgba(255,77,109,.18);color:var(--up);}
+.sig.bear  .sig-tag{background:rgba(0,200,150,.18);color:var(--dn);}
 .sig.neutral .sig-tag{background:rgba(74,96,128,.25);color:var(--muted2);}
 
 /* CHIP SCORE TABLE */
@@ -351,8 +353,8 @@ header{
 .chip-table tr:last-child td{border-bottom:none;}
 .chip-table .ck{color:var(--muted2);}
 .chip-table .cv{font-family:var(--mono);text-align:right;}
-.chip-table .cv.pos{color:var(--green);}
-.chip-table .cv.neg{color:var(--red);}
+.chip-table .cv.pos{color:var(--up);}
+.chip-table .cv.neg{color:var(--dn);}
 .chip-table .cv.neu{color:var(--muted2);}
 
 /* TRADE BOX */
@@ -364,8 +366,8 @@ header{
 .trow:last-child{border-bottom:none;}
 .tkey{color:var(--muted2);}
 .tval{font-family:var(--mono);font-weight:600;}
-.tval.buy{color:var(--green);}
-.tval.stop{color:var(--red);}
+.tval.buy{color:var(--up);}
+.tval.stop{color:var(--dn);}
 .tval.tp1{color:var(--blue);}
 .tval.tp2{color:#a78bfa;}
 .tval.rr{color:var(--gold);}
@@ -478,8 +480,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 .bias-row:last-child{border-bottom:none;}
 .bias-key{color:var(--muted2);flex-shrink:0;}
 .bias-val{font-family:var(--mono);font-weight:600;display:flex;align-items:center;flex-wrap:wrap;gap:3px;}
-.bias-val.high{color:var(--red);}
-.bias-val.low{color:var(--green);}
+.bias-val.high{color:var(--up);}
+.bias-val.low{color:var(--dn);}
 .bias-val.mid{color:var(--text);}
 
 /* RSI sub chart */
@@ -511,8 +513,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
   display:inline-block;font-size:.62rem;font-weight:700;
   padding:1px 7px;border-radius:3px;margin-left:4px;vertical-align:middle;
 }
-.div-badge.bull{background:rgba(0,200,150,.2);color:var(--green);}
-.div-badge.bear{background:rgba(255,77,109,.2);color:var(--red);}
+.div-badge.bull{background:rgba(255,77,109,.2);color:var(--up);}
+.div-badge.bear{background:rgba(0,200,150,.2);color:var(--dn);}
 
 /* ── REVENUE SECTION ── */
 .rev-row{
@@ -522,8 +524,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 .rev-row:last-child{border-bottom:none;}
 .rev-key{color:var(--muted2);}
 .rev-val{font-family:var(--mono);font-weight:600;}
-.rev-val.pos{color:var(--green);}
-.rev-val.neg{color:var(--red);}
+.rev-val.pos{color:var(--up);}
+.rev-val.neg{color:var(--dn);}
 .rev-val.neu{color:var(--text);}
 </style>
 </head>
@@ -1333,7 +1335,7 @@ function renderMeta(stockId, stockName) {
     <span class="stock-title">${stockId}</span>
     ${nameTag}
     <span class="stock-id">${last.date}</span>
-    <span class="price-main" style="color:${up?'var(--green)':'var(--red)'}">
+    <span class="price-main" style="color:${up?'var(--up)':'var(--dn)'}">
       ${last.close.toFixed(2)}
     </span>
     <span class="price-chg ${up?'up':'dn'}">${up?'▲':'▼'} ${Math.abs(chg).toFixed(2)} (${up?'+':''}${pct}%)</span>
@@ -1346,7 +1348,7 @@ function renderMeta(stockId, stockName) {
       // 預期全日量：今日累積量 / 開盤進度
       const projectedVol = dayProgress > 0.05 ? todayVol / dayProgress : null;
       const projRatio = (projectedVol && prevDayVol > 0) ? projectedVol / prevDayVol : null;
-      const ratioColor = ratio >= 1.5 ? 'var(--green)' : ratio >= 0.8 ? 'var(--text)' : 'var(--muted2)';
+      const ratioColor = ratio >= 1.5 ? 'var(--up)' : ratio >= 0.8 ? 'var(--text)' : 'var(--muted2)';
       const ratioLabel = ratio >= 2.0 ? '🔥爆量' : ratio >= 1.5 ? '📈量增' : ratio >= 0.8 ? '量正常' : '縮量';
       return `
         <span class="meta-pill" style="border-left:1px solid var(--border);padding-left:14px;">
@@ -1418,9 +1420,9 @@ function buildCharts(data) {
   });
 
   candleSeries = kChart.addCandlestickSeries({
-    upColor:'#00c896', downColor:'#ff4d6d',
-    borderUpColor:'#00c896', borderDownColor:'#ff4d6d',
-    wickUpColor:'#00c896', wickDownColor:'#ff4d6d',
+    upColor:'#ff4d6d', downColor:'#00c896',
+    borderUpColor:'#ff4d6d', borderDownColor:'#00c896',
+    wickUpColor:'#ff4d6d', wickDownColor:'#00c896',
     lastValueVisible: true, priceLineVisible: true,
     priceLineColor: 'rgba(255,255,255,0.5)',
     priceLineStyle: LightweightCharts.LineStyle.Dashed,
@@ -1508,7 +1510,7 @@ function buildCharts(data) {
   volSeries.priceScale().applyOptions({ scaleMargins:{top:.1,bottom:0} });
   volSeries.setData(data.map(d=>({
     time:d.date, value:d.Trading_Volume,
-    color: d.close>=d.open ? 'rgba(0,200,150,0.65)' : 'rgba(255,77,109,0.65)'
+    color: d.close>=d.open ? 'rgba(255,77,109,0.65)' : 'rgba(0,200,150,0.65)'
   })));
   volMaSeries = volChart.addLineSeries({ color:'#e8b84b', lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   volMaSeries.setData(calcAvgVol(data, 20));
@@ -1546,7 +1548,7 @@ function buildCharts(data) {
   histSeries.setData(
     macdAligned.filter(d => d.hist !== null).map(d => ({
       time: d.time, value: d.hist,
-      color: d.hist >= 0 ? 'rgba(0,200,150,0.6)' : 'rgba(255,77,109,0.6)'
+      color: d.hist >= 0 ? 'rgba(255,77,109,0.6)' : 'rgba(0,200,150,0.6)'
     }))
   );
   macdSeries = macdChartObj.addLineSeries({ color:'#4a9eff', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
@@ -2083,11 +2085,11 @@ function runAnalysis(slicedData, twiiRaw) {
   const dayRange = last.max - last.min || 0.01;
   const closePosition = (last.close - last.min) / dayRange;  // 0=最低 1=最高
   let closePosLabel, closePosColor, closePosScore;
-  if (closePosition >= 0.8)      { closePosLabel='極強收盤（高點區>80%）'; closePosColor='var(--green)';  closePosScore=3;  bullPts+=5; }
-  else if (closePosition >= 0.6) { closePosLabel='偏強收盤（60-80%）';      closePosColor='var(--green)';  closePosScore=2;  bullPts+=3; }
+  if (closePosition >= 0.8)      { closePosLabel='極強收盤（高點區>80%）'; closePosColor='var(--up)';  closePosScore=3;  bullPts+=5; }
+  else if (closePosition >= 0.6) { closePosLabel='偏強收盤（60-80%）';      closePosColor='var(--up)';  closePosScore=2;  bullPts+=3; }
   else if (closePosition >= 0.4) { closePosLabel='中性收盤（40-60%）';      closePosColor='var(--text)';   closePosScore=1; }
-  else if (closePosition >= 0.2) { closePosLabel='偏弱收盤（20-40%）';      closePosColor='var(--red)';    closePosScore=-1; bearPts+=3; }
-  else                           { closePosLabel='極弱收盤（低點區<20%）';  closePosColor='var(--red)';    closePosScore=-2; bearPts+=5; }
+  else if (closePosition >= 0.2) { closePosLabel='偏弱收盤（20-40%）';      closePosColor='var(--dn)';    closePosScore=-1; bearPts+=3; }
+  else                           { closePosLabel='極弱收盤（低點區<20%）';  closePosColor='var(--dn)';    closePosScore=-2; bearPts+=5; }
 
   // ── 2. 上下影線分析：主力意圖偵測 ──
   const upperShadow = last.max - Math.max(last.close, last.open);
@@ -2324,11 +2326,11 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   arc.setAttribute('stroke-dasharray', `${dash} ${circumference - dash}`);
 
   let color, verdict, sub;
-  if(score>=78){ color='#00c896'; verdict='📈 強烈偏多'; sub='多項指標共振看多，可考慮介入'; }
-  else if(score>=62){ color='#4a9eff'; verdict='📊 偏多觀察'; sub='中短線偏多，可小量試單'; }
+  if(score>=78){ color='#ff4d6d'; verdict='📈 強烈偏多'; sub='多項指標共振看多，可考慮介入'; }
+  else if(score>=62){ color='#ff9f40'; verdict='📊 偏多觀察'; sub='中短線偏多，可小量試單'; }
   else if(score>=45){ color='#e8b84b'; verdict='⚖️ 中性觀望'; sub='多空混雜，暫時觀望等訊號'; }
-  else if(score>=30){ color='#ff9f40'; verdict='⚠️ 偏空謹慎'; sub='偏空訊號出現，持股注意停損'; }
-  else { color='#ff4d6d'; verdict='🔻 強烈偏空'; sub='多項指標轉空，不宜持多'; }
+  else if(score>=30){ color='#4a9eff'; verdict='⚠️ 偏空謹慎'; sub='偏空訊號出現，持股注意停損'; }
+  else { color='#00c896'; verdict='🔻 強烈偏空'; sub='多項指標轉空，不宜持多'; }
 
   arc.setAttribute('stroke', color);
   document.getElementById('scoreNum').style.color = color;
@@ -2357,7 +2359,7 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   if (volStructScore !== undefined) {
     const filled = Math.round(volStructScore);
     const bar = '█'.repeat(filled) + '░'.repeat(10-filled);
-    const bc = volStructScore>=7?'var(--green)':volStructScore>=4?'var(--gold)':'var(--red)';
+    const bc = volStructScore>=7?'var(--up)':volStructScore>=4?'var(--gold)':'var(--dn)';
     const vTag = document.createElement('div');
     vTag.id = 'volStructTag';
     vTag.style.cssText = 'font-size:.63rem;margin-top:5px;font-family:var(--mono);padding:3px 8px;background:var(--s2);border:1px solid var(--border);border-radius:4px;display:inline-block;color:var(--muted2);';
@@ -2405,7 +2407,7 @@ function renderChip(chip) {
     { foreign:0, trust:0, dealer:0 });
   const maxAbs = Math.max(1, Math.abs(sum5.foreign), Math.abs(sum5.trust), Math.abs(sum5.dealer));
   const barPct = v => Math.min(100, Math.abs(v) / maxAbs * 100);
-  const barColor = v => v >= 0 ? 'var(--green)' : 'var(--red)';
+  const barColor = v => v >= 0 ? 'var(--up)' : 'var(--dn)';
   const barRow = (label, val, anomalyHtml='') => `
     <div class="chip-bar-item">
       <span class="chip-bar-label">${label}</span>
@@ -2463,8 +2465,8 @@ function renderChip(chip) {
       <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">🔔 籌碼異常偵測</div>
       ${anomalies.map(a => `
         <div style="padding:6px 10px;border-radius:6px;margin-bottom:5px;font-size:.73rem;line-height:1.5;
-          background:${a.direction==='bull'?'rgba(0,200,150,.08)':'rgba(255,77,109,.08)'};
-          border-left:3px solid ${a.direction==='bull'?'var(--green)':'var(--red)'};">
+          background:${a.direction==='bull'?'rgba(255,77,109,.08)':'rgba(0,200,150,.08)'};
+          border-left:3px solid ${a.direction==='bull'?'var(--up)':'var(--dn)'};">
           ${a.direction==='bull'?'📈':'📉'} ${a.msg}
         </div>`).join('')}
     </div>` : '';
@@ -2561,7 +2563,7 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:.78rem;">
           <span style="color:var(--muted)">✗ 硬止損（3日低）</span>
-          <span style="font-family:var(--mono);color:var(--red);font-weight:600;">${sl_hard.toFixed(2)}</span>
+          <span style="font-family:var(--mono);color:var(--dn);font-weight:600;">${sl_hard.toFixed(2)}</span>
         </div>
         <div style="font-size:.67rem;color:var(--muted);line-height:1.6;margin-top:4px;">
           跌破MA5先減半倉觀察；跌破3日低點${sl_hard.toFixed(2)}確認出場
@@ -2616,13 +2618,13 @@ function renderBias(data) {
   // 語意說明
   const bLabel = (v) => {
     if (v === null) return '';
-    if (v > 12)  return `<span style="font-size:.62rem;color:var(--red);margin-left:4px;">🔥 嚴重過熱，回調風險極高</span>`;
-    if (v > 7)   return `<span style="font-size:.62rem;color:var(--red);margin-left:4px;">⚠ 偏高，謹慎追多</span>`;
+    if (v > 12)  return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">🔥 嚴重過熱，回調風險極高</span>`;
+    if (v > 7)   return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">⚠ 偏高，謹慎追多</span>`;
     if (v > 3)   return `<span style="font-size:.62rem;color:#ff9f40;margin-left:4px;">↑ 偏多，注意高點</span>`;
     if (v > -3)  return `<span style="font-size:.62rem;color:var(--muted2);margin-left:4px;">✓ 健康區間</span>`;
     if (v > -7)  return `<span style="font-size:.62rem;color:var(--blue);margin-left:4px;">↓ 偏低，有支撐回測機會</span>`;
-    if (v > -12) return `<span style="font-size:.62rem;color:var(--green);margin-left:4px;">🎯 超跌，反彈機率高</span>`;
-    return `<span style="font-size:.62rem;color:var(--green);margin-left:4px;">🚀 極度超跌，強力彈升訊號</span>`;
+    if (v > -12) return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🎯 超跌，反彈機率高</span>`;
+    return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🚀 極度超跌，強力彈升訊號</span>`;
   };
 
   const avgV20 = data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20;
@@ -2631,9 +2633,9 @@ function renderBias(data) {
   const vol5Ratio = avgV5 / avgV20;
 
   const volLevel = volRatio > 2.5 ? '爆量🔥' : volRatio > 1.5 ? '量增📈' : volRatio > 1.2 ? '偏量' : volRatio < 0.5 ? '極縮🔇' : volRatio < 0.7 ? '縮量' : '正常';
-  const volColor = volRatio > 1.5 ? 'var(--green)' : volRatio < 0.6 ? 'var(--muted2)' : 'var(--text)';
+  const volColor = volRatio > 1.5 ? 'var(--up)' : volRatio < 0.6 ? 'var(--muted2)' : 'var(--text)';
   const vol5Trend = vol5Ratio > 1.2 ? '↑ 量能擴張' : vol5Ratio < 0.8 ? '↓ 量能收縮' : '→ 量能平穩';
-  const vol5Color = vol5Ratio > 1.2 ? 'var(--green)' : vol5Ratio < 0.8 ? 'var(--red)' : 'var(--muted2)';
+  const vol5Color = vol5Ratio > 1.2 ? 'var(--up)' : vol5Ratio < 0.8 ? 'var(--dn)' : 'var(--muted2)';
 
   const warnings = [];
   if (bias20 !== null && Math.abs(bias20) > 10) warnings.push(`MA20乖離過大（${bFmt(bias20)}），均值回歸風險`);
@@ -2674,7 +2676,7 @@ function renderShortTerm(d) {
 
   // 收盤強度圓弧指示器
   const cpPct = (d.closePosition * 100).toFixed(0);
-  const cpColor = d.closePosScore >= 2 ? 'var(--green)' : d.closePosScore >= 0 ? 'var(--text)' : 'var(--red)';
+  const cpColor = d.closePosScore >= 2 ? 'var(--up)' : d.closePosScore >= 0 ? 'var(--text)' : 'var(--dn)';
 
   // 影線比例視覺化
   const totalBar = 200; // px
@@ -2683,7 +2685,7 @@ function renderShortTerm(d) {
   const lowerPct  = d.lowerRatio * 100;
 
   // 量能趨勢
-  const volTrend = d.volRatio > 1.5 ? { label:'量增', color:'var(--green)' }
+  const volTrend = d.volRatio > 1.5 ? { label:'量增', color:'var(--up)' }
                  : d.volRatio > 1.1 ? { label:'量偏大', color:'#ff9f40' }
                  : d.volRatio < 0.6 ? { label:'縮量', color:'var(--muted2)' }
                  : { label:'正常', color:'var(--text)' };
@@ -2716,9 +2718,9 @@ function renderShortTerm(d) {
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:7px;letter-spacing:1px;">◆ 影線比例（主力意圖）</div>
         <div style="display:flex;gap:3px;height:8px;margin-bottom:6px;border-radius:4px;overflow:hidden;">
-          <div style="width:${lowerPct.toFixed(0)}%;background:var(--green);border-radius:3px 0 0 3px;" title="下影線${lowerPct.toFixed(0)}%"></div>
-          <div style="width:${bodyPct.toFixed(0)}%;background:${d.isBull?'var(--green)':'var(--red)'};opacity:.8;" title="實體${bodyPct.toFixed(0)}%"></div>
-          <div style="width:${upperPct.toFixed(0)}%;background:var(--red);border-radius:0 3px 3px 0;" title="上影線${upperPct.toFixed(0)}%"></div>
+          <div style="width:${lowerPct.toFixed(0)}%;background:var(--up);border-radius:3px 0 0 3px;" title="下影線${lowerPct.toFixed(0)}%"></div>
+          <div style="width:${bodyPct.toFixed(0)}%;background:${d.isBull?'var(--up)':'var(--dn)'};opacity:.8;" title="實體${bodyPct.toFixed(0)}%"></div>
+          <div style="width:${upperPct.toFixed(0)}%;background:var(--dn);border-radius:0 3px 3px 0;" title="上影線${upperPct.toFixed(0)}%"></div>
         </div>
         <div style="display:flex;justify-content:space-between;font-size:.62rem;color:var(--muted2);font-family:var(--mono);">
           <span>下影 ${lowerPct.toFixed(0)}%</span>
@@ -2730,9 +2732,9 @@ function renderShortTerm(d) {
 
       <!-- 量能啟動 -->
       ${d.volumeLaunch ? `
-      <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.volumeLaunch.type==='bull'?'rgba(0,200,150,.3)':'rgba(255,77,109,.3)'};">
+      <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.volumeLaunch.type==='bull'?'rgba(255,77,109,.3)':'rgba(0,200,150,.3)'};">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 量能啟動偵測</div>
-        <div style="font-size:.78rem;color:${d.volumeLaunch.type==='bull'?'var(--green)':'var(--red)'};">🔔 ${d.volumeLaunch.text}</div>
+        <div style="font-size:.78rem;color:${d.volumeLaunch.type==='bull'?'var(--up)':'var(--dn)'};">🔔 ${d.volumeLaunch.text}</div>
       </div>` : `
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 量能狀態</div>
@@ -2741,9 +2743,9 @@ function renderShortTerm(d) {
 
       <!-- 個股 vs 大盤 -->
       ${d.relStrength ? `
-      <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.relStrength.type==='bull'?'rgba(0,200,150,.25)':d.relStrength.type==='bear'?'rgba(255,77,109,.25)':'var(--border)'};">
+      <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.relStrength.type==='bull'?'rgba(255,77,109,.25)':d.relStrength.type==='bear'?'rgba(0,200,150,.25)':'var(--border)'};">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 相對大盤強弱（近3日）</div>
-        <div style="font-size:.78rem;color:${d.relStrength.type==='bull'?'var(--green)':d.relStrength.type==='bear'?'var(--red)':'var(--muted2)'};">${d.relStrength.text}</div>
+        <div style="font-size:.78rem;color:${d.relStrength.type==='bull'?'var(--up)':d.relStrength.type==='bear'?'var(--dn)':'var(--muted2)'};">${d.relStrength.text}</div>
       </div>` : `
       <div style="background:var(--s2);border-radius:8px;padding:8px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);">◆ 相對強弱：大盤資料抓取中或不可用</div>
@@ -2874,7 +2876,7 @@ function renderRevenue(data, eps) {
         <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 5px;text-align:right;">EPS</span>
         ${epsRows.map(r => {
           const val = Number(r.value);
-          const color = val >= 0 ? 'var(--green)' : 'var(--red)';
+          const color = val >= 0 ? 'var(--up)' : 'var(--dn)';
           // 季度標籤：r.date 格式通常為 YYYY-MM-DD（季末），轉成 YYYY-Qn
           const yr = parseInt(r.date.slice(0,4));
           const mo = parseInt(r.date.slice(5,7));
@@ -2932,7 +2934,7 @@ function addVolumeMarkers(data, avgVolArr) {
     if(ratio >= 2.5){
       markers.push({
         time: d.date, position: isBull ? 'belowBar' : 'aboveBar',
-        color: isBull ? 'rgba(0,200,150,0.9)' : 'rgba(255,77,109,0.9)',
+        color: isBull ? 'rgba(255,77,109,0.9)' : 'rgba(0,200,150,0.9)',
         shape: isBull ? 'arrowUp' : 'arrowDown',
         text: `爆量×${ratio.toFixed(1)}`, size: 1,
       });
