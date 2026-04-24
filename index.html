@@ -861,6 +861,19 @@ let revenueData = [];
 let epsData     = [];
 let twiiData    = [];   // 大盤加權指數（用於個股 vs 大盤比較）
 let intradayVolInfo = null;  // 即時盤中量能資訊 { todayVol, prevDayVol, ratio, time }
+let currentSuffix   = '.TW';  // 記錄成功的市場後綴（上市.TW / 上櫃.TWO）
+
+// stockNameCache 必須在 renderWatchlist/renderRecent 之前宣告
+// 因為這兩個函數頁面載入時立即執行
+let stockNameCache = {};
+
+// 追蹤清單/最近查詢顯示：有名稱就「代號 名稱」，沒有就純代號
+function displayLabel(stockId) {
+  const name = stockNameCache[stockId];
+  return name
+    ? `${stockId} <span style="font-size:.62rem;color:var(--muted2);font-weight:400;">${name}</span>`
+    : stockId;
+}
 
 // ═══════════════════════════════════════
 //  UI HELPERS
@@ -923,6 +936,7 @@ function addToRecent(stockId) {
   if(recentHistory.length > 10) recentHistory = recentHistory.slice(0,10);
   localStorage.setItem('kline_recent', JSON.stringify(recentHistory));
   renderRecent();
+  renderWatchlist();  // 名稱剛入 cache，同步更新追蹤清單顯示
 }
 function renderRecent() {
   const bar = document.getElementById('recentBar');
@@ -930,7 +944,7 @@ function renderRecent() {
   if(!recentHistory.length){ bar.style.display='none'; return; }
   bar.style.display = 'flex';
   items.innerHTML = recentHistory.map(code => `
-    <div class="recent-item" onclick="loadStock('${code}')">${code}</div>
+    <div class="recent-item" onclick="loadStock('${code}')" title="${code}">${displayLabel(code)}</div>
   `).join('');
 }
 function loadStock(code) {
@@ -945,8 +959,8 @@ function renderWatchlist() {
   const emptyMsg = document.getElementById('wlEmpty');
   if(emptyMsg) emptyMsg.style.display = watchlist.length ? 'none' : 'inline';
   items.innerHTML = (watchlist.length ? '' : '<span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（點右側按鈕加入代號）</span>') + watchlist.map(code => `
-    <div class="wl-item" onclick="loadFromWatchlist('${code}')">
-      ${code}
+    <div class="wl-item" onclick="loadFromWatchlist('${code}')" title="${code}">
+      ${displayLabel(code)}
       <span class="wl-del" onclick="removeFromWatchlist(event,'${code}')">✕</span>
     </div>`).join('');
 }
@@ -1089,6 +1103,7 @@ async function fetchYahooPrice(stockId) {
           const data = await tryYahooUrl(url);
           if (data && data.length >= 10) {
             console.log(`[Yahoo日線] 成功：${symbol} ${rng} via ${node}`);
+            currentSuffix = suffix;  // 記錄成功的市場後綴
             return data;
           }
         } catch(e) { /* continue */ }
@@ -1209,7 +1224,6 @@ async function fetchYahooLatest(stockId) {
 // ═══════════════════════════════════════
 //  FETCH — FinMind
 // ═══════════════════════════════════════
-let stockNameCache = {};
 
 async function fetchStockName(stockId) {
   if (stockNameCache[stockId]) return stockNameCache[stockId];
@@ -1331,8 +1345,12 @@ function renderMeta(stockId, stockName) {
   const nameTag = stockName
     ? `<span class="stock-name-tag">${stockName}</span>`
     : '';
+  const yahooLink = `https://tw.stock.yahoo.com/quote/${stockId}${currentSuffix}`;
   bar.innerHTML = `
-    <span class="stock-title">${stockId}</span>
+    <a href="${yahooLink}" target="_blank" rel="noopener" style="text-decoration:none;display:contents;">
+      <span class="stock-title" style="cursor:pointer;border-bottom:1px dashed rgba(212,223,240,.25);"
+        title="點擊前往 Yahoo 奇摩股市（${stockId}${currentSuffix}）">${stockId} 🔗</span>
+    </a>
     ${nameTag}
     <span class="stock-id">${last.date}</span>
     <span class="price-main" style="color:${up?'var(--up)':'var(--dn)'}">
