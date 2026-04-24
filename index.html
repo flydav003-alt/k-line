@@ -1277,21 +1277,33 @@ async function analyze() {
   const customTo = document.getElementById('dateTo')?.value || '';
 
   try {
-    const [pd, cd, sn, rd, epsd, twiid] = await Promise.all([
+    // 主資料（5個）先跑，不等 TWII
+    const [pd, cd, sn, rd, epsd] = await Promise.all([
       fetchPrice(stockId, token, '', customTo),
       fetchChip(stockId, token),
       fetchStockName(stockId),
       fetchRevenue(stockId, token),
       fetchEPS(stockId, token),
-      fetchTWII(),
     ]);
-    priceData = pd; chipData = cd; revenueData = rd; epsData = epsd; twiiData = twiid;
-    intradayVolInfo = null;  // 一般分析不顯示即時量能
+    priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
+    intradayVolInfo = null;
     currentStockId = stockId;
     addToRecent(stockId);
     clearStatus();
     renderMeta(stockId, sn);
+    twiiData = [];        // 先清空，畫面先出來
     redraw();
+
+    // TWII 背景抓，抓到後靜默更新相對強弱訊號
+    fetchTWII().then(twiid => {
+      if (twiid && twiid.length > 0) {
+        twiiData = twiid;
+        // 只重跑 runAnalysis（不重建圖表，速度快）
+        const sliced = priceData.slice(-currentPeriod);
+        runAnalysis(sliced, twiiData);
+      }
+    }).catch(() => {});   // TWII 失敗不影響主流程
+
   } catch(err) {
     setStatus(err.message, 'error');
   }
