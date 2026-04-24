@@ -37,6 +37,7 @@ body{
   font-family:var(--font);
   min-height:100vh;
   overflow-x:hidden;
+  /* overflow-y は desktop では hidden にしない（モバイルは media query で auto に上書き） */
 }
 
 /* ── HEADER ── */
@@ -199,10 +200,45 @@ header{
 }
 .charts-col{ flex:1 1 auto; min-width:300px; overflow:hidden; }
 .analysis-col{ flex:0 0 360px; min-width:200px; max-width:600px; }
+
+/* ── 手機 / iPad 直向：上下堆疊，頁面可完整滾動 ── */
 @media(max-width:960px){
-  .layout{flex-direction:column;height:auto;}
-  .resizer{display:none;}
-  .analysis-col{flex:0 0 auto;min-width:unset;max-width:unset;}
+  /* 頁面本身可捲動 */
+  html, body { overflow-y:auto !important; height:auto !important; }
+
+  .layout{
+    flex-direction:column;
+    height:auto;          /* 不再鎖死高度 */
+    min-height:unset;
+  }
+  .resizer{ display:none; }
+
+  /* K線區：固定高度讓圖表正常顯示 */
+  .charts-col{
+    flex:none;
+    width:100%;
+    height:70vh;          /* 佔螢幕七成，剩下三成給分析欄 */
+    min-height:480px;
+    overflow:hidden;
+  }
+
+  /* 分析欄：高度自動伸展，不限制，讓頁面滾動顯示 */
+  .analysis-col{
+    flex:none;
+    width:100%;
+    min-width:unset;
+    max-width:unset;
+    height:auto;          /* 讓內容撐開 */
+    overflow-y:visible;   /* 讓父頁面滾動，不是自己內部滾 */
+  }
+
+  /* 子圖高度在小螢幕縮小一點 */
+  .sub-chart-wrap{ height:70px; }
+}
+
+/* ── iPad 橫向 / 小桌機：維持左右但分析欄可稍窄 ── */
+@media(min-width:961px) and (max-width:1200px){
+  .analysis-col{ flex:0 0 300px; }
 }
 
 /* ── LEFT CHARTS ── */
@@ -250,7 +286,7 @@ header{
 
 /* ── RIGHT PANEL ── */
 .analysis-col{
-  overflow-y:auto;
+  overflow-y:auto;   /* desktop: 右欄自己滾 */
   background:var(--s1);
 }
 .analysis-col::-webkit-scrollbar{width:4px;}
@@ -2095,7 +2131,8 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
   const sl_hard = Math.min(...last3.map(d => d.min));
   const ma5arr = data.map((_,i) => i < 4 ? null : data.slice(i-4, i+1).reduce((s,d)=>s+d.close,0)/5);
   const sl_ma5 = ma5arr[n-1];
-  const riskBase = p - sl_hard;
+  // riskBase 最小取現價的 0.5%，避免除以零出現 Infinity
+  const riskBase = Math.max(p - sl_hard, p * 0.005);
 
   const ref60 = data.slice(-60, -3);
   const resistance = ref60.length ? Math.max(...ref60.map(d => d.max)) : null;
@@ -2133,7 +2170,8 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
   const tp1_str = tp1_price > p ? tp1_price.toFixed(2) : '-';
   const tp2_str = score >= 62 && tp2_price > p ? tp2_price.toFixed(2) : '-';
   const tp1_src = (tp1_price === resistance) ? '前高壓力' : (tp1_price === bbUpper) ? '布林上軌' : '風報比2R';
-  const rr = (score >= 62 && tp1_str !== '-') ? ((parseFloat(tp1_str) - p) / riskBase).toFixed(1) + ' : 1' : '-';
+  const rrVal = (score >= 62 && tp1_str !== '-') ? ((parseFloat(tp1_str) - p) / riskBase) : null;
+  const rr = rrVal === null ? '-' : (!isFinite(rrVal) || rrVal > 99) ? '極高（止損極近）' : rrVal.toFixed(1) + ' : 1';
 
   document.getElementById('tradeContent').innerHTML = `
     <div class="trade-grid">
@@ -2248,14 +2286,21 @@ function renderBias(data) {
 // resize
 window.addEventListener('resize', () => {
   if(!kChart) return;
-  const kEl=document.getElementById('klineChart');
-  const vEl=document.getElementById('volumeChart');
-  const mEl=document.getElementById('macdChart');
-  const rEl=document.getElementById('rsiChart');
-  kChart.resize(kEl.offsetWidth, kEl.offsetHeight);
-  volChart.resize(vEl.offsetWidth, vEl.offsetHeight);
-  macdChartObj.resize(mEl.offsetWidth, mEl.offsetHeight);
-  if(rsiChart && rEl) rsiChart.resize(rEl.offsetWidth, rEl.offsetHeight);
+  // On mobile, re-apply charts-col height before measuring
+  const chartsColEl = document.getElementById('chartsCol');
+  if (chartsColEl && window.innerWidth <= 960) {
+    chartsColEl.style.height = Math.max(480, window.innerHeight * 0.70) + 'px';
+  }
+  requestAnimationFrame(() => {
+    const kEl=document.getElementById('klineChart');
+    const vEl=document.getElementById('volumeChart');
+    const mEl=document.getElementById('macdChart');
+    const rEl=document.getElementById('rsiChart');
+    if(kEl.offsetWidth) kChart.resize(kEl.offsetWidth, kEl.offsetHeight);
+    if(vEl.offsetWidth) volChart.resize(vEl.offsetWidth, vEl.offsetHeight);
+    if(mEl.offsetWidth) macdChartObj.resize(mEl.offsetWidth, mEl.offsetHeight);
+    if(rsiChart && rEl && rEl.offsetWidth) rsiChart.resize(rEl.offsetWidth, rEl.offsetHeight);
+  });
 });
 
 // ═══════════════════════════════════════
@@ -2506,17 +2551,23 @@ document.addEventListener('keydown', e => {
 //  初始化：延遲確認 chart 高度正確
 // ═══════════════════════════════════════
 window.addEventListener('load', () => {
-  // 頁面完全載入後 200ms，如果 kChart 存在就強制 resize 一次
   setTimeout(() => {
     if (!kChart) return;
-    const kEl = document.getElementById('klineChart');
-    const vEl = document.getElementById('volumeChart');
-    const mEl = document.getElementById('macdChart');
-    const rEl = document.getElementById('rsiChart');
-    kChart.resize(kEl.offsetWidth, kEl.offsetHeight);
-    if(volChart) volChart.resize(vEl.offsetWidth, vEl.offsetHeight);
-    if(macdChartObj) macdChartObj.resize(mEl.offsetWidth, mEl.offsetHeight);
-    if(rsiChart && rEl) rsiChart.resize(rEl.offsetWidth, rEl.offsetHeight);
+    // 手機版：動態設定 charts-col 高度
+    const chartsColEl = document.getElementById('chartsCol');
+    if (chartsColEl && window.innerWidth <= 960) {
+      chartsColEl.style.height = Math.max(480, window.innerHeight * 0.70) + 'px';
+    }
+    requestAnimationFrame(() => {
+      const kEl = document.getElementById('klineChart');
+      const vEl = document.getElementById('volumeChart');
+      const mEl = document.getElementById('macdChart');
+      const rEl = document.getElementById('rsiChart');
+      kChart.resize(kEl.offsetWidth, kEl.offsetHeight);
+      if(volChart) volChart.resize(vEl.offsetWidth, vEl.offsetHeight);
+      if(macdChartObj) macdChartObj.resize(mEl.offsetWidth, mEl.offsetHeight);
+      if(rsiChart && rEl) rsiChart.resize(rEl.offsetWidth, rEl.offsetHeight);
+    });
   }, 200);
 });
 
