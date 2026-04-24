@@ -2183,6 +2183,62 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  // ── 均線糾結偵測 ──
+  // 定義：MA5 / MA10 / MA20 三線在現價的 2% 價差範圍內互相纏繞
+  if (lma5 && lma10 && lma20) {
+    const maHigh  = Math.max(lma5, lma10, lma20);
+    const maLow   = Math.min(lma5, lma10, lma20);
+    const maSpread = (maHigh - maLow) / last.close * 100;  // 三線價差（%）
+
+    if (maSpread < 1.5) {
+      // 極度糾結：三線幾乎重疊，方向選擇最近
+      const prevSpread = (() => {
+        const pm5  = ma5a[n-4];
+        const pm10 = ma10a[n-4];
+        const pm20 = ma20a[n-4];
+        if (!pm5 || !pm10 || !pm20) return maSpread;
+        return (Math.max(pm5,pm10,pm20) - Math.min(pm5,pm10,pm20)) / data[n-4].close * 100;
+      })();
+      const shrinking = maSpread < prevSpread;  // 糾結是否還在收窄
+
+      // 嘗試判斷糾結後的方向傾向：股價在三線中心之上/之下
+      const maCenter = (lma5 + lma10 + lma20) / 3;
+      const priceAbove = last.close > maCenter;
+
+      signals.push({
+        type: 'neutral',
+        cat: '均線糾結',
+        text: `⚡ MA5/10/20 極度糾結（三線價差僅 ${maSpread.toFixed(2)}%）${shrinking ? '，仍在收窄中' : ''}｜方向即將選擇，股價在均線中心${priceAbove ? '上方偏多' : '下方偏空'}，等突破確認再進場`
+      });
+      // 糾結本身不加多空分，但突破方向加分
+      if (priceAbove && isBull) bullPts += 6;
+      if (!priceAbove && isBear) bearPts += 6;
+
+    } else if (maSpread < 3.0) {
+      // 中度糾結：三線在收斂中
+      // 確認是否有收窄趨勢（近3日的三線價差是否在縮小）
+      const spreads = [2, 3, 4].map(back => {
+        const bma5  = ma5a[n-back];
+        const bma10 = ma10a[n-back];
+        const bma20 = ma20a[n-back];
+        if (!bma5 || !bma10 || !bma20) return null;
+        return (Math.max(bma5,bma10,bma20) - Math.min(bma5,bma10,bma20)) / data[n-back].close * 100;
+      }).filter(Boolean);
+
+      const isTightening = spreads.length >= 2 && spreads[0] > maSpread && spreads[1] > spreads[0];
+
+      if (isTightening) {
+        signals.push({
+          type: 'neutral',
+          cat: '均線糾結',
+          text: `均線持續收斂（三線價差 ${maSpread.toFixed(2)}%，近3日由 ${spreads[1].toFixed(2)}%→${spreads[0].toFixed(2)}%→${maSpread.toFixed(2)}%），蓄勢待發，量增突破前不宜追`
+        });
+        bullPts += 2;  // 收斂中偏中性，給小加分等待
+      }
+    }
+    // maSpread >= 3% 代表三線已擴張，不算糾結，不發訊號
+  }
+
   // ── 量能結構評分（0-10分）──
   const vol1     = last.Trading_Volume;
   const vol5avg  = n >= 5  ? data.slice(-5).reduce((s,d)=>s+d.Trading_Volume,0)/5 : vol1;
