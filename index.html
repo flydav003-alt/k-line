@@ -3061,6 +3061,16 @@ window.addEventListener('load', () => {
   }, 200);
 });
 
+  // ── 自動從 OTC 報告連結載入股票代號 ──
+(function() {
+  const params = new URLSearchParams(location.search);
+  const stockParam = params.get('stock');
+  if (stockParam) {
+    document.getElementById('stockInput').value = stockParam;
+    analyze();
+  }
+})();
+  
 // 初始化完成
 function setActivePeriod(p) {
   document.querySelectorAll('.pt').forEach(t => {
