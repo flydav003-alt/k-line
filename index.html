@@ -20,10 +20,10 @@
   --gold2:    #f5d07a;
   --cyan:     #29c5c5;
   --blue:     #4a9eff;
-  --red:      #ff4d6d;   /* 警告/錯誤語義（保留） */
-  --green:    #00c896;   /* 成功/健康語義（保留） */
-  --up:       #ff4d6d;   /* 台股漲 = 紅 */
-  --dn:       #00c896;   /* 台股跌 = 綠 */
+  --red:      #ff4d6d;
+  --green:    #00c896;
+  --up:       #ff4d6d;
+  --dn:       #00c896;
   --text:     #d4dff0;
   --muted:    #4a6080;
   --muted2:   #6a85a8;
@@ -39,7 +39,6 @@ body{
   font-family:var(--font);
   min-height:100vh;
   overflow-x:hidden;
-  /* overflow-y は desktop では hidden にしない（モバイルは media query で auto に上書き） */
 }
 
 /* ── HEADER ── */
@@ -86,14 +85,6 @@ header{
 }
 #stockInput:focus{border-color:var(--gold);box-shadow:0 0 0 2px rgba(232,184,75,.12);}
 
-.period-group{display:flex;gap:4px;}
-.pt{
-  font-size:.72rem;padding:6px 12px;border-radius:5px;cursor:pointer;
-  background:var(--s2);border:1px solid var(--border);color:var(--muted2);
-  font-family:var(--mono);transition:all .15s;
-}
-.pt.active,.pt:hover{background:var(--gold);color:#000;border-color:var(--gold);font-weight:600;}
-
 /* 策略選單 */
 #strategySelect{
   background:var(--s2);
@@ -130,7 +121,7 @@ header{
 .btn-realtime:hover{opacity:.8;}
 .btn-realtime.rt-active{background:var(--cyan);color:#000;}
 
-/* ── RESIZER (iPad 左右拖拉) ── */
+/* ── RESIZER ── */
 .resizer{
   width:6px;background:var(--border);cursor:col-resize;
   flex-shrink:0;position:relative;transition:background .15s;
@@ -203,42 +194,34 @@ header{
 .charts-col{ flex:1 1 auto; min-width:300px; overflow:hidden; }
 .analysis-col{ flex:0 0 360px; min-width:200px; max-width:600px; }
 
-/* ── 手機 / iPad 直向：上下堆疊，頁面可完整滾動 ── */
+/* ── 手機 / iPad 直向 ── */
 @media(max-width:960px){
-  /* 頁面本身可捲動 */
   html, body { overflow-y:auto !important; height:auto !important; }
-
   .layout{
     flex-direction:column;
-    height:auto;          /* 不再鎖死高度 */
+    height:auto;
     min-height:unset;
   }
   .resizer{ display:none; }
-
-  /* K線區：固定高度讓圖表正常顯示 */
   .charts-col{
     flex:none;
     width:100%;
-    height:70vh;          /* 佔螢幕七成，剩下三成給分析欄 */
+    height:70vh;
     min-height:480px;
     overflow:hidden;
   }
-
-  /* 分析欄：高度自動伸展，不限制，讓頁面滾動顯示 */
   .analysis-col{
     flex:none;
     width:100%;
     min-width:unset;
     max-width:unset;
-    height:auto;          /* 讓內容撐開 */
-    overflow-y:visible;   /* 讓父頁面滾動，不是自己內部滾 */
+    height:auto;
+    overflow-y:visible;
   }
-
-  /* 子圖高度在小螢幕縮小一點 */
   .sub-chart-wrap{ height:70px; }
 }
 
-/* ── iPad 橫向 / 小桌機：維持左右但分析欄可稍窄 ── */
+/* ── iPad 橫向 ── */
 @media(min-width:961px) and (max-width:1200px){
   .analysis-col{ flex:0 0 300px; }
 }
@@ -250,6 +233,7 @@ header{
   overflow:hidden;
 }
 
+/* ── PERIOD + TREND 列（原 chart-tabs 位置）── */
 .chart-tabs{
   display:flex;gap:0;border-bottom:1px solid var(--border);
   background:var(--s1);padding:0 16px;
@@ -261,6 +245,17 @@ header{
   white-space:nowrap;
 }
 .chart-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+
+/* Period 按鈕放在 chart-tabs 裡的樣式 */
+.pt{
+  font-size:.72rem;padding:10px 14px;cursor:pointer;
+  color:var(--muted2);border-bottom:2px solid transparent;
+  font-family:var(--mono);font-weight:500;transition:all .15s;
+  white-space:nowrap;background:transparent;border-top:none;border-left:none;border-right:none;
+  border-radius:0;
+}
+.pt.active{color:var(--gold);border-bottom-color:var(--gold);}
+.pt:hover:not(.active){color:var(--text);}
 
 .chart-block{flex:1;position:relative;min-height:0;}
 #klineChart{width:100%;height:100%;}
@@ -288,7 +283,7 @@ header{
 
 /* ── RIGHT PANEL ── */
 .analysis-col{
-  overflow-y:auto;   /* desktop: 右欄自己滾 */
+  overflow-y:auto;
   background:var(--s1);
 }
 .analysis-col::-webkit-scrollbar{width:4px;}
@@ -500,8 +495,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 }
 .recent-item:hover{border-color:var(--gold);color:var(--gold);}
 
-
-
 /* ── KEYBOARD HINT ── */
 .kbd-hint{
   font-size:.65rem;color:var(--muted);font-family:var(--mono);
@@ -537,13 +530,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
   <div class="search-wrap">
     <input type="text" id="stockInput" placeholder="2330" maxlength="6" />
-    <div class="period-group">
-      <div class="pt active" data-p="60">60日</div>
-      <div class="pt" data-p="120">120日</div>
-      <div class="pt" data-p="240">240日</div>
-    </div>
 
-    <!-- 策略選單：切換後自動重算，不需再點分析 -->
+    <!-- 策略選單 -->
     <select id="strategySelect" title="選擇分析策略模式，切換後自動生效" onchange="onStrategyChange()">
       <option value="balanced">⚖ 平衡模式</option>
       <option value="breakout">🚀 突破追強</option>
@@ -613,15 +601,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
     <!-- LEFT: CHARTS -->
     <div class="charts-col" id="chartsCol">
+
+      <!-- ★ 期間切換 + 趨勢通道（原 chart-tabs 位置，移除 K線+均線 tab）-->
       <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
         <div class="chart-tabs" style="border-bottom:none;flex:1;">
-          <div class="chart-tab active">K線 + 均線</div>
+          <div class="pt active" data-p="60" onclick="setActivePeriod(60)">60日</div>
+          <div class="pt" data-p="120" onclick="setActivePeriod(120)">120日</div>
+          <div class="pt" data-p="240" onclick="setActivePeriod(240)">240日</div>
           <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" style="cursor:pointer;user-select:none;">
             趨勢通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
           </div>
         </div>
-
       </div>
+
       <!-- MA toggle chips -->
       <div class="ma-toggle-bar">
         <span style="font-size:.65rem;color:var(--muted);font-family:var(--mono);margin-right:2px;">均線</span>
@@ -666,6 +658,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
     <!-- RESIZER -->
     <div class="resizer" id="resizer" title="拖拉調整左右寬度"></div>
+
     <!-- RIGHT: ANALYSIS -->
     <div class="analysis-col" id="analysisCol">
 
@@ -731,7 +724,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
       </div>
 
-      <!-- REVENUE SECTION -->
       <!-- SHORT-TERM SECTION -->
       <div class="section" id="secShortTerm">
         <div class="section-hd" onclick="toggleSection('secShortTerm')">
@@ -743,6 +735,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
       </div>
 
+      <!-- REVENUE SECTION -->
       <div class="section" id="secRevenue">
         <div class="section-hd" onclick="toggleSection('secRevenue')">
           <span class="section-title">月營收 / EPS</span>
@@ -763,7 +756,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
 <script>
 // ═══════════════════════════════════════
-//  CONFIG — 把你的 FinMind token 填這裡
+//  CONFIG
 // ═══════════════════════════════════════
 const FINMIND_TOKEN = 'YOUR_TOKEN_HERE';
 
@@ -822,11 +815,10 @@ function getCurrentStrategy() {
   return STRATEGY_PROFILES[sel?.value || 'balanced'];
 }
 
-// 策略切換後自動重算右側分析面板（不需重新抓資料）
 function onStrategyChange() {
   if (!priceData.length) return;
   const sliced = priceData.slice(-currentPeriod);
-  runAnalysis(sliced, twiiData);   // 傳入 twiiData
+  runAnalysis(sliced, twiiData);
   renderRevenue(revenueData, epsData);
 }
 
@@ -851,23 +843,20 @@ let rsiOBSeries = null;
 let rsiOSSeries = null;
 let bbUpperSeries = null, bbLowerSeries = null, bbMidSeries = null;
 let kdKSeries = null, kdDSeries = null;
-let bbVisible = true;   // BB 預設開啟
-let kdVisible = true;   // KD 預設開啟
+let bbVisible = true;
+let kdVisible = true;
 let maVisibility = { 5:true, 10:true, 20:true, 60:true };
 let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]');
 let recentHistory = JSON.parse(localStorage.getItem('kline_recent')||'[]');
 let currentStockId = '';
 let revenueData = [];
 let epsData     = [];
-let twiiData    = [];   // 大盤加權指數（用於個股 vs 大盤比較）
-let intradayVolInfo = null;  // 即時盤中量能資訊 { todayVol, prevDayVol, ratio, time }
-let currentSuffix   = '.TW';  // 記錄成功的市場後綴（上市.TW / 上櫃.TWO）
+let twiiData    = [];
+let intradayVolInfo = null;
+let currentSuffix   = '.TW';
 
-// stockNameCache 必須在 renderWatchlist/renderRecent 之前宣告
-// 因為這兩個函數頁面載入時立即執行
 let stockNameCache = {};
 
-// 追蹤清單/最近查詢顯示：有名稱就「代號 名稱」，沒有就純代號
 function displayLabel(stockId) {
   const name = stockNameCache[stockId];
   return name
@@ -878,17 +867,8 @@ function displayLabel(stockId) {
 // ═══════════════════════════════════════
 //  UI HELPERS
 // ═══════════════════════════════════════
-document.querySelectorAll('.pt').forEach(t => {
-  t.onclick = () => {
-    document.querySelectorAll('.pt').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    currentPeriod = parseInt(t.dataset.p);
-    if (priceData.length) redraw();
-  };
-});
 document.getElementById('stockInput').onkeydown = e => { if(e.key==='Enter') analyze(); };
 
-// ── 修正：clearDateRange 只清 dateTo ──
 function clearDateRange() {
   document.getElementById('dateTo').value = '';
   if(priceData.length) analyze();
@@ -914,7 +894,7 @@ function toggleBB() {
   });
 }
 
-// ── KD TOGGLE（疊加在 RSI 圖）──
+// ── KD TOGGLE ──
 function toggleKDline() {
   kdVisible = !kdVisible;
   const chip = document.getElementById('kdChip');
@@ -922,7 +902,6 @@ function toggleKDline() {
   [kdKSeries, kdDSeries].forEach(s => {
     if(s) try { s.applyOptions({ visible: kdVisible }); } catch{}
   });
-  // 同步 label 顯示
   const klEl = document.getElementById('kdLabelItem');
   const dlEl = document.getElementById('kdDLabelItem');
   if(klEl) klEl.style.display = kdVisible ? 'flex' : 'none';
@@ -936,7 +915,7 @@ function addToRecent(stockId) {
   if(recentHistory.length > 10) recentHistory = recentHistory.slice(0,10);
   localStorage.setItem('kline_recent', JSON.stringify(recentHistory));
   renderRecent();
-  renderWatchlist();  // 名稱剛入 cache，同步更新追蹤清單顯示
+  renderWatchlist();
 }
 function renderRecent() {
   const bar = document.getElementById('recentBar');
@@ -1003,17 +982,8 @@ function toggleSection(id) {
 }
 
 // ═══════════════════════════════════════
-//  YAHOO FINANCE 即時抓取（含 CORS Proxy 備援）
-// ═══════════════════════════════════════
-// ══════════════════════════════════════════════════════
 //  YAHOO FINANCE 即時抓取
-//  - allorigins /get 回傳 {contents:"...json..."}，需 JSON.parse
-//  - 自動判斷上市(.TW) / 上櫃(.TWO)
-//  - 每次嘗試有 8 秒 timeout
-//  - 策略：先抓輕量 1y 日線（快），成功再擴展到 400d
-// ══════════════════════════════════════════════════════
-
-// fetch with timeout helper
+// ═══════════════════════════════════════
 function fetchWithTimeout(url, ms = 8000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
@@ -1022,7 +992,6 @@ function fetchWithTimeout(url, ms = 8000) {
 }
 
 function parseYahooJSON(raw) {
-  // allorigins /get 包在 {contents: "...字串..."} 裡，需再 JSON.parse
   const j = (raw && typeof raw.contents === 'string') ? JSON.parse(raw.contents) : raw;
   const result = j?.chart?.result?.[0];
   if (!result) throw new Error('Yahoo 查無資料');
@@ -1044,12 +1013,9 @@ function parseYahooJSON(raw) {
   }).filter(d => d.close > 0);
 }
 
-// 單一 URL 嘗試：allorigins /get → allorigins /raw → 直連
-// Grok v2 驗證：加 cache:"no-store" 強制不快取
 async function tryYahooUrl(targetUrl) {
   const noCache = { cache: 'no-store' };
 
-  // 策略 A: allorigins /get（Grok & Document 3 驗證最穩定）
   try {
     const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(targetUrl);
     const r = await fetchWithTimeout(proxyUrl, 9000);
@@ -1060,7 +1026,6 @@ async function tryYahooUrl(targetUrl) {
     }
   } catch(e) { console.warn('[Yahoo] allorigins/get:', e.message); }
 
-  // 策略 B: allorigins /raw + no-cache
   try {
     const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl);
     const ctrl = new AbortController();
@@ -1073,7 +1038,6 @@ async function tryYahooUrl(targetUrl) {
     }
   } catch(e) { console.warn('[Yahoo] allorigins/raw:', e.message); }
 
-  // 策略 C: 直連（部分環境 CORS 通）
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 6000);
@@ -1089,7 +1053,6 @@ async function tryYahooUrl(targetUrl) {
 }
 
 async function fetchYahooPrice(stockId) {
-  // 純日線歷史（1d interval），供即時按鈕的 Step2 使用
   const suffixes = ['.TW', '.TWO'];
   const nodes    = ['query1', 'query2'];
   const ranges   = ['1y', '400d'];
@@ -1103,7 +1066,7 @@ async function fetchYahooPrice(stockId) {
           const data = await tryYahooUrl(url);
           if (data && data.length >= 10) {
             console.log(`[Yahoo日線] 成功：${symbol} ${rng} via ${node}`);
-            currentSuffix = suffix;  // 記錄成功的市場後綴
+            currentSuffix = suffix;
             return data;
           }
         } catch(e) { /* continue */ }
@@ -1114,8 +1077,6 @@ async function fetchYahooPrice(stockId) {
 }
 
 async function analyzeRealtime() {
-  // 原理：用 Yahoo 1分K 抓法（interval=1m&range=1d）抓當日最新成交價
-  // 取最後一根的 close 作為「今日最新收盤」補入歷史日線，完成全圖分析
   const stockId = document.getElementById('stockInput').value.trim();
   if (!stockId) { setStatus('請輸入股票代號','error'); return; }
   const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
@@ -1123,10 +1084,7 @@ async function analyzeRealtime() {
   document.getElementById('splash').style.display = 'none';
   document.getElementById('mainContent').classList.add('show');
   try {
-    // Step 1: 抓即時 1分K 取最新一根
     const latestBar = await fetchYahooLatest(stockId);
-
-    // Step 2: 同步抓 FinMind 歷史日線 + 籌碼 + 基本面
     const [pd, cd, sn, rd, epsd] = await Promise.all([
       fetchPrice(stockId, token),
       fetchChip(stockId, token),
@@ -1135,17 +1093,14 @@ async function analyzeRealtime() {
       fetchEPS(stockId, token),
     ]);
 
-    // Step 3: 把即時最新一根插入（或更新）歷史日線末尾
     if (latestBar) {
       const lastHist = pd[pd.length - 1];
       if (lastHist && lastHist.date === latestBar.date) {
-        // 同一天：更新最後一根的 close/high/low（反映盤中最新）
         lastHist.close = latestBar.close;
         lastHist.max   = Math.max(lastHist.max, latestBar.close);
         lastHist.min   = Math.min(lastHist.min, latestBar.close);
         if (latestBar.Trading_Volume > 0) lastHist.Trading_Volume = latestBar.Trading_Volume;
       } else if (!lastHist || latestBar.date > lastHist.date) {
-        // 新的交易日：直接加在末尾
         pd.push(latestBar);
       }
       setStatus(`即時成功！最新收盤：${latestBar.close}（${latestBar.date}）`, 'success');
@@ -1165,7 +1120,6 @@ async function analyzeRealtime() {
   }
 }
 
-// ── 抓大盤加權指數日線（^TWII）用於個股強弱比較 ──
 async function fetchTWII() {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=60d&includePrePost=false`;
   for (const node of ['query1', 'query2']) {
@@ -1178,19 +1132,16 @@ async function fetchTWII() {
       }
     } catch(e) {}
   }
-  return [];  // 失敗就空陣列，不影響主流程
+  return [];
 }
 
-// ── 抓當日1分K：取最後一根收盤 + 計算今日累積量 ──
 async function fetchYahooLatest(stockId) {
   const suffixes = ['.TW', '.TWO'];
   const nodes    = ['query1', 'query2'];
   for (const suffix of suffixes) {
     const symbol = stockId + suffix;
     for (const node of nodes) {
-      // 抓今日1分K（range=1d）
       const url1m = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=false`;
-      // 同時抓5日日線取昨日成交量（range=5d&interval=1d）
       const url1d = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d&includePrePost=false`;
       try {
         const [intraday, daily] = await Promise.all([
@@ -1199,19 +1150,15 @@ async function fetchYahooLatest(stockId) {
         ]);
         if (intraday && intraday.length > 0) {
           const last = intraday[intraday.length - 1];
-          // 計算今日已累積成交量（所有1分K的量加總）
           const todayVol = intraday.reduce((s, d) => s + (d.Trading_Volume || 0), 0);
-          // 昨日全天成交量（日線倒數第2根）
           const prevDayVol = daily && daily.length >= 2
             ? daily[daily.length - 2].Trading_Volume : 0;
           const ratio = prevDayVol > 0 ? todayVol / prevDayVol : null;
-          // 取當前時間判斷市場開盤進度
           const now = new Date();
-          const marketMinutes = Math.max(0, (now.getHours()*60 + now.getMinutes()) - 9*60); // 距開盤分鐘
-          const dayProgress = Math.min(1, marketMinutes / 270); // 台股270分鐘（9:00-13:30）
+          const marketMinutes = Math.max(0, (now.getHours()*60 + now.getMinutes()) - 9*60);
+          const dayProgress = Math.min(1, marketMinutes / 270);
 
           intradayVolInfo = { todayVol, prevDayVol, ratio, dayProgress, time: now.toLocaleTimeString('zh-TW') };
-          console.log(`[即時] ${symbol} 今日累積${(todayVol/1000).toFixed(0)}張，昨日${(prevDayVol/1000).toFixed(0)}張，比例${ratio?.toFixed(2)}`);
           return last;
         }
       } catch(e) { console.warn(`[即時] ${symbol} ${node}:`, e.message); }
@@ -1224,7 +1171,6 @@ async function fetchYahooLatest(stockId) {
 // ═══════════════════════════════════════
 //  FETCH — FinMind
 // ═══════════════════════════════════════
-
 async function fetchStockName(stockId) {
   if (stockNameCache[stockId]) return stockNameCache[stockId];
   try {
@@ -1293,7 +1239,6 @@ async function analyze() {
   const customTo = document.getElementById('dateTo')?.value || '';
 
   try {
-    // 主資料（5個）先跑，不等 TWII
     const [pd, cd, sn, rd, epsd] = await Promise.all([
       fetchPrice(stockId, token, '', customTo),
       fetchChip(stockId, token),
@@ -1307,18 +1252,16 @@ async function analyze() {
     addToRecent(stockId);
     clearStatus();
     renderMeta(stockId, sn);
-    twiiData = [];        // 先清空，畫面先出來
+    twiiData = [];
     redraw();
 
-    // TWII 背景抓，抓到後靜默更新相對強弱訊號
     fetchTWII().then(twiid => {
       if (twiid && twiid.length > 0) {
         twiiData = twiid;
-        // 只重跑 runAnalysis（不重建圖表，速度快）
         const sliced = priceData.slice(-currentPeriod);
         runAnalysis(sliced, twiiData);
       }
-    }).catch(() => {});   // TWII 失敗不影響主流程
+    }).catch(() => {});
 
   } catch(err) {
     setStatus(err.message, 'error');
@@ -1363,7 +1306,6 @@ function renderMeta(stockId, stockName) {
     <span class="meta-pill">量 <b>${(last.Trading_Volume/1000).toFixed(0)}張</b></span>
     ${intradayVolInfo ? (() => {
       const { todayVol, prevDayVol, ratio, dayProgress, time } = intradayVolInfo;
-      // 預期全日量：今日累積量 / 開盤進度
       const projectedVol = dayProgress > 0.05 ? todayVol / dayProgress : null;
       const projRatio = (projectedVol && prevDayVol > 0) ? projectedVol / prevDayVol : null;
       const ratioColor = ratio >= 1.5 ? 'var(--up)' : ratio >= 0.8 ? 'var(--text)' : 'var(--muted2)';
@@ -1426,12 +1368,10 @@ function buildCharts(data) {
   if(macdChartObj){ macdChartObj.remove(); macdChartObj=null; }
   trendLines = [];
 
-  // 用 getBoundingClientRect 取得實際高度，避免 offsetHeight=0 的問題
   const kRect = kEl.parentElement.getBoundingClientRect();
   const kH = (kRect.height > 50 ? kRect.height : kEl.parentElement.offsetHeight) || 340;
   const vH = 90; const mH = 90;
 
-  // ─ KLINE CHART ─（開啟時間軸顯示）
   kChart = LightweightCharts.createChart(kEl, {
     ...lwChartOpts(kH),
     timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
@@ -1476,7 +1416,7 @@ function buildCharts(data) {
   ma20Series = addMA(20, maColors[20]);
   ma60Series = addMA(60, maColors[60]);
 
-  // ── VWAP 主力成本均線（成交量加權均價）──
+  // VWAP
   {
     let cumPV = 0, cumV = 0;
     const vwapData = data.map(d => {
@@ -1494,7 +1434,7 @@ function buildCharts(data) {
     vwapSeries.setData(vwapData);
   }
 
-  // ── 布林通道（Bollinger Bands, 20日 ±2σ）──
+  // 布林通道
   {
     const bbData = data.map((d, i) => {
       if (i < 19) return null;
@@ -1513,12 +1453,11 @@ function buildCharts(data) {
     bbLowerSeries = kChart.addLineSeries({ color:'rgba(41,197,197,0.7)', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, title:'BB下' });
     bbLowerSeries.setData(bbData.map(d=>({ time:d.time, value:d.lower })));
 
-    // 套用預設可見狀態
     [bbUpperSeries, bbMidSeries, bbLowerSeries].forEach(s => s.applyOptions({ visible: bbVisible }));
     document.getElementById('bbChip')?.setAttribute('data-off', bbVisible ? '0' : '1');
   }
 
-  // ─ VOLUME CHART ─
+  // Volume Chart
   volChart = LightweightCharts.createChart(vEl, {
     ...lwChartOpts(vH),
     timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false },
@@ -1533,7 +1472,7 @@ function buildCharts(data) {
   volMaSeries = volChart.addLineSeries({ color:'#e8b84b', lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   volMaSeries.setData(calcAvgVol(data, 20));
 
-  // ─ MACD CHART ─
+  // MACD Chart
   macdChartObj = LightweightCharts.createChart(mEl, {
     ...lwChartOpts(mH),
     timeScale:{ borderColor:'#1e2d4a', visible:true, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
@@ -1574,7 +1513,7 @@ function buildCharts(data) {
   signalSeries = macdChartObj.addLineSeries({ color:'#ff9f40', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   signalSeries.setData(macdAligned.filter(d => d.signal !== null).map(d => ({ time: d.time, value: d.signal })));
 
-  // ─ RSI CHART ─ (先建立，才能一起納入同步群組)
+  // RSI Chart
   if(rsiChart){ rsiChart.remove(); rsiChart=null; }
   const rsiEl = document.getElementById('rsiChart');
   if(rsiEl) {
@@ -1607,12 +1546,11 @@ function buildCharts(data) {
     const rsiAnchor = rsiChart.addLineSeries({ color:'transparent', lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, visible:false });
     rsiAnchor.setData(data.map(d=>({ time:d.date, value:50 })));
 
-    // ── KD 線疊加在 RSI 圖（共用同一個子圖，不另開新圖）──
-    // KD 值域 0-100 和 RSI 相同，可直接疊加
+    // KD 疊加在 RSI 圖
     {
       let pk = 50, pd = 50;
       const kdData = data.map((bar, i) => {
-        if (i < 8) return null;   // 9日KD，至少需要9根
+        if (i < 8) return null;
         const sl  = data.slice(i-8, i+1);
         const hi  = Math.max(...sl.map(b=>b.max));
         const lo  = Math.min(...sl.map(b=>b.min));
@@ -1629,7 +1567,6 @@ function buildCharts(data) {
       kdDSeries = rsiChart.addLineSeries({ color:'rgba(232,184,75,0.85)', lineWidth:1.5, priceLineVisible:false, lastValueVisible:true, crosshairMarkerVisible:false });
       kdDSeries.setData(kdData.map(d=>({ time:d.time, value:d.d })));
 
-      // 套用預設可見狀態
       kdKSeries.applyOptions({ visible: kdVisible });
       kdDSeries.applyOptions({ visible: kdVisible });
       const klEl = document.getElementById('kdLabelItem');
@@ -1640,8 +1577,7 @@ function buildCharts(data) {
     }
   }
 
-  // ── 同步十字線 & 時間軸（RSI 已建立，一次全部納入）──
-  // 關鍵：必須在 RSI 建立後才組 allCharts，否則 crosshair subscriber 訂閱不到 RSI
+  // 同步十字線 & 時間軸
   const allCharts = [
     { c: kChart,       s: () => candleSeries },
     { c: volChart,     s: () => volSeries },
@@ -1649,7 +1585,6 @@ function buildCharts(data) {
     ...(rsiChart ? [{ c: rsiChart, s: () => rsiSeries }] : []),
   ];
 
-  // 十字線同步（用 param.time 直接同步，param.logical 可能因子圖資料起始不同而偏移）
   allCharts.forEach(({ c }) => {
     c.subscribeCrosshairMove(param => {
       allCharts.forEach(({ c: oc, s: oSeries }) => {
@@ -1666,7 +1601,6 @@ function buildCharts(data) {
     });
   });
 
-  // 時間軸範圍同步
   let _syncing = false;
   const syncRange = (src) => {
     if (_syncing) return; _syncing = true;
@@ -1676,7 +1610,6 @@ function buildCharts(data) {
   };
   allCharts.forEach(({ c }) => { c.timeScale().subscribeVisibleLogicalRangeChange(() => syncRange(c)); });
 
-  // fitContent + 強制對齊到 kChart 的範圍
   allCharts.forEach(({ c }) => c.timeScale().fitContent());
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -1836,7 +1769,7 @@ function processChip(chipRaw) {
 }
 
 // ═══════════════════════════════════════
-//  ANALYSIS ENGINE（含策略加權）
+//  ANALYSIS ENGINE
 // ═══════════════════════════════════════
 function runAnalysis(slicedData, twiiRaw) {
   const data = slicedData || priceData.slice(-currentPeriod);
@@ -1898,7 +1831,7 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
-  // ── RSI（依策略調整閾值）──
+  // ── RSI ──
   const rsiOB = strat.rsiOBWarn || 70;
   const rsiOS = strat.rsiOSBuy  || 35;
   if(lrsi!==null){
@@ -2095,13 +2028,9 @@ function runAnalysis(slicedData, twiiRaw) {
   let bonusPts = 0;
   if(strat.bonusCond) bonusPts = strat.bonusCond(signals, data);
 
-  // ════════════════════════════════════════
-  //  短線強度分析（新增）
-  // ════════════════════════════════════════
-
-  // ── 1. 收盤強度：收盤在當日高低範圍的位置 ──
+  // ── 短線強度分析 ──
   const dayRange = last.max - last.min || 0.01;
-  const closePosition = (last.close - last.min) / dayRange;  // 0=最低 1=最高
+  const closePosition = (last.close - last.min) / dayRange;
   let closePosLabel, closePosColor, closePosScore;
   if (closePosition >= 0.8)      { closePosLabel='極強收盤（高點區>80%）'; closePosColor='var(--up)';  closePosScore=3;  bullPts+=5; }
   else if (closePosition >= 0.6) { closePosLabel='偏強收盤（60-80%）';      closePosColor='var(--up)';  closePosScore=2;  bullPts+=3; }
@@ -2109,7 +2038,6 @@ function runAnalysis(slicedData, twiiRaw) {
   else if (closePosition >= 0.2) { closePosLabel='偏弱收盤（20-40%）';      closePosColor='var(--dn)';    closePosScore=-1; bearPts+=3; }
   else                           { closePosLabel='極弱收盤（低點區<20%）';  closePosColor='var(--dn)';    closePosScore=-2; bearPts+=5; }
 
-  // ── 2. 上下影線分析：主力意圖偵測 ──
   const upperShadow = last.max - Math.max(last.close, last.open);
   const lowerShadow = Math.min(last.close, last.open) - last.min;
   const bodySize    = Math.abs(last.close - last.open);
@@ -2123,13 +2051,12 @@ function runAnalysis(slicedData, twiiRaw) {
   else if (upperRatio < 0.1 && isBull) { shadowIntention='幾乎無上影，主力不急於出貨，多方控盤'; bullPts+=4; }
   else                               { shadowIntention='影線正常，無特殊意圖'; }
 
-  // ── 3. 量能啟動偵測：連續縮量後放量 ──
   let volumeLaunch = null;
   if (n >= 6) {
     const prev5vols = data.slice(-6, -1).map(d => d.Trading_Volume);
     const prev5avg  = prev5vols.reduce((s,v)=>s+v,0) / 5;
     const prev3avg  = prev5vols.slice(-3).reduce((s,v)=>s+v,0) / 3;
-    const isConsolidating = prev3avg < prev5avg * 0.85;  // 近3日量 < 近5日均量85%
+    const isConsolidating = prev3avg < prev5avg * 0.85;
     if (isConsolidating && volRatio > 1.4) {
       volumeLaunch = { type: isBull ? 'bull' : 'bear',
         text: `縮量整理後今日量增${volRatio.toFixed(1)}倍${isBull?'收紅，啟動訊號強烈！':'收黑，需觀察方向'}` };
@@ -2139,7 +2066,6 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
-  // ── 4. K線實體連續收縮偵測 ──
   let bodyShrink = null;
   if (n >= 4) {
     const bodies = data.slice(-4).map(d => Math.abs(d.close - d.open));
@@ -2147,14 +2073,12 @@ function runAnalysis(slicedData, twiiRaw) {
     const avgBody3 = (bodies[0]+bodies[1]+bodies[2])/3;
     if (shrinking && bodies[3] < avgBody3 * 0.5) {
       bodyShrink = { type:'neutral', text:`K線實體連續收縮4日，震幅逐日縮小，方向選擇即將出現` };
-      bullPts += 3; // 收斂本身是中性偏多的準備訊號
+      bullPts += 3;
     }
   }
 
-  // ── 5. 個股 vs 大盤相對強弱 ──
   let relStrength = null;
   if (twiiRaw && twiiRaw.length >= 3 && n >= 3) {
-    // 比較近3日個股漲跌 vs 大盤漲跌
     const stockChg3 = (data[n-1].close - data[n-4]?.close) / (data[n-4]?.close || data[n-1].close) * 100;
     const twiiLast  = twiiRaw[twiiRaw.length-1];
     const twiiPrev3 = twiiRaw[twiiRaw.length-4] || twiiRaw[0];
@@ -2174,14 +2098,12 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
-  // 短線訊號加入 signals
   if (volumeLaunch) signals.push({ type: volumeLaunch.type, cat:'量能啟動', text: volumeLaunch.text });
   if (bodyShrink)   signals.push({ type: bodyShrink.type,   cat:'K線收斂', text: bodyShrink.text });
   if (relStrength)  signals.push({ type: relStrength.type,  cat:'相對強弱', text: relStrength.text });
   signals.push({ type: closePosition>=0.5?'bull':'bear', cat:'收盤強度', text: `${closePosLabel}（${(closePosition*100).toFixed(0)}%位置）` });
   if (shadowIntention) signals.push({ type: upperRatio>0.35?'bear':lowerRatio>0.35?'bull':'neutral', cat:'影線意圖', text: shadowIntention });
 
-  // ── 週線/月線強弱判斷 ──
   const week5   = n >= 5  ? data.slice(-5).reduce((s,d)=>s+d.close,0)/5   : last.close;
   const week20  = n >= 20 ? data.slice(-20).reduce((s,d)=>s+d.close,0)/20 : last.close;
   const month60 = n >= 60 ? data.slice(-60).reduce((s,d)=>s+d.close,0)/60 : null;
@@ -2203,15 +2125,12 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
-  // ── 均線糾結偵測 ──
-  // 定義：MA5 / MA10 / MA20 三線在現價的 2% 價差範圍內互相纏繞
   if (lma5 && lma10 && lma20) {
     const maHigh  = Math.max(lma5, lma10, lma20);
     const maLow   = Math.min(lma5, lma10, lma20);
-    const maSpread = (maHigh - maLow) / last.close * 100;  // 三線價差（%）
+    const maSpread = (maHigh - maLow) / last.close * 100;
 
     if (maSpread < 1.5) {
-      // 極度糾結：三線幾乎重疊，方向選擇最近
       const prevSpread = (() => {
         const pm5  = ma5a[n-4];
         const pm10 = ma10a[n-4];
@@ -2219,24 +2138,17 @@ function runAnalysis(slicedData, twiiRaw) {
         if (!pm5 || !pm10 || !pm20) return maSpread;
         return (Math.max(pm5,pm10,pm20) - Math.min(pm5,pm10,pm20)) / data[n-4].close * 100;
       })();
-      const shrinking = maSpread < prevSpread;  // 糾結是否還在收窄
-
-      // 嘗試判斷糾結後的方向傾向：股價在三線中心之上/之下
+      const shrinking = maSpread < prevSpread;
       const maCenter = (lma5 + lma10 + lma20) / 3;
       const priceAbove = last.close > maCenter;
-
       signals.push({
         type: 'neutral',
         cat: '均線糾結',
         text: `⚡ MA5/10/20 極度糾結（三線價差僅 ${maSpread.toFixed(2)}%）${shrinking ? '，仍在收窄中' : ''}｜方向即將選擇，股價在均線中心${priceAbove ? '上方偏多' : '下方偏空'}，等突破確認再進場`
       });
-      // 糾結本身不加多空分，但突破方向加分
       if (priceAbove && isBull) bullPts += 6;
       if (!priceAbove && isBear) bearPts += 6;
-
     } else if (maSpread < 3.0) {
-      // 中度糾結：三線在收斂中
-      // 確認是否有收窄趨勢（近3日的三線價差是否在縮小）
       const spreads = [2, 3, 4].map(back => {
         const bma5  = ma5a[n-back];
         const bma10 = ma10a[n-back];
@@ -2244,22 +2156,18 @@ function runAnalysis(slicedData, twiiRaw) {
         if (!bma5 || !bma10 || !bma20) return null;
         return (Math.max(bma5,bma10,bma20) - Math.min(bma5,bma10,bma20)) / data[n-back].close * 100;
       }).filter(Boolean);
-
       const isTightening = spreads.length >= 2 && spreads[0] > maSpread && spreads[1] > spreads[0];
-
       if (isTightening) {
         signals.push({
           type: 'neutral',
           cat: '均線糾結',
           text: `均線持續收斂（三線價差 ${maSpread.toFixed(2)}%，近3日由 ${spreads[1].toFixed(2)}%→${spreads[0].toFixed(2)}%→${maSpread.toFixed(2)}%），蓄勢待發，量增突破前不宜追`
         });
-        bullPts += 2;  // 收斂中偏中性，給小加分等待
+        bullPts += 2;
       }
     }
-    // maSpread >= 3% 代表三線已擴張，不算糾結，不發訊號
   }
 
-  // ── 量能結構評分（0-10分）──
   const vol1     = last.Trading_Volume;
   const vol5avg  = n >= 5  ? data.slice(-5).reduce((s,d)=>s+d.Trading_Volume,0)/5 : vol1;
   const vol20avg = lavg || (n >= 20 ? data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20 : vol1);
@@ -2276,7 +2184,6 @@ function runAnalysis(slicedData, twiiRaw) {
   volStructScore = Math.max(0, Math.min(10, volStructScore));
   const volStructLabel = volStructScore>=8?'🔥 強勁':volStructScore>=6?'📈 偏強':volStructScore>=4?'➡ 正常':'📉 偏弱';
 
-  // ── 支撐壓力強度（測試次數）──
   const priceRange    = rhi - rlo || 1;
   const resTolerance  = priceRange * 0.015;
   const supTolerance  = priceRange * 0.015;
@@ -2296,7 +2203,6 @@ function runAnalysis(slicedData, twiiRaw) {
     text: `支撐 ${rlo.toFixed(2)} 測試 ${supTestCount} 次（${supStrength}）`
   });
 
-  // ── 自動推薦策略 ──
   const autoStrategy = (() => {
     if (lrsi !== null && lrsi < 35 && lkdj && lkdj.k < 30)
       return { key:'reversal', reason:`RSI=${lrsi.toFixed(0)} + KD低檔，超賣反彈機會` };
@@ -2309,13 +2215,11 @@ function runAnalysis(slicedData, twiiRaw) {
     return { key:'balanced', reason:`訊號混雜，建議平衡評估` };
   })();
 
-  // ── 計算總分 ──
   const net = bullPts - bearPts + bonusPts;
   const maxPossible = 200;
   let score = Math.round(50 + (net / maxPossible) * 50);
   score = Math.max(0, Math.min(100, score));
 
-  // 整理短線強度資料給 renderShortTerm
   const shortTermData = {
     closePosition, closePosLabel, closePosColor, closePosScore,
     upperRatio, lowerRatio, upperShadow, lowerShadow, bodySize, dayRange,
@@ -2357,11 +2261,9 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   document.getElementById('scoreVerdict').style.color = color;
   document.getElementById('scoreSub').textContent = sub;
 
-  // 移除舊標籤
   ['strategyTag','autoStratTag','volStructTag'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
   const hdr = document.querySelector('.score-header');
 
-  // 💡 自動推薦策略（可點擊套用）
   if (autoStrategy) {
     const names = { balanced:'⚖ 平衡', breakout:'🚀 突破追強', pullback:'🔄 回檔承接', reversal:'⚡ 反轉搶彈' };
     const aTag = document.createElement('div');
@@ -2373,7 +2275,6 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     hdr.appendChild(aTag);
   }
 
-  // 量能結構評分
   if (volStructScore !== undefined) {
     const filled = Math.round(volStructScore);
     const bar = '█'.repeat(filled) + '░'.repeat(10-filled);
@@ -2385,7 +2286,6 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     hdr.appendChild(vTag);
   }
 
-  // 當前策略標籤
   const strat = getCurrentStrategy();
   const sTag = document.createElement('div');
   sTag.id = 'strategyTag';
@@ -2408,7 +2308,7 @@ function renderSignals(signals) {
 }
 
 // ═══════════════════════════════════════
-//  RENDER CHIP + 籌碼異常偵測
+//  RENDER CHIP
 // ═══════════════════════════════════════
 function renderChip(chip) {
   const el = document.getElementById('chipContent');
@@ -2434,21 +2334,16 @@ function renderChip(chip) {
       ${anomalyHtml}
     </div>`;
 
-  // ── 籌碼異常偵測 ──
-  // 用完整60日資料算各法人日均絕對值，與最新一日比較
   const anomalies = [];
   const calcAnomaly = (key, label) => {
     if (chip.length < 10) return { html:'', alert:null };
     const allVals   = chip.map(d => d[key]);
     const absVals   = allVals.map(v => Math.abs(v));
-    // 平均用前 N-1 日（排除最新一日），避免自己影響自己
     const histVals  = absVals.slice(0, -1);
     const histAvg   = histVals.reduce((s,v)=>s+v,0) / (histVals.length || 1);
     const todayAbs  = absVals[absVals.length - 1];
     const todayVal  = allVals[allVals.length - 1];
     const ratio     = histAvg > 0 ? todayAbs / histAvg : 0;
-
-    // 方向反轉偵測：前3日方向 vs 今日方向
     const prev3     = allVals.slice(-4, -1);
     const prev3sum  = prev3.reduce((s,v)=>s+v, 0);
     const reversed  = prev3sum !== 0 && Math.sign(prev3sum) !== Math.sign(todayVal) && todayAbs > histAvg * 0.8;
@@ -2477,7 +2372,6 @@ function renderChip(chip) {
   const tAnomaly = calcAnomaly('trust',   '投信');
   const dAnomaly = calcAnomaly('dealer',  '自營');
 
-  // 異常警報 HTML
   const anomalyAlertHtml = anomalies.length > 0 ? `
     <div style="margin-bottom:10px;">
       <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">🔔 籌碼異常偵測</div>
@@ -2527,7 +2421,6 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
   const sl_hard = Math.min(...last3.map(d => d.min));
   const ma5arr = data.map((_,i) => i < 4 ? null : data.slice(i-4, i+1).reduce((s,d)=>s+d.close,0)/5);
   const sl_ma5 = ma5arr[n-1];
-  // riskBase 最小取現價的 0.5%，避免除以零出現 Infinity
   const riskBase = Math.max(p - sl_hard, p * 0.005);
 
   const ref60 = data.slice(-60, -3);
@@ -2605,7 +2498,7 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
 }
 
 // ═══════════════════════════════════════
-//  RENDER BIAS（加語意說明）
+//  RENDER BIAS
 // ═══════════════════════════════════════
 function renderBias(data) {
   const el = document.getElementById('biasContent');
@@ -2633,7 +2526,6 @@ function renderBias(data) {
   };
   const bFmt = (v) => v === null ? '-' : `${v>0?'+':''}${v.toFixed(2)}%`;
 
-  // 語意說明
   const bLabel = (v) => {
     if (v === null) return '';
     if (v > 12)  return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">🔥 嚴重過熱，回調風險極高</span>`;
@@ -2680,29 +2572,19 @@ function renderBias(data) {
 }
 
 // ═══════════════════════════════════════
-//  RENDER SHORT TERM STRENGTH
+//  RENDER SHORT TERM
 // ═══════════════════════════════════════
 function renderShortTerm(d) {
   const el = document.getElementById('shortTermContent');
   if (!el) return;
 
-  const pct = v => (v * 100).toFixed(0) + '%';
-  const bar = (ratio, color) => `
-    <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
-      <div style="width:${Math.min(100,ratio*100).toFixed(0)}%;height:100%;background:${color};border-radius:3px;transition:width .4s;"></div>
-    </div>`;
-
-  // 收盤強度圓弧指示器
   const cpPct = (d.closePosition * 100).toFixed(0);
   const cpColor = d.closePosScore >= 2 ? 'var(--up)' : d.closePosScore >= 0 ? 'var(--text)' : 'var(--dn)';
 
-  // 影線比例視覺化
-  const totalBar = 200; // px
   const bodyPct   = d.dayRange > 0 ? d.bodySize / d.dayRange * 100 : 0;
   const upperPct  = d.upperRatio * 100;
   const lowerPct  = d.lowerRatio * 100;
 
-  // 量能趨勢
   const volTrend = d.volRatio > 1.5 ? { label:'量增', color:'var(--up)' }
                  : d.volRatio > 1.1 ? { label:'量偏大', color:'#ff9f40' }
                  : d.volRatio < 0.6 ? { label:'縮量', color:'var(--muted2)' }
@@ -2710,8 +2592,6 @@ function renderShortTerm(d) {
 
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:10px;">
-
-      <!-- 收盤強度 -->
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:7px;letter-spacing:1px;">◆ 收盤強度（日內位置）</div>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -2732,7 +2612,6 @@ function renderShortTerm(d) {
         </div>
       </div>
 
-      <!-- 影線意圖 -->
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:7px;letter-spacing:1px;">◆ 影線比例（主力意圖）</div>
         <div style="display:flex;gap:3px;height:8px;margin-bottom:6px;border-radius:4px;overflow:hidden;">
@@ -2748,7 +2627,6 @@ function renderShortTerm(d) {
         <div style="font-size:.73rem;color:var(--text);margin-top:5px;">💬 ${d.shadowIntention}</div>
       </div>
 
-      <!-- 量能啟動 -->
       ${d.volumeLaunch ? `
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.volumeLaunch.type==='bull'?'rgba(255,77,109,.3)':'rgba(0,200,150,.3)'};">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 量能啟動偵測</div>
@@ -2759,7 +2637,6 @@ function renderShortTerm(d) {
         <div style="font-size:.75rem;color:${volTrend.color};">今日量 ${volTrend.label}（均量${d.volRatio.toFixed(1)}倍）${d.bodyShrink?'<br>⚡ '+d.bodyShrink.text:''}</div>
       </div>`}
 
-      <!-- 個股 vs 大盤 -->
       ${d.relStrength ? `
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.relStrength.type==='bull'?'rgba(255,77,109,.25)':d.relStrength.type==='bear'?'rgba(0,200,150,.25)':'var(--border)'};">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 相對大盤強弱（近3日）</div>
@@ -2768,7 +2645,6 @@ function renderShortTerm(d) {
       <div style="background:var(--s2);border-radius:8px;padding:8px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);">◆ 相對強弱：大盤資料抓取中或不可用</div>
       </div>`}
-
     </div>
   `;
 }
@@ -2776,7 +2652,6 @@ function renderShortTerm(d) {
 // resize
 window.addEventListener('resize', () => {
   if(!kChart) return;
-  // On mobile, re-apply charts-col height before measuring
   const chartsColEl = document.getElementById('chartsCol');
   if (chartsColEl && window.innerWidth <= 960) {
     chartsColEl.style.height = Math.max(480, window.innerHeight * 0.70) + 'px';
@@ -2811,12 +2686,8 @@ async function fetchRevenue(stockId, token) {
 }
 
 // ═══════════════════════════════════════
-//  FETCH EPS（每季）
+//  FETCH EPS
 // ═══════════════════════════════════════
-// ══════════════════════════════════════════════════════
-//  FETCH EPS（使用 TaiwanStockFinancialStatements，Document 2 驗證有效）
-//  欄位：r.date（季度末日期），r.value（EPS 數值）
-// ══════════════════════════════════════════════════════
 async function fetchEPS(stockId, token) {
   try {
     const today = new Date();
@@ -2832,18 +2703,17 @@ async function fetchEPS(stockId, token) {
     const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
     const j = await r.json();
     if (!j?.data?.length) return [];
-    // 只取 BasicEPS 行（每股盈餘），按日期升序
     return j.data
       .filter(d => d.type === 'BasicEPS' || d.type === 'EPS'
                 || (d.origin_name && d.origin_name.includes('每股')))
       .sort((a, b) => a.date.localeCompare(b.date));
   } catch { return []; }
 }
+
 function renderRevenue(data, eps) {
   const el = document.getElementById('revenueContent');
   let html = '';
 
-  // ── 月營收 ──
   if(!data?.length){
     html += '<div style="color:var(--muted);font-size:.75rem;margin-bottom:12px;">無法取得月營收資料</div>';
   } else {
@@ -2882,7 +2752,6 @@ function renderRevenue(data, eps) {
     `;
   }
 
-  // ── EPS（每季）── Document 2 驗證有效：r.date 季末日期，r.value EPS值
   const epsRows = (eps || []).slice(-8).reverse();
   html += `<div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);padding-top:8px;border-top:1px solid var(--border);">EPS（每季）</div>`;
   if (!epsRows.length) {
@@ -2895,7 +2764,6 @@ function renderRevenue(data, eps) {
         ${epsRows.map(r => {
           const val = Number(r.value);
           const color = val >= 0 ? 'var(--up)' : 'var(--dn)';
-          // 季度標籤：r.date 格式通常為 YYYY-MM-DD（季末），轉成 YYYY-Qn
           const yr = parseInt(r.date.slice(0,4));
           const mo = parseInt(r.date.slice(5,7));
           const qMap = {3:'Q1',6:'Q2',9:'Q3',12:'Q4'};
@@ -2909,7 +2777,6 @@ function renderRevenue(data, eps) {
 
   el.innerHTML = html;
 }
-
 
 // ═══════════════════════════════════════
 //  RSI DIVERGENCE
@@ -2963,7 +2830,6 @@ function addVolumeMarkers(data, avgVolArr) {
   try { candleSeries.setMarkers(markers.slice(-30)); } catch{}
 }
 
-
 // ═══════════════════════════════════════
 //  KEYBOARD SHORTCUTS
 // ═══════════════════════════════════════
@@ -2984,7 +2850,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ═══════════════════════════════════════
-//  RESIZER（iPad/電腦左右拖拉）
+//  RESIZER
 // ═══════════════════════════════════════
 (function initResizer() {
   const resizer     = document.getElementById('resizer');
@@ -3005,10 +2871,9 @@ document.addEventListener('keydown', e => {
   const onMove = (e) => {
     if (!isDown) return;
     const x = e.touches ? e.touches[0].clientX : e.clientX;
-    const dx = startX - x;  // 往左拖：分析欄變大
+    const dx = startX - x;
     const newW = Math.max(200, Math.min(700, startAnalW + dx));
     analysisCol.style.flex = `0 0 ${newW}px`;
-    // 觸發 chart resize
     if (kChart) {
       const kEl = document.getElementById('klineChart');
       const vEl = document.getElementById('volumeChart');
@@ -3038,12 +2903,11 @@ document.addEventListener('keydown', e => {
 })();
 
 // ═══════════════════════════════════════
-//  初始化：延遲確認 chart 高度正確
+//  初始化
 // ═══════════════════════════════════════
 window.addEventListener('load', () => {
   setTimeout(() => {
     if (!kChart) return;
-    // 手機版：動態設定 charts-col 高度
     const chartsColEl = document.getElementById('chartsCol');
     if (chartsColEl && window.innerWidth <= 960) {
       chartsColEl.style.height = Math.max(480, window.innerHeight * 0.70) + 'px';
@@ -3061,7 +2925,7 @@ window.addEventListener('load', () => {
   }, 200);
 });
 
-  // ── 自動從 OTC 報告連結載入股票代號 ──
+// 自動從 OTC 報告連結載入股票代號
 (function() {
   const params = new URLSearchParams(location.search);
   const stockParam = params.get('stock');
@@ -3070,11 +2934,12 @@ window.addEventListener('load', () => {
     analyze();
   }
 })();
-  
-// 初始化完成
+
+// ★ setActivePeriod：同步更新新位置的 .pt 按鈕樣式
 function setActivePeriod(p) {
   document.querySelectorAll('.pt').forEach(t => {
-    t.classList.toggle('active', parseInt(t.dataset.p) === p);
+    const isActive = parseInt(t.dataset.p) === p;
+    t.classList.toggle('active', isActive);
   });
   currentPeriod = p;
   if(priceData.length) redraw();
