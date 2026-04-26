@@ -234,7 +234,7 @@ header{
 }
 /* iPad 滾動側條：右側 16px 窄條（價格軸右邊），touch 不被 chart 攔截 */
 .scroll-strip{
-  width:16px;flex-shrink:0;
+  width:32px;flex-shrink:0;
   background:var(--s1);
   border-left:1px solid var(--border);
   touch-action:pan-y;
@@ -244,9 +244,9 @@ header{
 }
 .scroll-strip::after{
   content:'';display:block;
-  width:3px;height:32px;
+  width:4px;height:40px;
   background:var(--border2);border-radius:2px;
-  opacity:.6;
+  opacity:.7;
 }
 /* charts 內容區（原 charts-col 的直排內容） */
 .charts-inner{
@@ -2779,10 +2779,8 @@ async function fetchEPS(stockId, token) {
     const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
     const j = await r.json();
     if (!j?.data?.length) return [];
-    return j.data
-      .filter(d => d.type === 'BasicEPS' || d.type === 'EPS'
-                || (d.origin_name && d.origin_name.includes('每股')))
-      .sort((a, b) => a.date.localeCompare(b.date));
+    // 回傳全部財報資料，renderRevenue 自行篩選各指標
+    return j.data.sort((a, b) => a.date.localeCompare(b.date));
   } catch { return []; }
 }
 
@@ -2814,51 +2812,134 @@ function renderRevenue(data, eps) {
     html += `
       <div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);">月營收</div>
       <div style="margin-bottom:14px;">
-      <table style="border-collapse:collapse;font-size:.76rem;">
+      <table style="border-collapse:collapse;font-size:.76rem;width:100%;table-layout:fixed;">
+        <colgroup>
+          <col style="width:26%">
+          <col style="width:26%">
+          <col style="width:24%">
+          <col style="width:24%">
+        </colgroup>
         <tr>
-          <td style="padding:2px 10px 6px 0;color:var(--muted);font-size:.62rem;">月份</td>
-          <td style="padding:2px 10px 6px;text-align:right;color:var(--muted);font-size:.62rem;">營收</td>
-          <td style="padding:2px 10px 6px;text-align:right;color:var(--muted);font-size:.62rem;">YoY</td>
-          <td style="padding:2px 4px 6px;text-align:right;color:var(--muted);font-size:.62rem;">MoM</td>
+          <td style="padding:2px 0 6px;color:var(--muted);font-size:.62rem;">月份</td>
+          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">營收</td>
+          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">YoY</td>
+          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">MoM</td>
         </tr>
         ${rows.map(r => `
         <tr style="border-top:1px solid var(--border);">
-          <td style="padding:5px 10px 5px 0;color:var(--muted2);font-family:var(--mono);">${r.date.slice(0,7)}</td>
-          <td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-weight:600;">${fmtRev(r.rev)}</td>
-          <td style="padding:5px 10px;text-align:right;" class="rev-val ${pctCls(r.yoy)}">${fmtPct(r.yoy)}</td>
-          <td style="padding:5px 4px;text-align:right;" class="rev-val ${pctCls(r.mom,3,-3)}">${fmtPct(r.mom)}</td>
+          <td style="padding:5px 0;color:var(--muted2);font-family:var(--mono);">${r.date.slice(0,7)}</td>
+          <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-weight:600;">${fmtRev(r.rev)}</td>
+          <td style="padding:5px 0;text-align:right;" class="rev-val ${pctCls(r.yoy)}">${fmtPct(r.yoy)}</td>
+          <td style="padding:5px 0;text-align:right;" class="rev-val ${pctCls(r.mom,3,-3)}">${fmtPct(r.mom)}</td>
         </tr>`).join('')}
       </table>
       </div>
     `;
   }
 
-  const epsRows = (eps || []).slice(-8).reverse();
-  html += `<div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);padding-top:8px;border-top:1px solid var(--border);">EPS（每季）</div>`;
-  if (!epsRows.length) {
-    html += '<div style="color:var(--muted);font-size:.72rem;padding-bottom:4px;">EPS 暫無資料（需填入 FinMind Token）</div>';
+  // ── 季度財報：EPS + 毛利率 + 營益率 ──
+  // 從原始財報資料分別篩出三個指標，按日期組合成季度列
+  const allFinData = eps || [];  // fetchEPS 現在回傳全部財報資料
+  const qDateMap = {};  // { '2025-12-31': { eps, grossMargin, opMargin } }
+
+  const typeMap = {
+    eps:         ['BasicEPS','EPS'],
+    grossMargin: ['GrossProfit','毛利率','GrossProfitMargin'],
+    opMargin:    ['OperatingIncome','營業利益率','OperatingIncomeMargin'],
+    revenue:     ['Revenue','OperatingRevenue','TotalRevenue'],
+    grossProfit: ['GrossProfit'],
+    opIncome:    ['OperatingIncome'],
+  };
+
+  // 建立日期 → 各值的 map
+  allFinData.forEach(d => {
+    const dt = d.date;
+    if (!qDateMap[dt]) qDateMap[dt] = { eps: null, grossPct: null, opPct: null };
+    const t = d.type || '';
+    const v = Number(d.value);
+    if (['BasicEPS','EPS'].includes(t) || (d.origin_name && d.origin_name.includes('每股'))) {
+      qDateMap[dt].eps = v;
+    }
+    // 毛利率：直接是百分比欄位，或需要從毛利/收入計算
+    if (t === 'GrossProfitMargin' || t === 'GrossMargin') {
+      qDateMap[dt].grossPct = v;  // 已是百分比
+    }
+    if (t === 'OperatingIncomeMargin' || t === 'OperatingMargin') {
+      qDateMap[dt].opPct = v;  // 已是百分比
+    }
+    // 備用：收入/毛利/營益三欄原始值，供後面計算
+    if (['Revenue','OperatingRevenue','TotalRevenue'].includes(t)) {
+      qDateMap[dt].rev = v;
+    }
+    if (t === 'GrossProfit') { qDateMap[dt].grossProfit = v; }
+    if (t === 'OperatingIncome') { qDateMap[dt].opIncome = v; }
+  });
+
+  // 補算毛利率/營益率（若沒有直接欄位，用毛利÷收入）
+  Object.keys(qDateMap).forEach(dt => {
+    const q = qDateMap[dt];
+    if (q.grossPct === null && q.grossProfit != null && q.rev > 0) {
+      q.grossPct = q.grossProfit / q.rev * 100;
+    }
+    if (q.opPct === null && q.opIncome != null && q.rev > 0) {
+      q.opPct = q.opIncome / q.rev * 100;
+    }
+  });
+
+  // 過濾有 EPS 的季度，排序取最新8季
+  const qRows = Object.entries(qDateMap)
+    .filter(([dt, q]) => q.eps !== null)
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .slice(0, 8);
+
+  // 季度標籤
+  const toQLabel = dt => {
+    const yr = parseInt(dt.slice(0,4));
+    const mo = parseInt(dt.slice(5,7));
+    const qMap = {3:'Q1',6:'Q2',9:'Q3',12:'Q4'};
+    return qMap[mo] ? yr+'-'+qMap[mo] : dt.slice(0,7);
+  };
+
+  const fmtPct = v => v === null ? '-' : v.toFixed(1)+'%';
+  const pctColor = v => v === null ? 'var(--muted2)' : v >= 30 ? 'var(--up)' : v >= 15 ? 'var(--text)' : 'var(--dn)';
+
+  html += `<div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);padding-top:8px;border-top:1px solid var(--border);">季度財報</div>`;
+  if (!qRows.length) {
+    html += '<div style="color:var(--muted);font-size:.72rem;padding-bottom:4px;">季度財報暫無資料（需填入 FinMind Token）</div>';
   } else {
+    // 判斷有無毛利率/營益率資料
+    const hasMargin = qRows.some(([,q]) => q.grossPct !== null || q.opPct !== null);
     html += `
-      <table style="border-collapse:collapse;font-size:.76rem;">
+      <table style="border-collapse:collapse;font-size:.76rem;width:100%;table-layout:fixed;">
+        <colgroup>
+          <col style="width:26%">
+          <col style="width:${hasMargin ? '26%' : '74%'}">
+          ${hasMargin ? '<col style="width:24%"><col style="width:24%">' : ''}
+        </colgroup>
         <tr>
-          <td style="padding:2px 24px 6px 0;color:var(--muted);font-size:.62rem;">季度</td>
-          <td style="padding:2px 4px 6px;text-align:right;color:var(--muted);font-size:.62rem;">EPS</td>
+          <td style="padding:2px 0 6px;color:var(--muted);font-size:.62rem;">季度</td>
+          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">EPS</td>
+          ${hasMargin ? `
+          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">毛利率</td>
+          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">營益率</td>` : ''}
         </tr>
-        ${epsRows.map(r => {
-          const val = Number(r.value);
-          const color = val >= 0 ? 'var(--up)' : 'var(--dn)';
-          const yr = parseInt(r.date.slice(0,4));
-          const mo = parseInt(r.date.slice(5,7));
-          const qMap = {3:'Q1',6:'Q2',9:'Q3',12:'Q4'};
-          const qLabel = qMap[mo] ? yr+'-'+qMap[mo] : r.date.slice(0,7);
+        ${qRows.map(([dt, q]) => {
+          const epsVal = q.eps;
+          const epsColor = epsVal >= 0 ? 'var(--up)' : 'var(--dn)';
           return `
           <tr style="border-top:1px solid var(--border);">
-            <td style="padding:5px 24px 5px 0;color:var(--muted2);font-family:var(--mono);font-size:.75rem;">${qLabel}</td>
-            <td style="padding:5px 4px;text-align:right;font-family:var(--mono);font-weight:700;color:${color};font-size:.9rem;">${val.toFixed(2)}</td>
+            <td style="padding:5px 0;color:var(--muted2);font-family:var(--mono);font-size:.75rem;">${toQLabel(dt)}</td>
+            <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-weight:700;color:${epsColor};font-size:.88rem;">${epsVal.toFixed(2)}</td>
+            ${hasMargin ? `
+            <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-size:.8rem;color:${pctColor(q.grossPct)};">${fmtPct(q.grossPct)}</td>
+            <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-size:.8rem;color:${pctColor(q.opPct)};">${fmtPct(q.opPct)}</td>` : ''}
           </tr>`;
         }).join('')}
-      </table>
-      </div>`;
+      </table>`;
+    if (!hasMargin) {
+      html += `<div style="font-size:.62rem;color:var(--muted);margin-top:5px;">毛利率/營益率：此標的財報無此欄位</div>`;
+    }
+    html += '</div>';
   }
 
   el.innerHTML = html;
