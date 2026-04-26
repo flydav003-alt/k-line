@@ -228,9 +228,30 @@ header{
 
 /* ── LEFT CHARTS ── */
 .charts-col{
-  display:flex;flex-direction:column;
+  display:flex;flex-direction:row;
   border-right:1px solid var(--border);
   overflow:hidden;
+}
+/* iPad 滾動側條：右側 16px 窄條（價格軸右邊），touch 不被 chart 攔截 */
+.scroll-strip{
+  width:16px;flex-shrink:0;
+  background:var(--s1);
+  border-left:1px solid var(--border);
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+  cursor:ns-resize;
+  display:flex;align-items:center;justify-content:center;
+}
+.scroll-strip::after{
+  content:'';display:block;
+  width:3px;height:32px;
+  background:var(--border2);border-radius:2px;
+  opacity:.6;
+}
+/* charts 內容區（原 charts-col 的直排內容） */
+.charts-inner{
+  display:flex;flex-direction:column;
+  flex:1;min-width:0;overflow:hidden;
 }
 
 /* ── PERIOD + TREND 列（原 chart-tabs 位置）── */
@@ -292,13 +313,36 @@ header{
 
 /* SCORE HEADER */
 .score-header{
-  padding:20px 20px 16px;
+  padding:20px 16px 14px;
   border-bottom:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;
   text-align:center;
+}
+.score-left{display:flex;flex-direction:column;align-items:center;}
+.score-right{width:100%;margin-top:12px;}
+.strat-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:6px;width:100%;
+}
+.strat-btn{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  padding:7px 6px;border-radius:6px;
+  font-size:.75rem;font-family:var(--font);
+  cursor:pointer;border:1px solid var(--border2);
+  background:var(--s2);color:var(--muted2);
+  transition:all .15s;white-space:nowrap;
+  border-left:3px solid transparent;
+}
+.strat-btn:hover{border-color:var(--gold);color:var(--text);}
+.strat-btn.active{
+  border-color:var(--gold);
+  border-left-color:var(--gold);
+  background:rgba(232,184,75,.12);
+  color:var(--gold);font-weight:600;
 }
 .score-ring-wrap{
   display:inline-flex;align-items:center;justify-content:center;
-  width:100px;height:100px;position:relative;margin-bottom:10px;
+  width:100px;height:100px;position:relative;margin-bottom:4px;
 }
 .score-ring-wrap svg{position:absolute;top:0;left:0;}
 .score-inner{
@@ -531,12 +575,12 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
   <div class="search-wrap">
     <input type="text" id="stockInput" placeholder="2330" maxlength="6" />
 
-    <!-- 策略選單 -->
-    <select id="strategySelect" title="選擇分析策略模式，切換後自動生效" onchange="onStrategyChange()">
-      <option value="balanced">⚖ 平衡模式</option>
-      <option value="breakout">🚀 突破追強</option>
-      <option value="pullback">🔄 回檔承接</option>
-      <option value="reversal">⚡ 反轉搶彈</option>
+    <!-- 策略選單（hidden，供 getCurrentStrategy/onStrategyChange 使用；UI 改用右側四按鈕）-->
+    <select id="strategySelect" style="display:none;" onchange="onStrategyChange()">
+      <option value="balanced">平衡模式</option>
+      <option value="breakout">突破追強</option>
+      <option value="pullback">回檔承接</option>
+      <option value="reversal">反轉搶彈</option>
     </select>
 
     <button class="btn-analyze" onclick="analyze()">▶ 分析</button>
@@ -601,7 +645,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
     <!-- LEFT: CHARTS -->
     <div class="charts-col" id="chartsCol">
-
+      <div class="charts-inner">
       <!-- ★ 期間切換 + 趨勢通道（原 chart-tabs 位置，移除 K線+均線 tab）-->
       <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
         <div class="chart-tabs" style="border-bottom:none;flex:1;">
@@ -654,6 +698,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           <div id="macdChart"></div>
         </div>
       </div>
+      </div><!-- /charts-inner -->
+      <!-- 右側滾動側條：iPad/手機上可在此區域上下滑動頁面（價格軸右邊）-->
+      <div class="scroll-strip" id="scrollStrip" title="從此處上下滑動頁面"></div>
     </div>
 
     <!-- RESIZER -->
@@ -664,20 +711,31 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
       <!-- SCORE -->
       <div class="score-header">
-        <div class="score-ring-wrap">
-          <svg width="100" height="100" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="44" fill="none" stroke="#1a2340" stroke-width="8"/>
-            <circle id="scoreArc" cx="50" cy="50" r="44" fill="none"
-              stroke="#e8b84b" stroke-width="8"
-              stroke-dasharray="0 276.46"
-              stroke-dashoffset="69.1"
-              stroke-linecap="round"
-              style="transition:stroke-dasharray .8s ease,stroke .4s ease;transform:rotate(-90deg);transform-origin:50% 50%"/>
-          </svg>
-          <div class="score-inner" id="scoreNum" style="color:var(--gold)">--</div>
+        <div class="score-left">
+          <div class="score-ring-wrap">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="44" fill="none" stroke="#1a2340" stroke-width="8"/>
+              <circle id="scoreArc" cx="50" cy="50" r="44" fill="none"
+                stroke="#e8b84b" stroke-width="8"
+                stroke-dasharray="0 276.46"
+                stroke-dashoffset="69.1"
+                stroke-linecap="round"
+                style="transition:stroke-dasharray .8s ease,stroke .4s ease;transform:rotate(-90deg);transform-origin:50% 50%"/>
+            </svg>
+            <div class="score-inner" id="scoreNum" style="color:var(--gold)">--</div>
+          </div>
+          <div class="score-verdict" id="scoreVerdict">等待分析</div>
+          <div class="score-sub" id="scoreSub">輸入代號後點擊分析</div>
         </div>
-        <div class="score-verdict" id="scoreVerdict">等待分析</div>
-        <div class="score-sub" id="scoreSub">輸入代號後點擊分析</div>
+        <div class="score-right">
+          <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px;text-align:left;">策略模式</div>
+          <div class="strat-grid">
+            <div class="strat-btn active" data-strat="balanced" onclick="selectStratBtn('balanced')">⚖ 平衡模式</div>
+            <div class="strat-btn" data-strat="breakout" onclick="selectStratBtn('breakout')">🚀 突破追強</div>
+            <div class="strat-btn" data-strat="pullback" onclick="selectStratBtn('pullback')">🔄 回檔承接</div>
+            <div class="strat-btn" data-strat="reversal" onclick="selectStratBtn('reversal')">⚡ 反轉搶彈</div>
+          </div>
+        </div>
       </div>
 
       <!-- SIGNALS SECTION -->
@@ -2261,17 +2319,17 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   document.getElementById('scoreVerdict').style.color = color;
   document.getElementById('scoreSub').textContent = sub;
 
-  ['strategyTag','autoStratTag','volStructTag'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
+  ['autoStratTag','volStructTag'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
   const hdr = document.querySelector('.score-header');
 
   if (autoStrategy) {
     const names = { balanced:'⚖ 平衡', breakout:'🚀 突破追強', pullback:'🔄 回檔承接', reversal:'⚡ 反轉搶彈' };
     const aTag = document.createElement('div');
     aTag.id = 'autoStratTag';
-    aTag.style.cssText = 'font-size:.68rem;color:#29c5c5;margin-top:7px;font-family:var(--mono);padding:5px 10px;background:rgba(41,197,197,.1);border:1px solid rgba(41,197,197,.3);border-radius:6px;display:inline-block;cursor:pointer;text-align:left;width:90%;';
+    aTag.style.cssText = 'font-size:.68rem;color:#29c5c5;margin-top:8px;font-family:var(--mono);padding:5px 10px;background:rgba(41,197,197,.1);border:1px solid rgba(41,197,197,.3);border-radius:6px;display:block;cursor:pointer;text-align:left;width:100%;box-sizing:border-box;';
     aTag.title = '點擊套用此策略';
     aTag.innerHTML = `💡 建議策略：<b style="color:#fff">${names[autoStrategy.key]}</b><br><span style="font-size:.6rem;color:var(--muted2);line-height:1.5">${autoStrategy.reason}</span>`;
-    aTag.onclick = () => { const s=document.getElementById('strategySelect'); if(s){s.value=autoStrategy.key; onStrategyChange();} };
+    aTag.onclick = () => { const s=document.getElementById('strategySelect'); if(s){s.value=autoStrategy.key; onStrategyChange(); syncStratBtns();} };
     hdr.appendChild(aTag);
   }
 
@@ -2281,17 +2339,13 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     const bc = volStructScore>=7?'var(--up)':volStructScore>=4?'var(--gold)':'var(--dn)';
     const vTag = document.createElement('div');
     vTag.id = 'volStructTag';
-    vTag.style.cssText = 'font-size:.63rem;margin-top:5px;font-family:var(--mono);padding:3px 8px;background:var(--s2);border:1px solid var(--border);border-radius:4px;display:inline-block;color:var(--muted2);';
+    vTag.style.cssText = 'font-size:.63rem;margin-top:5px;font-family:var(--mono);padding:3px 8px;background:var(--s2);border:1px solid var(--border);border-radius:4px;display:block;color:var(--muted2);box-sizing:border-box;';
     vTag.innerHTML = `量能結構 <span style="color:${bc};letter-spacing:0">${bar}</span> ${volStructScore}/10 ${volStructLabel}`;
     hdr.appendChild(vTag);
   }
 
-  const strat = getCurrentStrategy();
-  const sTag = document.createElement('div');
-  sTag.id = 'strategyTag';
-  sTag.style.cssText = 'font-size:.6rem;color:var(--muted);margin-top:4px;font-family:var(--mono);display:inline-block;';
-  sTag.textContent = `▷ 當前策略：${strat.name}`;
-  hdr.appendChild(sTag);
+  // 同步策略按鈕高亮
+  syncStratBtns();
 }
 
 // ═══════════════════════════════════════
@@ -2391,19 +2445,19 @@ function renderChip(chip) {
       ${barRow('投信', sum5.trust,   tAnomaly.html)}
       ${barRow('自營', sum5.dealer,  dAnomaly.html)}
     </div>
-    <table class="chip-table">
+    <table style="border-collapse:collapse;font-size:.76rem;width:100%;">
       <tr>
-        <td class="ck" style="font-size:.63rem;color:var(--muted)">日期</td>
-        <td class="cv" style="text-align:right;font-size:.63rem;color:var(--muted2)">外資</td>
-        <td class="cv" style="text-align:right;font-size:.63rem;color:var(--muted2)">投信</td>
-        <td class="cv" style="text-align:right;font-size:.63rem;color:var(--muted2)">自營</td>
+        <td style="padding:3px 10px 6px 0;color:var(--muted);font-size:.63rem;">日期</td>
+        <td style="padding:3px 8px 6px;text-align:right;font-size:.63rem;color:var(--muted2);">外資</td>
+        <td style="padding:3px 8px 6px;text-align:right;font-size:.63rem;color:var(--muted2);">投信</td>
+        <td style="padding:3px 4px 6px;text-align:right;font-size:.63rem;color:var(--muted2);">自營</td>
       </tr>
       ${rows.map(d=>`
-      <tr>
-        <td class="ck">${d.date.slice(5)}</td>
-        <td>${fmtK(d.foreign)}</td>
-        <td>${fmtK(d.trust)}</td>
-        <td>${fmtK(d.dealer)}</td>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:5px 10px 5px 0;color:var(--muted2);font-family:var(--mono);">${d.date.slice(5)}</td>
+        <td style="padding:5px 8px;text-align:right;">${fmtK(d.foreign)}</td>
+        <td style="padding:5px 8px;text-align:right;">${fmtK(d.trust)}</td>
+        <td style="padding:5px 4px;text-align:right;">${fmtK(d.dealer)}</td>
       </tr>`).join('')}
     </table>
   `;
@@ -2553,21 +2607,43 @@ function renderBias(data) {
   if (volRatio > 3 && last.close > last.open) warnings.push('爆量長紅，突破訊號確認');
 
   el.innerHTML = `
-    <div style="margin-bottom:8px;">
-      <div style="font-size:.65rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;">乖離率（BIAS）說明：+3%以上偏高，-3%以下偏低</div>
-      <div class="bias-row"><span class="bias-key">MA5 乖離</span><span class="bias-val ${bClass(bias5)}">${bFmt(bias5)}${bLabel(bias5)}</span></div>
-      <div class="bias-row"><span class="bias-key">MA10 乖離</span><span class="bias-val ${bClass(bias10)}">${bFmt(bias10)}${bLabel(bias10)}</span></div>
-      <div class="bias-row"><span class="bias-key">MA20 乖離</span><span class="bias-val ${bClass(bias20)}">${bFmt(bias20)}${bLabel(bias20)}</span></div>
-      <div class="bias-row"><span class="bias-key">MA60 乖離</span><span class="bias-val ${bClass(bias60)}">${bFmt(bias60)}${bLabel(bias60)}</span></div>
-    </div>
-    <div>
-      <div style="font-size:.65rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;">成交量分析</div>
-      <div class="bias-row"><span class="bias-key">今日量能</span><span class="bias-val" style="color:${volColor}">${volLevel}（${volRatio.toFixed(1)}倍均量）</span></div>
-      <div class="bias-row"><span class="bias-key">今日成交量</span><span class="bias-val mid">${(last.Trading_Volume/1000).toFixed(0)}張</span></div>
-      <div class="bias-row"><span class="bias-key">近5日量趨勢</span><span class="bias-val" style="color:${vol5Color}">${vol5Trend}</span></div>
-      <div class="bias-row"><span class="bias-key">20日均量</span><span class="bias-val mid">${(avgV20/1000).toFixed(0)}張</span></div>
-      ${warnings.map(w=>`<div style="margin-top:6px;padding:6px 8px;background:rgba(255,77,109,.08);border-left:2px solid var(--red);border-radius:4px;font-size:.72rem;color:var(--red);">⚠ ${w}</div>`).join('')}
-    </div>
+    <table style="border-collapse:collapse;font-size:.76rem;width:100%;">
+      <tr><td colspan="2" style="padding:2px 0 6px;font-size:.63rem;color:var(--muted2);font-family:var(--mono);">乖離率 +3%偏高 / -3%偏低</td></tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA5 乖離</td>
+        <td style="padding:6px 0;text-align:right;" class="${bClass(bias5)}">${bFmt(bias5)}${bLabel(bias5)}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA10 乖離</td>
+        <td style="padding:6px 0;text-align:right;" class="${bClass(bias10)}">${bFmt(bias10)}${bLabel(bias10)}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA20 乖離</td>
+        <td style="padding:6px 0;text-align:right;" class="${bClass(bias20)}">${bFmt(bias20)}${bLabel(bias20)}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA60 乖離</td>
+        <td style="padding:6px 0;text-align:right;" class="${bClass(bias60)}">${bFmt(bias60)}${bLabel(bias60)}</td>
+      </tr>
+      <tr><td colspan="2" style="padding:10px 0 6px;font-size:.63rem;color:var(--muted2);font-family:var(--mono);">成交量分析</td></tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">今日量能</td>
+        <td style="padding:6px 0;text-align:right;color:${volColor};">${volLevel}（${volRatio.toFixed(1)}倍）</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">今日成交量</td>
+        <td style="padding:6px 0;text-align:right;font-family:var(--mono);">${(last.Trading_Volume/1000).toFixed(0)}張</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">近5日量趨勢</td>
+        <td style="padding:6px 0;text-align:right;color:${vol5Color};">${vol5Trend}</td>
+      </tr>
+      <tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 12px 6px 0;color:var(--muted2);">20日均量</td>
+        <td style="padding:6px 0;text-align:right;font-family:var(--mono);">${(avgV20/1000).toFixed(0)}張</td>
+      </tr>
+    </table>
+    ${warnings.map(w=>`<div style="margin-top:6px;padding:6px 8px;background:rgba(255,77,109,.08);border-left:2px solid var(--red);border-radius:4px;font-size:.72rem;color:var(--red);">⚠ ${w}</div>`).join('')}
   `;
 }
 
@@ -2737,17 +2813,22 @@ function renderRevenue(data, eps) {
 
     html += `
       <div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);">月營收</div>
-      <div style="display:grid;grid-template-columns:auto 1fr auto auto;font-size:.78rem;margin-bottom:14px;">
-        <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 6px;">月份</span>
-        <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 6px;text-align:right;">營收</span>
-        <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 6px;text-align:right;">YoY</span>
-        <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 6px;text-align:right;">MoM</span>
+      <div style="margin-bottom:14px;">
+      <table style="border-collapse:collapse;font-size:.76rem;">
+        <tr>
+          <td style="padding:2px 10px 6px 0;color:var(--muted);font-size:.62rem;">月份</td>
+          <td style="padding:2px 10px 6px;text-align:right;color:var(--muted);font-size:.62rem;">營收</td>
+          <td style="padding:2px 10px 6px;text-align:right;color:var(--muted);font-size:.62rem;">YoY</td>
+          <td style="padding:2px 4px 6px;text-align:right;color:var(--muted);font-size:.62rem;">MoM</td>
+        </tr>
         ${rows.map(r => `
-        <span style="color:var(--muted2);padding:5px 4px;border-top:1px solid var(--border);">${r.date.slice(0,7)}</span>
-        <span style="font-family:var(--mono);font-weight:600;padding:5px 4px;text-align:right;border-top:1px solid var(--border);">${fmtRev(r.rev)}</span>
-        <span class="rev-val ${pctCls(r.yoy)}" style="padding:5px 4px;text-align:right;border-top:1px solid var(--border);">${fmtPct(r.yoy)}</span>
-        <span class="rev-val ${pctCls(r.mom,3,-3)}" style="padding:5px 4px;text-align:right;border-top:1px solid var(--border);">${fmtPct(r.mom)}</span>
-        `).join('')}
+        <tr style="border-top:1px solid var(--border);">
+          <td style="padding:5px 10px 5px 0;color:var(--muted2);font-family:var(--mono);">${r.date.slice(0,7)}</td>
+          <td style="padding:5px 10px;text-align:right;font-family:var(--mono);font-weight:600;">${fmtRev(r.rev)}</td>
+          <td style="padding:5px 10px;text-align:right;" class="rev-val ${pctCls(r.yoy)}">${fmtPct(r.yoy)}</td>
+          <td style="padding:5px 4px;text-align:right;" class="rev-val ${pctCls(r.mom,3,-3)}">${fmtPct(r.mom)}</td>
+        </tr>`).join('')}
+      </table>
       </div>
     `;
   }
@@ -2758,9 +2839,11 @@ function renderRevenue(data, eps) {
     html += '<div style="color:var(--muted);font-size:.72rem;padding-bottom:4px;">EPS 暫無資料（需填入 FinMind Token）</div>';
   } else {
     html += `
-      <div style="display:grid;grid-template-columns:auto 1fr;font-size:.78rem;gap:0;">
-        <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 5px;">季度</span>
-        <span style="color:var(--muted);font-size:.62rem;padding:2px 4px 5px;text-align:right;">EPS</span>
+      <table style="border-collapse:collapse;font-size:.76rem;">
+        <tr>
+          <td style="padding:2px 24px 6px 0;color:var(--muted);font-size:.62rem;">季度</td>
+          <td style="padding:2px 4px 6px;text-align:right;color:var(--muted);font-size:.62rem;">EPS</td>
+        </tr>
         ${epsRows.map(r => {
           const val = Number(r.value);
           const color = val >= 0 ? 'var(--up)' : 'var(--dn)';
@@ -2769,9 +2852,12 @@ function renderRevenue(data, eps) {
           const qMap = {3:'Q1',6:'Q2',9:'Q3',12:'Q4'};
           const qLabel = qMap[mo] ? yr+'-'+qMap[mo] : r.date.slice(0,7);
           return `
-          <span style="color:var(--muted2);padding:4px 4px;border-top:1px solid var(--border);font-family:var(--mono);font-size:.75rem;">${qLabel}</span>
-          <span style="font-family:var(--mono);font-weight:700;padding:4px 4px;text-align:right;border-top:1px solid var(--border);color:${color};font-size:.9rem;">${val.toFixed(2)}</span>`;
+          <tr style="border-top:1px solid var(--border);">
+            <td style="padding:5px 24px 5px 0;color:var(--muted2);font-family:var(--mono);font-size:.75rem;">${qLabel}</td>
+            <td style="padding:5px 4px;text-align:right;font-family:var(--mono);font-weight:700;color:${color};font-size:.9rem;">${val.toFixed(2)}</td>
+          </tr>`;
         }).join('')}
+      </table>
       </div>`;
   }
 
@@ -2943,6 +3029,25 @@ function setActivePeriod(p) {
   });
   currentPeriod = p;
   if(priceData.length) redraw();
+}
+
+// ★ selectStratBtn：四個策略按鈕點擊處理
+function selectStratBtn(key) {
+  document.querySelectorAll('.strat-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.strat === key);
+  });
+  const sel = document.getElementById('strategySelect');
+  if (sel) sel.value = key;
+  onStrategyChange();
+}
+
+// ★ renderScore 呼叫後同步策略按鈕高亮（策略可能由 autoStrategy 切換）
+function syncStratBtns() {
+  const sel = document.getElementById('strategySelect');
+  if (!sel) return;
+  document.querySelectorAll('.strat-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.strat === sel.value);
+  });
 }
 
 </script>
