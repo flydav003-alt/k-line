@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>K線分析</title>
+<title>K線分析 V2.2</title>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 
 <style>
@@ -63,6 +63,31 @@ header{
 }
 .logo em{color:var(--muted2);font-style:normal;}
 
+/* ── MARKET SWITCHER ── */
+.market-switcher{
+  display:flex;
+  align-items:center;
+  background:var(--bg);
+  border:1px solid var(--border2);
+  border-radius:8px;
+  padding:3px;
+  gap:2px;
+  flex-shrink:0;
+}
+.mkt-btn{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 12px;border-radius:6px;
+  font-size:.78rem;font-family:var(--font);font-weight:600;
+  cursor:pointer;border:none;background:transparent;
+  color:var(--muted2);transition:all .2s;white-space:nowrap;
+}
+.mkt-btn.active{
+  background:var(--gold);
+  color:#000;
+}
+.mkt-btn:hover:not(.active){color:var(--text);}
+.mkt-flag{font-size:.9rem;}
+
 .search-wrap{
   display:flex;
   gap:8px;
@@ -78,12 +103,15 @@ header{
   border-radius:6px;
   font-family:var(--mono);
   font-size:.95rem;
-  width:75px;
+  width:90px;
   letter-spacing:2px;
   outline:none;
   transition:border-color .2s,box-shadow .2s;
 }
 #stockInput:focus{border-color:var(--gold);box-shadow:0 0 0 2px rgba(232,184,75,.12);}
+
+/* US 模式下輸入框稍寬 */
+body.us-mode #stockInput{ width:110px; }
 
 /* 策略選單 */
 #strategySelect{
@@ -219,6 +247,7 @@ header{
     overflow-y:visible;
   }
   .sub-chart-wrap{ height:70px; }
+  .market-switcher{ display:none; }
 }
 
 /* ── iPad 橫向 ── */
@@ -232,7 +261,6 @@ header{
   border-right:1px solid var(--border);
   overflow:hidden;
 }
-/* iPad 滾動側條：右側 16px 窄條（價格軸右邊），touch 不被 chart 攔截 */
 .scroll-strip{
   width:32px;flex-shrink:0;
   background:var(--s1);
@@ -248,13 +276,12 @@ header{
   background:var(--border2);border-radius:2px;
   opacity:.7;
 }
-/* charts 內容區（原 charts-col 的直排內容） */
 .charts-inner{
   display:flex;flex-direction:column;
   flex:1;min-width:0;overflow:hidden;
 }
 
-/* ── PERIOD + TREND 列（原 chart-tabs 位置）── */
+/* ── PERIOD + TREND 列 ── */
 .chart-tabs{
   display:flex;gap:0;border-bottom:1px solid var(--border);
   background:var(--s1);padding:0 16px;
@@ -267,7 +294,6 @@ header{
 }
 .chart-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
 
-/* Period 按鈕放在 chart-tabs 裡的樣式 */
 .pt{
   font-size:.72rem;padding:10px 14px;cursor:pointer;
   color:var(--muted2);border-bottom:2px solid transparent;
@@ -412,7 +438,7 @@ header{
 .tval.rr{color:var(--gold);}
 .tval.act{color:var(--text);}
 
-/* TREND CHANNEL TOGGLE */
+/* TOGGLE */
 .toggle-row{
   display:flex;align-items:center;justify-content:space-between;
   padding:10px 16px;border-bottom:1px solid var(--border);
@@ -564,6 +590,39 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 .rev-val.pos{color:var(--up);}
 .rev-val.neg{color:var(--dn);}
 .rev-val.neu{color:var(--text);}
+
+/* ── US FUNDAMENTALS ── */
+.us-fund-block{
+  background:var(--s2);border-radius:8px;padding:10px 12px;
+  border:1px solid var(--border);margin-bottom:8px;
+}
+.us-fund-title{
+  font-size:.62rem;color:var(--muted2);font-family:var(--mono);
+  letter-spacing:1px;margin-bottom:6px;font-weight:700;
+}
+.us-fund-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:4px 0;border-bottom:1px solid var(--border);font-size:.78rem;
+}
+.us-fund-row:last-child{border-bottom:none;}
+.us-fund-key{color:var(--muted2);}
+.us-fund-val{font-family:var(--mono);font-weight:600;}
+.us-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:.62rem;padding:2px 7px;border-radius:4px;font-weight:700;
+}
+.us-badge.pos{background:rgba(255,77,109,.15);color:var(--up);}
+.us-badge.neg{background:rgba(0,200,150,.15);color:var(--dn);}
+.us-badge.neu{background:rgba(74,96,128,.2);color:var(--muted2);}
+
+/* ── US MARKET BADGE ── */
+.market-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:.65rem;padding:2px 8px;border-radius:4px;font-weight:700;
+  font-family:var(--mono);letter-spacing:1px;
+}
+.market-badge.tw{background:rgba(232,184,75,.15);color:var(--gold);}
+.market-badge.us{background:rgba(74,158,255,.15);color:var(--blue);}
 </style>
 </head>
 <body>
@@ -572,10 +631,19 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 <header>
   <div class="logo">K<em>線</em>分析</div>
 
-  <div class="search-wrap">
-    <input type="text" id="stockInput" placeholder="2330" maxlength="6" />
+  <!-- 市場切換 -->
+  <div class="market-switcher">
+    <button class="mkt-btn active" id="mktTW" onclick="switchMarket('TW')">
+      <span class="mkt-flag">🇹🇼</span> 台股
+    </button>
+    <button class="mkt-btn" id="mktUS" onclick="switchMarket('US')">
+      <span class="mkt-flag">🇺🇸</span> 美股
+    </button>
+  </div>
 
-    <!-- 策略選單（hidden，供 getCurrentStrategy/onStrategyChange 使用；UI 改用右側四按鈕）-->
+  <div class="search-wrap">
+    <input type="text" id="stockInput" placeholder="2330" maxlength="8" />
+
     <select id="strategySelect" style="display:none;" onchange="onStrategyChange()">
       <option value="balanced">平衡模式</option>
       <option value="breakout">突破追強</option>
@@ -584,7 +652,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     </select>
 
     <button class="btn-analyze" onclick="analyze()">▶ 分析</button>
-    <button class="btn-realtime" onclick="analyzeRealtime()" title="用1分K抓法取得最新一根，完成全圖分析">📡 即時</button>
+    <button class="btn-realtime" id="btnRealtime" onclick="analyzeRealtime()" title="用1分K抓法取得最新一根，完成全圖分析">📡 即時</button>
 
     <div class="date-range-bar">
       <span style="font-size:.7rem;color:var(--muted2);white-space:nowrap;">回測至</span>
@@ -626,16 +694,17 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 <!-- SPLASH -->
 <div id="splash">
   <div style="font-size:3rem">📊</div>
-  <h2>台股K線技術分析系統 V2.1</h2>
-  <p>輸入台股代號，即時抓取K線資料，整合真實蠟燭圖、多項技術指標、籌碼面分析，四種策略模式，輸出白話操作建議。</p>
+  <h2>台股 & 美股 K線技術分析系統 V2.2</h2>
+  <p>支援台股（2330、0050…）與美股（AAPL、NVDA…），即時抓取K線資料，整合蠟燭圖、技術指標、籌碼/機構持股、財報，四種策略模式，輸出白話操作建議。</p>
   <div class="splash-feat">
+    <div class="sf"><span class="sf-icon">🇹🇼</span>台股支援</div>
+    <div class="sf"><span class="sf-icon">🇺🇸</span>美股支援</div>
     <div class="sf"><span class="sf-icon">🕯️</span>TradingView蠟燭圖</div>
     <div class="sf"><span class="sf-icon">📈</span>MACD / RSI / KD</div>
-    <div class="sf"><span class="sf-icon">🏦</span>外資/投信籌碼</div>
+    <div class="sf"><span class="sf-icon">🏦</span>機構持股分析</div>
     <div class="sf"><span class="sf-icon">📐</span>趨勢通道</div>
     <div class="sf"><span class="sf-icon">⚖</span>四種策略模式</div>
-    <div class="sf"><span class="sf-icon">📡</span>Yahoo即時嘗試</div>
-    <div class="sf"><span class="sf-icon">💰</span>月營收 + EPS</div>
+    <div class="sf"><span class="sf-icon">💰</span>季度財報 EPS</div>
   </div>
 </div>
 
@@ -646,7 +715,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <!-- LEFT: CHARTS -->
     <div class="charts-col" id="chartsCol">
       <div class="charts-inner">
-      <!-- ★ 期間切換 + 趨勢通道（原 chart-tabs 位置，移除 K線+均線 tab）-->
       <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
         <div class="chart-tabs" style="border-bottom:none;flex:1;">
           <div class="pt active" data-p="60" onclick="setActivePeriod(60)">60日</div>
@@ -699,7 +767,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
       </div>
       </div><!-- /charts-inner -->
-      <!-- 右側滾動側條：iPad/手機上可在此區域上下滑動頁面（價格軸右邊）-->
       <div class="scroll-strip" id="scrollStrip" title="從此處上下滑動頁面"></div>
     </div>
 
@@ -749,10 +816,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
       </div>
 
-      <!-- CHIP SECTION -->
+      <!-- CHIP / INSTITUTIONAL SECTION -->
       <div class="section" id="secChip">
         <div class="section-hd" onclick="toggleSection('secChip')">
-          <span class="section-title">籌碼面（外資/投信）</span>
+          <span class="section-title" id="secChipTitle">籌碼面（外資/投信）</span>
           <span class="section-arrow open" id="arr-secChip">▼</span>
         </div>
         <div class="section-body" id="body-secChip">
@@ -793,10 +860,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
       </div>
 
-      <!-- REVENUE SECTION -->
+      <!-- REVENUE / US FUNDAMENTALS SECTION -->
       <div class="section" id="secRevenue">
         <div class="section-hd" onclick="toggleSection('secRevenue')">
-          <span class="section-title">月營收 / EPS</span>
+          <span class="section-title" id="secRevenueTitle">月營收 / EPS</span>
           <span class="section-arrow open" id="arr-secRevenue">▼</span>
         </div>
         <div class="section-body" id="body-secRevenue">
@@ -817,6 +884,44 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 //  CONFIG
 // ═══════════════════════════════════════
 const FINMIND_TOKEN = 'YOUR_TOKEN_HERE';
+
+// ═══════════════════════════════════════
+//  市場切換狀態
+// ═══════════════════════════════════════
+let currentMarket = 'TW'; // 'TW' | 'US'
+
+function switchMarket(mkt) {
+  currentMarket = mkt;
+  document.getElementById('mktTW').classList.toggle('active', mkt === 'TW');
+  document.getElementById('mktUS').classList.toggle('active', mkt === 'US');
+  document.body.classList.toggle('us-mode', mkt === 'US');
+
+  const input = document.getElementById('stockInput');
+  if (mkt === 'TW') {
+    input.placeholder = '2330';
+    input.maxLength = 6;
+    document.getElementById('secChipTitle').textContent = '籌碼面（外資/投信）';
+    document.getElementById('secRevenueTitle').textContent = '月營收 / EPS';
+    document.getElementById('btnRealtime').style.display = '';
+  } else {
+    input.placeholder = 'AAPL';
+    input.maxLength = 8;
+    document.getElementById('secChipTitle').textContent = '籌碼面';
+    document.getElementById('secRevenueTitle').textContent = '季度財報';
+    document.getElementById('btnRealtime').style.display = 'none';
+  }
+  input.value = '';
+}
+
+// 自動判斷輸入的是台股還是美股
+function autoDetectMarket(raw) {
+  const val = raw.trim().toUpperCase();
+  // 台股：純數字 4-6 碼，或 ETF（如 0050）
+  if (/^\d{4,6}$/.test(val)) return 'TW';
+  // 美股：純英文字母 1-5 碼
+  if (/^[A-Z]{1,5}$/.test(val)) return 'US';
+  return currentMarket;
+}
 
 // ═══════════════════════════════════════
 //  策略模式設定
@@ -877,7 +982,7 @@ function onStrategyChange() {
   if (!priceData.length) return;
   const sliced = priceData.slice(-currentPeriod);
   runAnalysis(sliced, twiiData);
-  renderRevenue(revenueData, epsData);
+  if (currentMarket === 'TW') renderRevenue(revenueData, epsData);
 }
 
 // ═══════════════════════════════════════
@@ -912,6 +1017,8 @@ let epsData     = [];
 let twiiData    = [];
 let intradayVolInfo = null;
 let currentSuffix   = '.TW';
+let usInstitutional = [];
+let usFinancials    = [];
 
 let stockNameCache = {};
 
@@ -926,6 +1033,14 @@ function displayLabel(stockId) {
 //  UI HELPERS
 // ═══════════════════════════════════════
 document.getElementById('stockInput').onkeydown = e => { if(e.key==='Enter') analyze(); };
+
+// 輸入框失焦時自動判斷市場
+document.getElementById('stockInput').onblur = e => {
+  const val = e.target.value.trim();
+  if (!val) return;
+  const detected = autoDetectMarket(val);
+  if (detected !== currentMarket) switchMarket(detected);
+};
 
 function clearDateRange() {
   document.getElementById('dateTo').value = '';
@@ -986,6 +1101,8 @@ function renderRecent() {
 }
 function loadStock(code) {
   document.getElementById('stockInput').value = code;
+  const detected = autoDetectMarket(code);
+  if (detected !== currentMarket) switchMarket(detected);
   analyze();
 }
 renderRecent();
@@ -1016,6 +1133,8 @@ function removeFromWatchlist(e, code) {
 }
 function loadFromWatchlist(code) {
   document.getElementById('stockInput').value = code;
+  const detected = autoDetectMarket(code);
+  if (detected !== currentMarket) switchMarket(detected);
   analyze();
 }
 renderWatchlist();
@@ -1040,17 +1159,27 @@ function toggleSection(id) {
 }
 
 // ═══════════════════════════════════════
-//  YAHOO FINANCE 即時抓取
+//  YAHOO FINANCE — 強化多 Proxy + Retry
 // ═══════════════════════════════════════
-function fetchWithTimeout(url, ms = 8000) {
+function fetchWithTimeout(url, ms = 9000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { signal: ctrl.signal })
+  return fetch(url, { signal: ctrl.signal, cache: 'no-store' })
     .finally(() => clearTimeout(timer));
 }
 
+// Proxy 列表：多源輪替
+const PROXY_LIST = [
+  url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => url, // 直連（可能 CORS 失敗但值得一試）
+];
+
 function parseYahooJSON(raw) {
-  const j = (raw && typeof raw.contents === 'string') ? JSON.parse(raw.contents) : raw;
+  // allorigins /get 包一層 { contents }
+  const j = (raw && typeof raw === 'object' && typeof raw.contents === 'string')
+    ? JSON.parse(raw.contents) : raw;
   const result = j?.chart?.result?.[0];
   if (!result) throw new Error('Yahoo 查無資料');
   const ts = result.timestamp;
@@ -1072,49 +1201,29 @@ function parseYahooJSON(raw) {
 }
 
 async function tryYahooUrl(targetUrl) {
-  const noCache = { cache: 'no-store' };
-
-  try {
-    const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(targetUrl);
-    const r = await fetchWithTimeout(proxyUrl, 9000);
-    if (r.ok) {
-      const proxy = await r.json();
-      const data = parseYahooJSON(proxy);
-      if (data.length > 0) { console.log('[Yahoo] allorigins/get OK'); return data; }
-    }
-  } catch(e) { console.warn('[Yahoo] allorigins/get:', e.message); }
-
-  try {
-    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl);
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 9000);
-    const r = await fetch(proxyUrl, { ...noCache, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-    if (r.ok) {
-      const j = await r.json();
-      const data = parseYahooJSON(j);
-      if (data.length > 0) { console.log('[Yahoo] allorigins/raw OK'); return data; }
-    }
-  } catch(e) { console.warn('[Yahoo] allorigins/raw:', e.message); }
-
-  try {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 6000);
-    const r = await fetch(targetUrl, { ...noCache, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-    if (r.ok) {
-      const j = await r.json();
-      const data = parseYahooJSON(j);
-      if (data.length > 0) { console.log('[Yahoo] direct OK'); return data; }
-    }
-  } catch(e) { console.warn('[Yahoo] direct:', e.message); }
-
+  for (const makeProxy of PROXY_LIST) {
+    const proxyUrl = makeProxy(targetUrl);
+    try {
+      const r = await fetchWithTimeout(proxyUrl, 9000);
+      if (!r.ok) continue;
+      const ct = r.headers.get('content-type') || '';
+      const raw = ct.includes('application/json') || ct.includes('text/plain')
+        ? await r.json().catch(async () => JSON.parse(await r.text()))
+        : await r.json();
+      const data = parseYahooJSON(raw);
+      if (data.length > 0) { console.log('[Yahoo] proxy OK:', proxyUrl.slice(0,60)); return data; }
+    } catch(e) { console.warn('[Yahoo] proxy failed:', proxyUrl.slice(0,60), e.message); }
+  }
   return null;
 }
 
+// ═══════════════════════════════════════
+//  台股 Yahoo 抓取
+// ═══════════════════════════════════════
 async function fetchYahooPrice(stockId) {
   const suffixes = ['.TW', '.TWO'];
   const nodes    = ['query1', 'query2'];
   const ranges   = ['1y', '400d'];
-
   for (const suffix of suffixes) {
     const symbol = stockId + suffix;
     for (const rng of ranges) {
@@ -1123,71 +1232,87 @@ async function fetchYahooPrice(stockId) {
         try {
           const data = await tryYahooUrl(url);
           if (data && data.length >= 10) {
-            console.log(`[Yahoo日線] 成功：${symbol} ${rng} via ${node}`);
             currentSuffix = suffix;
             return data;
           }
-        } catch(e) { /* continue */ }
+        } catch(e) {}
       }
     }
   }
   throw new Error('所有日線來源均失敗（含 .TW / .TWO）');
 }
 
-async function analyzeRealtime() {
-  const stockId = document.getElementById('stockInput').value.trim();
-  if (!stockId) { setStatus('請輸入股票代號','error'); return; }
-  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
-  setStatus(`📡 正在抓取 ${stockId} 即時最新收盤（1分K抓法）...`, 'loading');
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('mainContent').classList.add('show');
-  try {
-    const latestBar = await fetchYahooLatest(stockId);
-    const [pd, cd, sn, rd, epsd] = await Promise.all([
-      fetchPrice(stockId, token),
-      fetchChip(stockId, token),
-      fetchStockName(stockId),
-      fetchRevenue(stockId, token),
-      fetchEPS(stockId, token),
-    ]);
-
-    if (latestBar) {
-      const lastHist = pd[pd.length - 1];
-      if (lastHist && lastHist.date === latestBar.date) {
-        lastHist.close = latestBar.close;
-        lastHist.max   = Math.max(lastHist.max, latestBar.close);
-        lastHist.min   = Math.min(lastHist.min, latestBar.close);
-        if (latestBar.Trading_Volume > 0) lastHist.Trading_Volume = latestBar.Trading_Volume;
-      } else if (!lastHist || latestBar.date > lastHist.date) {
-        pd.push(latestBar);
-      }
-      setStatus(`即時成功！最新收盤：${latestBar.close}（${latestBar.date}）`, 'success');
-    } else {
-      setStatus(`即時抓取失敗，改用 FinMind 最後一筆資料`, 'error');
+// ═══════════════════════════════════════
+//  美股 Yahoo 抓取（核心）
+// ═══════════════════════════════════════
+async function fetchUSPrice(ticker) {
+  const nodes  = ['query1', 'query2'];
+  const ranges = ['1y', '2y'];
+  const symbol = ticker.toUpperCase();
+  for (const rng of ranges) {
+    for (const node of nodes) {
+      const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${rng}&includePrePost=false`;
+      try {
+        const data = await tryYahooUrl(url);
+        if (data && data.length >= 10) {
+          currentSuffix = '';
+          return data;
+        }
+      } catch(e) {}
     }
+  }
+  throw new Error(`無法取得 ${ticker} 美股價格資料`);
+}
 
-    priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
-    currentStockId = stockId;
-    addToRecent(stockId);
-    setTimeout(() => clearStatus(), 4000);
-    renderMeta(stockId, sn);
-    redraw();
-  } catch(err) {
-    setStatus(`即時失敗（${err.message}），改用 FinMind 歷史資料...`, 'error');
-    setTimeout(() => analyze(), 800);
+// 美股核心財務資料（只抓能用的模組）
+async function fetchUSFinancials(ticker) {
+  const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker.toUpperCase())}?modules=financialData,defaultKeyStatistics`;
+  try {
+    const raw = await tryYahooUrl(url);
+    const result = raw?.quoteSummary?.result?.[0] || raw;
+    return result || null;
+  } catch(e) {
+    console.warn('[US Financials]', e.message);
+    return null;
   }
 }
 
+// 美股公司名稱
+async function fetchUSName(ticker) {
+  if (stockNameCache[ticker]) return stockNameCache[ticker];
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker.toUpperCase())}?interval=1d&range=5d`;
+  try {
+    const raw = await tryYahooUrl(url);
+    const meta = raw?.chart?.result?.[0]?.meta
+      || raw?.quoteSummary?.result?.[0]?.price;
+    const name = meta?.longName || meta?.shortName || ticker.toUpperCase();
+    stockNameCache[ticker] = name;
+    return name;
+  } catch { return ticker.toUpperCase(); }
+}
+
+// ═══════════════════════════════════════
+//  抓取美股完整資料包
+// ═══════════════════════════════════════
+async function fetchUSData(ticker) {
+  const [price, fin, name] = await Promise.all([
+    fetchUSPrice(ticker),
+    fetchUSFinancials(ticker).catch(() => null),
+    fetchUSName(ticker),
+  ]);
+  return { price, fin, name };
+}
+
+// ═══════════════════════════════════════
+//  即時抓取（台股）
+// ═══════════════════════════════════════
 async function fetchTWII() {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=60d&includePrePost=false`;
   for (const node of ['query1', 'query2']) {
     const nodeUrl = url.replace('query1', node);
     try {
       const data = await tryYahooUrl(nodeUrl);
-      if (data && data.length > 5) {
-        console.log('[TWII] 大盤資料載入成功');
-        return data;
-      }
+      if (data && data.length > 5) return data;
     } catch(e) {}
   }
   return [];
@@ -1209,25 +1334,66 @@ async function fetchYahooLatest(stockId) {
         if (intraday && intraday.length > 0) {
           const last = intraday[intraday.length - 1];
           const todayVol = intraday.reduce((s, d) => s + (d.Trading_Volume || 0), 0);
-          const prevDayVol = daily && daily.length >= 2
-            ? daily[daily.length - 2].Trading_Volume : 0;
+          const prevDayVol = daily && daily.length >= 2 ? daily[daily.length - 2].Trading_Volume : 0;
           const ratio = prevDayVol > 0 ? todayVol / prevDayVol : null;
           const now = new Date();
           const marketMinutes = Math.max(0, (now.getHours()*60 + now.getMinutes()) - 9*60);
           const dayProgress = Math.min(1, marketMinutes / 270);
-
           intradayVolInfo = { todayVol, prevDayVol, ratio, dayProgress, time: now.toLocaleTimeString('zh-TW') };
           return last;
         }
-      } catch(e) { console.warn(`[即時] ${symbol} ${node}:`, e.message); }
+      } catch(e) {}
     }
   }
   intradayVolInfo = null;
   return null;
 }
 
+async function analyzeRealtime() {
+  if (currentMarket === 'US') { analyze(); return; }
+  const stockId = document.getElementById('stockInput').value.trim();
+  if (!stockId) { setStatus('請輸入股票代號','error'); return; }
+  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+  setStatus(`📡 正在抓取 ${stockId} 即時最新收盤（1分K抓法）...`, 'loading');
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('mainContent').classList.add('show');
+  try {
+    const latestBar = await fetchYahooLatest(stockId);
+    const [pd, cd, sn, rd, epsd] = await Promise.all([
+      fetchPrice(stockId, token),
+      fetchChip(stockId, token),
+      fetchStockName(stockId),
+      fetchRevenue(stockId, token),
+      fetchEPS(stockId, token),
+    ]);
+    if (latestBar) {
+      const lastHist = pd[pd.length - 1];
+      if (lastHist && lastHist.date === latestBar.date) {
+        lastHist.close = latestBar.close;
+        lastHist.max   = Math.max(lastHist.max, latestBar.close);
+        lastHist.min   = Math.min(lastHist.min, latestBar.close);
+        if (latestBar.Trading_Volume > 0) lastHist.Trading_Volume = latestBar.Trading_Volume;
+      } else if (!lastHist || latestBar.date > lastHist.date) {
+        pd.push(latestBar);
+      }
+      setStatus(`即時成功！最新收盤：${latestBar.close}（${latestBar.date}）`, 'success');
+    } else {
+      setStatus(`即時抓取失敗，改用 FinMind 最後一筆資料`, 'error');
+    }
+    priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
+    currentStockId = stockId;
+    addToRecent(stockId);
+    setTimeout(() => clearStatus(), 4000);
+    renderMeta(stockId, sn);
+    redraw();
+  } catch(err) {
+    setStatus(`即時失敗（${err.message}），改用 FinMind 歷史資料...`, 'error');
+    setTimeout(() => analyze(), 800);
+  }
+}
+
 // ═══════════════════════════════════════
-//  FETCH — FinMind
+//  FETCH — FinMind（台股）
 // ═══════════════════════════════════════
 async function fetchStockName(stockId) {
   if (stockNameCache[stockId]) return stockNameCache[stockId];
@@ -1262,7 +1428,6 @@ async function fetchChip(stockId, token) {
   const start = new Date(); start.setDate(start.getDate()-60);
   const fmt = d => d.toISOString().slice(0,10);
   const startDate = fmt(start), endDate = fmt(today);
-
   try {
     const params = { dataset:'TaiwanStockInstitutionalInvestorsBuySell', data_id:stockId, start_date:startDate, end_date:endDate };
     if (token) params.token = token;
@@ -1270,7 +1435,6 @@ async function fetchChip(stockId, token) {
     const j = await r.json();
     if (j?.data?.length) return j.data;
   } catch {}
-
   try {
     const params = { dataset:'InstitutionalInvestorsBuySell', stock_id:stockId, date:startDate };
     if (token) params.token = token;
@@ -1278,24 +1442,34 @@ async function fetchChip(stockId, token) {
     const j = await r.json();
     if (j?.data?.length) return j.data;
   } catch {}
-
   return [];
 }
 
 // ═══════════════════════════════════════
-//  MAIN
+//  MAIN ANALYZE
 // ═══════════════════════════════════════
 async function analyze() {
-  const stockId = document.getElementById('stockInput').value.trim();
-  if (!stockId) { setStatus('請輸入股票代號','error'); return; }
-  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+  const rawInput = document.getElementById('stockInput').value.trim();
+  if (!rawInput) { setStatus('請輸入股票代號','error'); return; }
 
-  setStatus(`正在抓取 ${stockId} 資料...`, 'loading');
+  // 自動偵測市場
+  const detectedMkt = autoDetectMarket(rawInput);
+  if (detectedMkt !== currentMarket) switchMarket(detectedMkt);
+
+  if (currentMarket === 'US') {
+    await analyzeUS(rawInput.toUpperCase());
+  } else {
+    await analyzeTW(rawInput);
+  }
+}
+
+// ── 台股分析 ──
+async function analyzeTW(stockId) {
+  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+  setStatus(`正在抓取 ${stockId} 台股資料...`, 'loading');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('mainContent').classList.add('show');
-
   const customTo = document.getElementById('dateTo')?.value || '';
-
   try {
     const [pd, cd, sn, rd, epsd] = await Promise.all([
       fetchPrice(stockId, token, '', customTo),
@@ -1305,14 +1479,14 @@ async function analyze() {
       fetchEPS(stockId, token),
     ]);
     priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
+    usInstitutional = []; usFinancials = [];
     intradayVolInfo = null;
     currentStockId = stockId;
     addToRecent(stockId);
     clearStatus();
-    renderMeta(stockId, sn);
+    renderMeta(stockId, sn, 'TW');
     twiiData = [];
     redraw();
-
     fetchTWII().then(twiid => {
       if (twiid && twiid.length > 0) {
         twiiData = twiid;
@@ -1320,9 +1494,35 @@ async function analyze() {
         runAnalysis(sliced, twiiData);
       }
     }).catch(() => {});
-
   } catch(err) {
     setStatus(err.message, 'error');
+  }
+}
+
+// ── 美股分析 ──
+async function analyzeUS(ticker) {
+  setStatus(`正在抓取 ${ticker} 美股資料...`, 'loading');
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('mainContent').classList.add('show');
+  try {
+    const { price, fin, name } = await fetchUSData(ticker);
+    priceData = price;
+    chipData  = [];
+    revenueData = [];
+    epsData = [];
+    twiiData = [];
+    intradayVolInfo = null;
+    usFinancials = fin;
+    usInstitutional = [];
+    currentStockId = ticker;
+    addToRecent(ticker);
+    stockNameCache[ticker] = name;
+    clearStatus();
+    renderMeta(ticker, name, 'US');
+    redraw();
+    renderUSFundamentals(fin);
+  } catch(err) {
+    setStatus(`美股抓取失敗：${err.message}`, 'error');
   }
 }
 
@@ -1330,53 +1530,150 @@ function redraw() {
   const sliced = priceData.slice(-currentPeriod);
   buildCharts(sliced);
   runAnalysis(sliced, twiiData);
-  renderRevenue(revenueData, epsData);
+  if (currentMarket === 'TW') {
+    renderRevenue(revenueData, epsData);
+  }
+  // 美股財報在 analyzeUS 呼叫後直接 render，這裡不重複
 }
 
 // ═══════════════════════════════════════
 //  META BAR
 // ═══════════════════════════════════════
-function renderMeta(stockId, stockName) {
+function renderMeta(stockId, stockName, market) {
+  market = market || currentMarket;
   const last = priceData[priceData.length-1];
   const prev = priceData[priceData.length-2];
   const chg  = last.close - prev.close;
   const pct  = (chg/prev.close*100).toFixed(2);
   const up   = chg >= 0;
   const bar  = document.getElementById('metaBar');
+
+  const isUS = market === 'US';
   const nameTag = stockName
-    ? `<span class="stock-name-tag">${stockName}</span>`
-    : '';
-  const yahooLink = `https://tw.stock.yahoo.com/quote/${stockId}${currentSuffix}`;
+    ? `<span class="stock-name-tag">${stockName}</span>` : '';
+
+  const yahooLink = isUS
+    ? `https://finance.yahoo.com/quote/${stockId}`
+    : `https://tw.stock.yahoo.com/quote/${stockId}${currentSuffix}`;
+
+  const marketBadge = isUS
+    ? `<span class="market-badge us">🇺🇸 US</span>`
+    : `<span class="market-badge tw">🇹🇼 TW</span>`;
+
+  const priceFormat = isUS
+    ? `$${last.close.toFixed(2)}`
+    : last.close.toFixed(2);
+
+  const volText = isUS
+    ? `${(last.Trading_Volume/1e6).toFixed(2)}M`
+    : `${(last.Trading_Volume/1000).toFixed(0)}張`;
+
   bar.innerHTML = `
+    ${marketBadge}
     <a href="${yahooLink}" target="_blank" rel="noopener" style="text-decoration:none;display:contents;">
       <span class="stock-title" style="cursor:pointer;border-bottom:1px dashed rgba(212,223,240,.25);"
-        title="點擊前往 Yahoo 奇摩股市（${stockId}${currentSuffix}）">${stockId} 🔗</span>
+        title="點擊前往 Yahoo Finance">${stockId} 🔗</span>
     </a>
     ${nameTag}
     <span class="stock-id">${last.date}</span>
     <span class="price-main" style="color:${up?'var(--up)':'var(--dn)'}">
-      ${last.close.toFixed(2)}
+      ${priceFormat}
     </span>
     <span class="price-chg ${up?'up':'dn'}">${up?'▲':'▼'} ${Math.abs(chg).toFixed(2)} (${up?'+':''}${pct}%)</span>
-    <span class="meta-pill">開 <b>${last.open}</b></span>
-    <span class="meta-pill">高 <b>${last.max}</b></span>
-    <span class="meta-pill">低 <b>${last.min}</b></span>
-    <span class="meta-pill">量 <b>${(last.Trading_Volume/1000).toFixed(0)}張</b></span>
-    ${intradayVolInfo ? (() => {
+    <span class="meta-pill">開 <b>${isUS ? '$'+last.open.toFixed(2) : last.open}</b></span>
+    <span class="meta-pill">高 <b>${isUS ? '$'+last.max.toFixed(2) : last.max}</b></span>
+    <span class="meta-pill">低 <b>${isUS ? '$'+last.min.toFixed(2) : last.min}</b></span>
+    <span class="meta-pill">量 <b>${volText}</b></span>
+    ${!isUS && intradayVolInfo ? (() => {
       const { todayVol, prevDayVol, ratio, dayProgress, time } = intradayVolInfo;
       const projectedVol = dayProgress > 0.05 ? todayVol / dayProgress : null;
       const projRatio = (projectedVol && prevDayVol > 0) ? projectedVol / prevDayVol : null;
       const ratioColor = ratio >= 1.5 ? 'var(--up)' : ratio >= 0.8 ? 'var(--text)' : 'var(--muted2)';
       const ratioLabel = ratio >= 2.0 ? '🔥爆量' : ratio >= 1.5 ? '📈量增' : ratio >= 0.8 ? '量正常' : '縮量';
-      return `
-        <span class="meta-pill" style="border-left:1px solid var(--border);padding-left:14px;">
-          📡 即時量能
-          <b style="color:${ratioColor}"> ${(todayVol/1000).toFixed(0)}張 (${ratioLabel}，昨日${(ratio*100).toFixed(0)}%)</b>
-          ${projRatio ? `<span style="color:var(--muted2);font-size:.7rem;"> ｜ 預估全日${(projectedVol/1000).toFixed(0)}張（昨日${(projRatio*100).toFixed(0)}%）</span>` : ''}
-        </span>`;
+      return `<span class="meta-pill" style="border-left:1px solid var(--border);padding-left:14px;">
+        📡 即時量能 <b style="color:${ratioColor}"> ${(todayVol/1000).toFixed(0)}張 (${ratioLabel}，昨日${(ratio*100).toFixed(0)}%)</b>
+        ${projRatio ? `<span style="color:var(--muted2);font-size:.7rem;"> ｜ 預估全日${(projectedVol/1000).toFixed(0)}張（昨日${(projRatio*100).toFixed(0)}%）</span>` : ''}
+      </span>`;
     })() : ''}
   `;
   bar.classList.add('show');
+}
+
+// ═══════════════════════════════════════
+//  美股財報面板渲染（精簡版，只顯示穩定可取得的核心指標）
+// ═══════════════════════════════════════
+function renderUSFundamentals(fin) {
+  const el     = document.getElementById('revenueContent');
+  const chipEl = document.getElementById('chipContent');
+
+  // 籌碼欄位直接隱藏（美股抓不到）
+  chipEl.innerHTML = `<div style="color:var(--muted);font-size:.75rem;padding:4px 0;line-height:1.8;">
+    美股機構持股資料需付費授權，暫不支援。<br>
+    可前往 <a href="https://finance.yahoo.com/quote/${currentStockId}/holders" target="_blank" style="color:var(--blue)">Yahoo Finance</a> 查看。
+  </div>`;
+
+  if (!fin) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:.75rem;">財報資料暫無法取得</div>`;
+    return;
+  }
+
+  const fd = fin.financialData || {};
+  const ks = fin.defaultKeyStatistics || {};
+
+  const fmtUSD = v => {
+    const n = v?.raw ?? v;
+    if (n == null || isNaN(n)) return '-';
+    if (Math.abs(n) >= 1e12) return '$' + (n/1e12).toFixed(2) + 'T';
+    if (Math.abs(n) >= 1e9)  return '$' + (n/1e9).toFixed(2)  + 'B';
+    if (Math.abs(n) >= 1e6)  return '$' + (n/1e6).toFixed(2)  + 'M';
+    return '$' + (+n).toFixed(2);
+  };
+  const fmtPct = v => {
+    const n = v?.raw ?? v;
+    if (n == null || isNaN(n)) return '-';
+    return (n * 100).toFixed(1) + '%';
+  };
+  const fmtNum = v => {
+    const n = v?.raw ?? v?.fmt ?? v;
+    if (n == null || isNaN(n)) return v?.fmt || '-';
+    return (+n).toFixed(2);
+  };
+  const pctColor = v => {
+    const n = v?.raw ?? v;
+    if (n == null) return 'var(--muted2)';
+    return n >= 0.20 ? 'var(--up)' : n >= 0.08 ? 'var(--text)' : 'var(--dn)';
+  };
+  const numColor = v => {
+    const n = v?.raw ?? v;
+    if (n == null) return 'var(--muted2)';
+    return n >= 0 ? 'var(--up)' : 'var(--dn)';
+  };
+
+  const rows = [
+    { k:'市值',            v: fmtUSD(fd.marketCap || ks.marketCap),                 c: 'var(--text)' },
+    { k:'本益比 P/E',      v: fmtNum(ks.trailingPE),                                c: 'var(--text)' },
+    { k:'預期 P/E',        v: fmtNum(ks.forwardPE),                                 c: 'var(--text)' },
+    { k:'EPS（TTM）',      v: fmtNum(ks.trailingEps) !== '-' ? '$'+fmtNum(ks.trailingEps) : '-', c: numColor(ks.trailingEps) },
+    { k:'EPS（預期）',     v: fmtNum(ks.forwardEps)  !== '-' ? '$'+fmtNum(ks.forwardEps)  : '-', c: numColor(ks.forwardEps) },
+    { k:'毛利率',          v: fmtPct(fd.grossMargins),    c: pctColor(fd.grossMargins) },
+    { k:'營業利益率',      v: fmtPct(fd.operatingMargins),c: pctColor(fd.operatingMargins) },
+    { k:'淨利率',          v: fmtPct(fd.profitMargins),   c: pctColor(fd.profitMargins) },
+    { k:'ROE',             v: fmtPct(fd.returnOnEquity),  c: pctColor(fd.returnOnEquity) },
+    { k:'負債比（D/E）',   v: fmtNum(fd.debtToEquity),    c: 'var(--text)' },
+    { k:'自由現金流',      v: fmtUSD(fd.freeCashflow),    c: 'var(--text)' },
+    { k:'52週高',          v: fmtNum(fd.fiftyTwoWeekHigh || ks.fiftyTwoWeekHigh) !== '-' ? '$'+fmtNum(fd.fiftyTwoWeekHigh || ks.fiftyTwoWeekHigh) : '-', c: 'var(--text)' },
+    { k:'52週低',          v: fmtNum(fd.fiftyTwoWeekLow  || ks.fiftyTwoWeekLow)  !== '-' ? '$'+fmtNum(fd.fiftyTwoWeekLow  || ks.fiftyTwoWeekLow)  : '-', c: 'var(--text)' },
+  ];
+
+  el.innerHTML = `
+  <div class="us-fund-block">
+    <div class="us-fund-title">📊 核心財務指標</div>
+    ${rows.map(r => `
+    <div class="us-fund-row">
+      <span class="us-fund-key">${r.k}</span>
+      <span class="us-fund-val" style="color:${r.c}">${r.v}</span>
+    </div>`).join('')}
+  </div>`;
 }
 
 // ═══════════════════════════════════════
@@ -1504,13 +1801,10 @@ function buildCharts(data) {
 
     bbUpperSeries = kChart.addLineSeries({ color:'rgba(41,197,197,0.7)', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, title:'BB上' });
     bbUpperSeries.setData(bbData.map(d=>({ time:d.time, value:d.upper })));
-
     bbMidSeries = kChart.addLineSeries({ color:'rgba(41,197,197,0.35)', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dashed, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, title:'BB中' });
     bbMidSeries.setData(bbData.map(d=>({ time:d.time, value:d.mid })));
-
     bbLowerSeries = kChart.addLineSeries({ color:'rgba(41,197,197,0.7)', lineWidth:1, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, title:'BB下' });
     bbLowerSeries.setData(bbData.map(d=>({ time:d.time, value:d.lower })));
-
     [bbUpperSeries, bbMidSeries, bbLowerSeries].forEach(s => s.applyOptions({ visible: bbVisible }));
     document.getElementById('bbChip')?.setAttribute('data-off', bbVisible ? '0' : '1');
   }
@@ -1530,7 +1824,7 @@ function buildCharts(data) {
   volMaSeries = volChart.addLineSeries({ color:'#e8b84b', lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   volMaSeries.setData(calcAvgVol(data, 20));
 
-  // MACD Chart
+  // MACD Chart — 使用固定 priceScaleId 確保不干擾 K 線圖
   macdChartObj = LightweightCharts.createChart(mEl, {
     ...lwChartOpts(mH),
     timeScale:{ borderColor:'#1e2d4a', visible:true, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
@@ -1556,19 +1850,25 @@ function buildCharts(data) {
     });
   })();
 
-  const macdAlignSeries = macdChartObj.addLineSeries({ color:'transparent', lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, visible: false });
+  // 錨定序列：確保時間軸與 K 線圖對齊
+  const macdAlignSeries = macdChartObj.addLineSeries({
+    color:'transparent', lineWidth:1,
+    priceLineVisible:false, lastValueVisible:false,
+    crosshairMarkerVisible:false, visible: false,
+    priceScaleId: 'right',
+  });
   macdAlignSeries.setData(data.map(d => ({ time: d.date, value: 0 })));
 
-  histSeries = macdChartObj.addHistogramSeries({ priceLineVisible:false, lastValueVisible:false });
+  histSeries = macdChartObj.addHistogramSeries({ priceLineVisible:false, lastValueVisible:false, priceScaleId:'right' });
   histSeries.setData(
     macdAligned.filter(d => d.hist !== null).map(d => ({
       time: d.time, value: d.hist,
       color: d.hist >= 0 ? 'rgba(255,77,109,0.6)' : 'rgba(0,200,150,0.6)'
     }))
   );
-  macdSeries = macdChartObj.addLineSeries({ color:'#4a9eff', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+  macdSeries = macdChartObj.addLineSeries({ color:'#4a9eff', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, priceScaleId:'right' });
   macdSeries.setData(macdAligned.filter(d => d.macd !== null).map(d => ({ time: d.time, value: d.macd })));
-  signalSeries = macdChartObj.addLineSeries({ color:'#ff9f40', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+  signalSeries = macdChartObj.addLineSeries({ color:'#ff9f40', lineWidth:1.5, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, priceScaleId:'right' });
   signalSeries.setData(macdAligned.filter(d => d.signal !== null).map(d => ({ time: d.time, value: d.signal })));
 
   // RSI Chart
@@ -1621,10 +1921,8 @@ function buildCharts(data) {
 
       kdKSeries = rsiChart.addLineSeries({ color:'rgba(255,159,64,0.85)', lineWidth:1.5, priceLineVisible:false, lastValueVisible:true, crosshairMarkerVisible:false });
       kdKSeries.setData(kdData.map(d=>({ time:d.time, value:d.k })));
-
       kdDSeries = rsiChart.addLineSeries({ color:'rgba(232,184,75,0.85)', lineWidth:1.5, priceLineVisible:false, lastValueVisible:true, crosshairMarkerVisible:false });
       kdDSeries.setData(kdData.map(d=>({ time:d.time, value:d.d })));
-
       kdKSeries.applyOptions({ visible: kdVisible });
       kdDSeries.applyOptions({ visible: kdVisible });
       const klEl = document.getElementById('kdLabelItem');
@@ -1716,6 +2014,7 @@ function drawTrendChannel(data) {
       if(!last || Math.abs(item.v - last.v)/last.v > 0.01) result.push(item);
       if(result.length >= 2) break;
     }
+  console.log("🔍 fetchUSData 最終返回的資料結構:", JSON.stringify(result, null, 2));
     return result;
   };
   const addLine = (price, col, label) => {
@@ -1805,7 +2104,7 @@ function calcATR(data, p=14) {
 }
 
 // ═══════════════════════════════════════
-//  PROCESS CHIP
+//  PROCESS CHIP（台股）
 // ═══════════════════════════════════════
 function processChip(chipRaw) {
   if (!chipRaw?.length) return [];
@@ -1827,7 +2126,7 @@ function processChip(chipRaw) {
 }
 
 // ═══════════════════════════════════════
-//  ANALYSIS ENGINE
+//  ANALYSIS ENGINE（共用）
 // ═══════════════════════════════════════
 function runAnalysis(slicedData, twiiRaw) {
   const data = slicedData || priceData.slice(-currentPeriod);
@@ -1836,7 +2135,6 @@ function runAnalysis(slicedData, twiiRaw) {
 
   const signals = [];
   let bullPts = 0, bearPts = 0;
-
   const strat = getCurrentStrategy();
 
   const last=data[n-1], prev=data[n-2];
@@ -1858,7 +2156,6 @@ function runAnalysis(slicedData, twiiRaw) {
   const downShadow=Math.min(last.close,last.open)-last.min;
   const isBull=last.close>last.open, isBear=last.close<last.open;
   const volRatio=lavg?(last.Trading_Volume/lavg):1;
-
   const w = strat.w;
 
   // ── 均線 ──
@@ -1873,7 +2170,6 @@ function runAnalysis(slicedData, twiiRaw) {
   }
   if(lma20 && last.close > lma20) { bullPts+=5*w.ma; }
   if(lma60 && last.close > lma60) { bullPts+=5*w.ma; }
-
   if(pma5&&lma5&&pma10&&lma10){
     if(pma5<pma10&&lma5>lma10){
       signals.push({type:'bull',cat:'均線',text:`MA5黃金交叉MA10，短線轉多`}); bullPts+=10*w.ma;
@@ -2028,7 +2324,6 @@ function runAnalysis(slicedData, twiiRaw) {
     if (isBull && body >= range*0.7 && volRatio >= 1.2) pushPattern('bull', '長紅K', 'bull', 1.2, 2);
     if (isBear && body >= range*0.7 && volRatio >= 1.2) pushPattern('bear', '長黑K', 'bear', 1.2, 2);
     if (isBear && upShadow >= body*2 && downShadow <= body*0.5) pushPattern('bear', '射擊之星', 'bear', 1.0);
-
     if (isBull && prev.close < prev.open && last.open <= prev.close && last.close >= prev.open) pushPattern('bull', '多頭吞噬', 'bull', 1.3, 3);
     if (isBear && prev.close > prev.open && last.open >= prev.close && last.close <= prev.open) pushPattern('bear', '空頭吞噬', 'bear', 1.3, 3);
     if (isBull && prev.close < prev.open) {
@@ -2039,7 +2334,6 @@ function runAnalysis(slicedData, twiiRaw) {
       const prevMid = (prev.open + prev.close) / 2;
       if (last.open > prev.close && last.close < prevMid && last.close > prev.open) pushPattern('bear', '烏雲罩頂', 'bear', 1.1);
     }
-
     if (prev2) {
       const b0=prev2, b1=prev, b2=last;
       if (b0.close>b0.open && b1.close>b1.open && b2.close>b2.open && b1.close>b0.close && b2.close>b1.close) pushPattern('bull', '紅三兵', 'bull', 1.0, 5);
@@ -2047,7 +2341,6 @@ function runAnalysis(slicedData, twiiRaw) {
       if (b0.close<b0.open && Math.abs(b1.close-b1.open)<(b1.max-b1.min)*0.3 && b2.close>b2.open && b2.close>=(b0.open+b0.close)/2) pushPattern('bull', '晨星', 'bull', 1.2, 5);
       if (b0.close>b0.open && Math.abs(b1.close-b1.open)<(b1.max-b1.min)*0.3 && b2.close<b2.open && b2.close<=(b0.open+b0.close)/2) pushPattern('bear', '暮星', 'bear', 1.2, 5);
     }
-
     if (isBear && volRatio > 2.5) {
       signals.push({ type:'bear', cat:'K線型態', text: `「爆量長黑」量比均量${volRatio.toFixed(1)}倍 + 收黑｜主力出貨訊號，${posTag}出現${pos60>0.5?'，高度警戒':'，低檔可觀察是否為止跌量'}` });
       bearPts += 12*w.pattern;
@@ -2070,23 +2363,28 @@ function runAnalysis(slicedData, twiiRaw) {
   signals.push({ type:parseFloat(dhi)<3?'bear':'neutral', cat:'支撐壓力', text:`近20日壓力：${rhi.toFixed(2)}（+${dhi}%）／支撐：${rlo.toFixed(2)}（-${dlo}%）` });
   if(parseFloat(dhi)<3) bearPts+=5;
 
-  // ── 籌碼面 ──
-  const chipProcessed = processChip(chipData);
-  if(chipProcessed.length){
-    const last5 = chipProcessed.slice(-5);
-    const foreignSum = last5.reduce((s,d)=>s+d.foreign,0);
-    const trustSum   = last5.reduce((s,d)=>s+d.trust,0);
-    if(foreignSum>0){ signals.push({type:'bull',cat:'籌碼',text:`外資近5日買超 ${(foreignSum/1000).toFixed(0)}張`}); bullPts+=8*w.chip; }
-    else if(foreignSum<0){ signals.push({type:'bear',cat:'籌碼',text:`外資近5日賣超 ${Math.abs(foreignSum/1000).toFixed(0)}張`}); bearPts+=8*w.chip; }
-    if(trustSum>0){ signals.push({type:'bull',cat:'籌碼',text:`投信近5日買超 ${(trustSum/1000).toFixed(0)}張`}); bullPts+=7*w.chip; }
-    else if(trustSum<0){ signals.push({type:'bear',cat:'籌碼',text:`投信近5日賣超 ${Math.abs(trustSum/1000).toFixed(0)}張`}); bearPts+=7*w.chip; }
+  // ── 籌碼面（台股才有）──
+  if (currentMarket === 'TW') {
+    const chipProcessed = processChip(chipData);
+    if(chipProcessed.length){
+      const last5 = chipProcessed.slice(-5);
+      const foreignSum = last5.reduce((s,d)=>s+d.foreign,0);
+      const trustSum   = last5.reduce((s,d)=>s+d.trust,0);
+      if(foreignSum>0){ signals.push({type:'bull',cat:'籌碼',text:`外資近5日買超 ${(foreignSum/1000).toFixed(0)}張`}); bullPts+=8*w.chip; }
+      else if(foreignSum<0){ signals.push({type:'bear',cat:'籌碼',text:`外資近5日賣超 ${Math.abs(foreignSum/1000).toFixed(0)}張`}); bearPts+=8*w.chip; }
+      if(trustSum>0){ signals.push({type:'bull',cat:'籌碼',text:`投信近5日買超 ${(trustSum/1000).toFixed(0)}張`}); bullPts+=7*w.chip; }
+      else if(trustSum<0){ signals.push({type:'bear',cat:'籌碼',text:`投信近5日賣超 ${Math.abs(trustSum/1000).toFixed(0)}張`}); bearPts+=7*w.chip; }
+      renderChip(chipProcessed);
+    } else {
+      renderChip([]);
+    }
   }
 
   // ── 策略額外加分 ──
   let bonusPts = 0;
   if(strat.bonusCond) bonusPts = strat.bonusCond(signals, data);
 
-  // ── 短線強度分析 ──
+  // ── 短線強度 ──
   const dayRange = last.max - last.min || 0.01;
   const closePosition = (last.close - last.min) / dayRange;
   let closePosLabel, closePosColor, closePosScore;
@@ -2116,8 +2414,7 @@ function runAnalysis(slicedData, twiiRaw) {
     const prev3avg  = prev5vols.slice(-3).reduce((s,v)=>s+v,0) / 3;
     const isConsolidating = prev3avg < prev5avg * 0.85;
     if (isConsolidating && volRatio > 1.4) {
-      volumeLaunch = { type: isBull ? 'bull' : 'bear',
-        text: `縮量整理後今日量增${volRatio.toFixed(1)}倍${isBull?'收紅，啟動訊號強烈！':'收黑，需觀察方向'}` };
+      volumeLaunch = { type: isBull ? 'bull' : 'bear', text: `縮量整理後今日量增${volRatio.toFixed(1)}倍${isBull?'收紅，啟動訊號強烈！':'收黑，需觀察方向'}` };
       if (isBull) bullPts += 12; else bearPts += 8;
     } else if (isConsolidating) {
       volumeLaunch = { type: 'neutral', text: `持續縮量整理中（近3日均量僅前期${(prev3avg/prev5avg*100).toFixed(0)}%），蓄勢待發，等放量確認` };
@@ -2187,42 +2484,18 @@ function runAnalysis(slicedData, twiiRaw) {
     const maHigh  = Math.max(lma5, lma10, lma20);
     const maLow   = Math.min(lma5, lma10, lma20);
     const maSpread = (maHigh - maLow) / last.close * 100;
-
     if (maSpread < 1.5) {
       const prevSpread = (() => {
-        const pm5  = ma5a[n-4];
-        const pm10 = ma10a[n-4];
-        const pm20 = ma20a[n-4];
+        const pm5  = ma5a[n-4]; const pm10 = ma10a[n-4]; const pm20 = ma20a[n-4];
         if (!pm5 || !pm10 || !pm20) return maSpread;
         return (Math.max(pm5,pm10,pm20) - Math.min(pm5,pm10,pm20)) / data[n-4].close * 100;
       })();
       const shrinking = maSpread < prevSpread;
       const maCenter = (lma5 + lma10 + lma20) / 3;
       const priceAbove = last.close > maCenter;
-      signals.push({
-        type: 'neutral',
-        cat: '均線糾結',
-        text: `⚡ MA5/10/20 極度糾結（三線價差僅 ${maSpread.toFixed(2)}%）${shrinking ? '，仍在收窄中' : ''}｜方向即將選擇，股價在均線中心${priceAbove ? '上方偏多' : '下方偏空'}，等突破確認再進場`
-      });
+      signals.push({ type: 'neutral', cat: '均線糾結', text: `⚡ MA5/10/20 極度糾結（三線價差僅 ${maSpread.toFixed(2)}%）${shrinking ? '，仍在收窄中' : ''}｜方向即將選擇，股價在均線中心${priceAbove ? '上方偏多' : '下方偏空'}，等突破確認再進場` });
       if (priceAbove && isBull) bullPts += 6;
       if (!priceAbove && isBear) bearPts += 6;
-    } else if (maSpread < 3.0) {
-      const spreads = [2, 3, 4].map(back => {
-        const bma5  = ma5a[n-back];
-        const bma10 = ma10a[n-back];
-        const bma20 = ma20a[n-back];
-        if (!bma5 || !bma10 || !bma20) return null;
-        return (Math.max(bma5,bma10,bma20) - Math.min(bma5,bma10,bma20)) / data[n-back].close * 100;
-      }).filter(Boolean);
-      const isTightening = spreads.length >= 2 && spreads[0] > maSpread && spreads[1] > spreads[0];
-      if (isTightening) {
-        signals.push({
-          type: 'neutral',
-          cat: '均線糾結',
-          text: `均線持續收斂（三線價差 ${maSpread.toFixed(2)}%，近3日由 ${spreads[1].toFixed(2)}%→${spreads[0].toFixed(2)}%→${maSpread.toFixed(2)}%），蓄勢待發，量增突破前不宜追`
-        });
-        bullPts += 2;
-      }
     }
   }
 
@@ -2252,14 +2525,8 @@ function runAnalysis(slicedData, twiiRaw) {
   });
   const resStrength = resTestCount >= 4 ? '強壓力🔴' : resTestCount >= 2 ? '中壓力🟡' : '弱壓力⚪';
   const supStrength = supTestCount >= 4 ? '強支撐🟢' : supTestCount >= 2 ? '中支撐🟡' : '弱支撐⚪';
-  signals.push({
-    type: resTestCount >= 3 ? 'bear' : 'neutral', cat: '壓力強度',
-    text: `壓力 ${rhi.toFixed(2)} 測試 ${resTestCount} 次（${resStrength}）`
-  });
-  signals.push({
-    type: supTestCount >= 3 ? 'bull' : 'neutral', cat: '支撐強度',
-    text: `支撐 ${rlo.toFixed(2)} 測試 ${supTestCount} 次（${supStrength}）`
-  });
+  signals.push({ type: resTestCount >= 3 ? 'bear' : 'neutral', cat: '壓力強度', text: `壓力 ${rhi.toFixed(2)} 測試 ${resTestCount} 次（${resStrength}）` });
+  signals.push({ type: supTestCount >= 3 ? 'bull' : 'neutral', cat: '支撐強度', text: `支撐 ${rlo.toFixed(2)} 測試 ${supTestCount} 次（${supStrength}）` });
 
   const autoStrategy = (() => {
     if (lrsi !== null && lrsi < 35 && lkdj && lkdj.k < 30)
@@ -2281,16 +2548,12 @@ function runAnalysis(slicedData, twiiRaw) {
   const shortTermData = {
     closePosition, closePosLabel, closePosColor, closePosScore,
     upperRatio, lowerRatio, upperShadow, lowerShadow, bodySize, dayRange,
-    shadowIntention,
-    volumeLaunch, bodyShrink, relStrength,
-    volRatio, vol5avg, vol20avg,
-    isBull, isBear,
-    price: last.close,
+    shadowIntention, volumeLaunch, bodyShrink, relStrength,
+    volRatio, vol5avg, vol20avg, isBull, isBear, price: last.close,
   };
 
   renderScore(score, volStructScore, volStructLabel, autoStrategy);
   renderSignals(signals);
-  renderChip(chipProcessed);
   renderTrade(data, score, lma20, rhi, rlo, lATR);
   renderBias(data);
   renderShortTerm(shortTermData);
@@ -2343,8 +2606,6 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     vTag.innerHTML = `量能結構 <span style="color:${bc};letter-spacing:0">${bar}</span> ${volStructScore}/10 ${volStructLabel}`;
     hdr.appendChild(vTag);
   }
-
-  // 同步策略按鈕高亮
   syncStratBtns();
 }
 
@@ -2362,7 +2623,7 @@ function renderSignals(signals) {
 }
 
 // ═══════════════════════════════════════
-//  RENDER CHIP
+//  RENDER CHIP（台股）
 // ═══════════════════════════════════════
 function renderChip(chip) {
   const el = document.getElementById('chipContent');
@@ -2401,7 +2662,6 @@ function renderChip(chip) {
     const prev3     = allVals.slice(-4, -1);
     const prev3sum  = prev3.reduce((s,v)=>s+v, 0);
     const reversed  = prev3sum !== 0 && Math.sign(prev3sum) !== Math.sign(todayVal) && todayAbs > histAvg * 0.8;
-
     let html = '', alert = null;
     if (ratio >= 4) {
       const tag = `<span style="font-size:.58rem;background:rgba(255,77,109,.2);color:var(--red);border-radius:3px;padding:1px 5px;margin-left:4px;font-weight:700;">⚡×${ratio.toFixed(1)}</span>`;
@@ -2470,6 +2730,7 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
   const n = data.length;
   const last = data[n-1];
   const p = last.close;
+  const isUS = currentMarket === 'US';
 
   const last3 = data.slice(-3);
   const sl_hard = Math.min(...last3.map(d => d.min));
@@ -2510,10 +2771,11 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
     buyZone = '-';
   }
 
-  const tp1_str = tp1_price > p ? tp1_price.toFixed(2) : '-';
-  const tp2_str = score >= 62 && tp2_price > p ? tp2_price.toFixed(2) : '-';
+  const pfx = isUS ? '$' : '';
+  const tp1_str = tp1_price > p ? pfx + tp1_price.toFixed(2) : '-';
+  const tp2_str = score >= 62 && tp2_price > p ? pfx + tp2_price.toFixed(2) : '-';
   const tp1_src = (tp1_price === resistance) ? '前高壓力' : (tp1_price === bbUpper) ? '布林上軌' : '風報比2R';
-  const rrVal = (score >= 62 && tp1_str !== '-') ? ((parseFloat(tp1_str) - p) / riskBase) : null;
+  const rrVal = (score >= 62 && tp1_price > p) ? ((tp1_price - p) / riskBase) : null;
   const rr = rrVal === null ? '-' : (!isFinite(rrVal) || rrVal > 99) ? '極高（止損極近）' : rrVal.toFixed(1) + ' : 1';
 
   document.getElementById('tradeContent').innerHTML = `
@@ -2524,14 +2786,14 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
         <div style="font-size:.68rem;color:var(--muted2);margin-bottom:6px;font-weight:700;letter-spacing:1px;">◆ 止損區間</div>
         <div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:.78rem;">
           <span style="color:var(--muted)">⚠ 警示減碼（MA5）</span>
-          <span style="font-family:var(--mono);color:#ff9f40;font-weight:600;">${sl_ma5 ? sl_ma5.toFixed(2) : '-'}</span>
+          <span style="font-family:var(--mono);color:#ff9f40;font-weight:600;">${sl_ma5 ? pfx + sl_ma5.toFixed(2) : '-'}</span>
         </div>
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;font-size:.78rem;">
           <span style="color:var(--muted)">✗ 硬止損（3日低）</span>
-          <span style="font-family:var(--mono);color:var(--dn);font-weight:600;">${sl_hard.toFixed(2)}</span>
+          <span style="font-family:var(--mono);color:var(--dn);font-weight:600;">${pfx}${sl_hard.toFixed(2)}</span>
         </div>
         <div style="font-size:.67rem;color:var(--muted);line-height:1.6;margin-top:4px;">
-          跌破MA5先減半倉觀察；跌破3日低點${sl_hard.toFixed(2)}確認出場
+          跌破MA5先減半倉觀察；跌破3日低點${pfx}${sl_hard.toFixed(2)}確認出場
         </div>
       </div>
       <div style="padding:8px 0 4px;border-bottom:1px solid var(--border);">
@@ -2557,91 +2819,54 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
 function renderBias(data) {
   const el = document.getElementById('biasContent');
   if (!data || data.length < 20) { el.innerHTML = '<div style="color:var(--muted);font-size:.78rem">資料不足</div>'; return; }
-
   const n = data.length;
   const last = data[n-1];
   const p = last.close;
-
   const calcBias = (period) => {
     if (n < period) return null;
     const maVal = data.slice(n-period, n).reduce((s,d)=>s+d.close,0)/period;
     return ((p - maVal) / maVal * 100);
   };
-  const bias5  = calcBias(5);
-  const bias10 = calcBias(10);
-  const bias20 = calcBias(20);
-  const bias60 = calcBias(60);
-
-  const bClass = (v) => {
-    if (v === null) return 'mid';
-    if (v > 4) return 'high';
-    if (v < -4) return 'low';
-    return 'mid';
-  };
-  const bFmt = (v) => v === null ? '-' : `${v>0?'+':''}${v.toFixed(2)}%`;
-
+  const bias5=calcBias(5), bias10=calcBias(10), bias20=calcBias(20), bias60=calcBias(60);
+  const bClass = (v) => { if(v===null) return 'mid'; if(v>4) return 'high'; if(v<-4) return 'low'; return 'mid'; };
+  const bFmt = (v) => v===null ? '-' : `${v>0?'+':''}${v.toFixed(2)}%`;
   const bLabel = (v) => {
-    if (v === null) return '';
-    if (v > 12)  return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">🔥 嚴重過熱，回調風險極高</span>`;
-    if (v > 7)   return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">⚠ 偏高，謹慎追多</span>`;
-    if (v > 3)   return `<span style="font-size:.62rem;color:#ff9f40;margin-left:4px;">↑ 偏多，注意高點</span>`;
-    if (v > -3)  return `<span style="font-size:.62rem;color:var(--muted2);margin-left:4px;">✓ 健康區間</span>`;
-    if (v > -7)  return `<span style="font-size:.62rem;color:var(--blue);margin-left:4px;">↓ 偏低，有支撐回測機會</span>`;
-    if (v > -12) return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🎯 超跌，反彈機率高</span>`;
+    if(v===null) return '';
+    if(v>12)  return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">🔥 嚴重過熱，回調風險極高</span>`;
+    if(v>7)   return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">⚠ 偏高，謹慎追多</span>`;
+    if(v>3)   return `<span style="font-size:.62rem;color:#ff9f40;margin-left:4px;">↑ 偏多，注意高點</span>`;
+    if(v>-3)  return `<span style="font-size:.62rem;color:var(--muted2);margin-left:4px;">✓ 健康區間</span>`;
+    if(v>-7)  return `<span style="font-size:.62rem;color:var(--blue);margin-left:4px;">↓ 偏低，有支撐回測機會</span>`;
+    if(v>-12) return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🎯 超跌，反彈機率高</span>`;
     return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🚀 極度超跌，強力彈升訊號</span>`;
   };
-
   const avgV20 = data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20;
   const avgV5  = data.slice(-5).reduce((s,d)=>s+d.Trading_Volume,0)/5;
   const volRatio = last.Trading_Volume / avgV20;
   const vol5Ratio = avgV5 / avgV20;
-
-  const volLevel = volRatio > 2.5 ? '爆量🔥' : volRatio > 1.5 ? '量增📈' : volRatio > 1.2 ? '偏量' : volRatio < 0.5 ? '極縮🔇' : volRatio < 0.7 ? '縮量' : '正常';
-  const volColor = volRatio > 1.5 ? 'var(--up)' : volRatio < 0.6 ? 'var(--muted2)' : 'var(--text)';
-  const vol5Trend = vol5Ratio > 1.2 ? '↑ 量能擴張' : vol5Ratio < 0.8 ? '↓ 量能收縮' : '→ 量能平穩';
-  const vol5Color = vol5Ratio > 1.2 ? 'var(--up)' : vol5Ratio < 0.8 ? 'var(--dn)' : 'var(--muted2)';
-
+  const volLevel = volRatio>2.5?'爆量🔥':volRatio>1.5?'量增📈':volRatio>1.2?'偏量':volRatio<0.5?'極縮🔇':volRatio<0.7?'縮量':'正常';
+  const volColor = volRatio>1.5?'var(--up)':volRatio<0.6?'var(--muted2)':'var(--text)';
+  const vol5Trend = vol5Ratio>1.2?'↑ 量能擴張':vol5Ratio<0.8?'↓ 量能收縮':'→ 量能平穩';
+  const vol5Color = vol5Ratio>1.2?'var(--up)':vol5Ratio<0.8?'var(--dn)':'var(--muted2)';
   const warnings = [];
-  if (bias20 !== null && Math.abs(bias20) > 10) warnings.push(`MA20乖離過大（${bFmt(bias20)}），均值回歸風險`);
-  if (volRatio > 3 && last.close < last.open) warnings.push('爆量長黑，賣壓警示');
-  if (volRatio > 3 && last.close > last.open) warnings.push('爆量長紅，突破訊號確認');
-
+  if(bias20!==null && Math.abs(bias20)>10) warnings.push(`MA20乖離過大（${bFmt(bias20)}），均值回歸風險`);
+  if(volRatio>3 && last.close<last.open) warnings.push('爆量長黑，賣壓警示');
+  if(volRatio>3 && last.close>last.open) warnings.push('爆量長紅，突破訊號確認');
+  const isUS = currentMarket === 'US';
+  const volUnit = isUS ? 'M股' : '張';
+  const volFmt = v => isUS ? (v/1e6).toFixed(2)+' M' : (v/1000).toFixed(0)+' 張';
   el.innerHTML = `
     <table style="border-collapse:collapse;font-size:.76rem;width:100%;">
       <tr><td colspan="2" style="padding:2px 0 6px;font-size:.63rem;color:var(--muted2);font-family:var(--mono);">乖離率 +3%偏高 / -3%偏低</td></tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA5 乖離</td>
-        <td style="padding:6px 0;text-align:right;" class="${bClass(bias5)}">${bFmt(bias5)}${bLabel(bias5)}</td>
-      </tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA10 乖離</td>
-        <td style="padding:6px 0;text-align:right;" class="${bClass(bias10)}">${bFmt(bias10)}${bLabel(bias10)}</td>
-      </tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA20 乖離</td>
-        <td style="padding:6px 0;text-align:right;" class="${bClass(bias20)}">${bFmt(bias20)}${bLabel(bias20)}</td>
-      </tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">MA60 乖離</td>
-        <td style="padding:6px 0;text-align:right;" class="${bClass(bias60)}">${bFmt(bias60)}${bLabel(bias60)}</td>
-      </tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">MA5 乖離</td><td style="padding:6px 0;text-align:right;" class="${bClass(bias5)}">${bFmt(bias5)}${bLabel(bias5)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">MA10 乖離</td><td style="padding:6px 0;text-align:right;" class="${bClass(bias10)}">${bFmt(bias10)}${bLabel(bias10)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">MA20 乖離</td><td style="padding:6px 0;text-align:right;" class="${bClass(bias20)}">${bFmt(bias20)}${bLabel(bias20)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">MA60 乖離</td><td style="padding:6px 0;text-align:right;" class="${bClass(bias60)}">${bFmt(bias60)}${bLabel(bias60)}</td></tr>
       <tr><td colspan="2" style="padding:10px 0 6px;font-size:.63rem;color:var(--muted2);font-family:var(--mono);">成交量分析</td></tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">今日量能</td>
-        <td style="padding:6px 0;text-align:right;color:${volColor};">${volLevel}（${volRatio.toFixed(1)}倍）</td>
-      </tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">今日成交量</td>
-        <td style="padding:6px 0;text-align:right;font-family:var(--mono);">${(last.Trading_Volume/1000).toFixed(0)}張</td>
-      </tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">近5日量趨勢</td>
-        <td style="padding:6px 0;text-align:right;color:${vol5Color};">${vol5Trend}</td>
-      </tr>
-      <tr style="border-top:1px solid var(--border);">
-        <td style="padding:6px 12px 6px 0;color:var(--muted2);">20日均量</td>
-        <td style="padding:6px 0;text-align:right;font-family:var(--mono);">${(avgV20/1000).toFixed(0)}張</td>
-      </tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">今日量能</td><td style="padding:6px 0;text-align:right;color:${volColor};">${volLevel}（${volRatio.toFixed(1)}倍）</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">今日成交量</td><td style="padding:6px 0;text-align:right;font-family:var(--mono);">${volFmt(last.Trading_Volume)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">近5日量趨勢</td><td style="padding:6px 0;text-align:right;color:${vol5Color};">${vol5Trend}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">20日均量</td><td style="padding:6px 0;text-align:right;font-family:var(--mono);">${volFmt(avgV20)}</td></tr>
     </table>
     ${warnings.map(w=>`<div style="margin-top:6px;padding:6px 8px;background:rgba(255,77,109,.08);border-left:2px solid var(--red);border-radius:4px;font-size:.72rem;color:var(--red);">⚠ ${w}</div>`).join('')}
   `;
@@ -2653,19 +2878,15 @@ function renderBias(data) {
 function renderShortTerm(d) {
   const el = document.getElementById('shortTermContent');
   if (!el) return;
-
   const cpPct = (d.closePosition * 100).toFixed(0);
   const cpColor = d.closePosScore >= 2 ? 'var(--up)' : d.closePosScore >= 0 ? 'var(--text)' : 'var(--dn)';
-
   const bodyPct   = d.dayRange > 0 ? d.bodySize / d.dayRange * 100 : 0;
   const upperPct  = d.upperRatio * 100;
   const lowerPct  = d.lowerRatio * 100;
-
   const volTrend = d.volRatio > 1.5 ? { label:'量增', color:'var(--up)' }
                  : d.volRatio > 1.1 ? { label:'量偏大', color:'#ff9f40' }
                  : d.volRatio < 0.6 ? { label:'縮量', color:'var(--muted2)' }
                  : { label:'正常', color:'var(--text)' };
-
   el.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:10px;">
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);">
@@ -2687,7 +2908,6 @@ function renderShortTerm(d) {
           </div>
         </div>
       </div>
-
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid var(--border);">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:7px;letter-spacing:1px;">◆ 影線比例（主力意圖）</div>
         <div style="display:flex;gap:3px;height:8px;margin-bottom:6px;border-radius:4px;overflow:hidden;">
@@ -2702,7 +2922,6 @@ function renderShortTerm(d) {
         </div>
         <div style="font-size:.73rem;color:var(--text);margin-top:5px;">💬 ${d.shadowIntention}</div>
       </div>
-
       ${d.volumeLaunch ? `
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.volumeLaunch.type==='bull'?'rgba(255,77,109,.3)':'rgba(0,200,150,.3)'};">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 量能啟動偵測</div>
@@ -2712,7 +2931,6 @@ function renderShortTerm(d) {
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 量能狀態</div>
         <div style="font-size:.75rem;color:${volTrend.color};">今日量 ${volTrend.label}（均量${d.volRatio.toFixed(1)}倍）${d.bodyShrink?'<br>⚡ '+d.bodyShrink.text:''}</div>
       </div>`}
-
       ${d.relStrength ? `
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.relStrength.type==='bull'?'rgba(255,77,109,.25)':d.relStrength.type==='bear'?'rgba(0,200,150,.25)':'var(--border)'};">
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 相對大盤強弱（近3日）</div>
@@ -2745,7 +2963,7 @@ window.addEventListener('resize', () => {
 });
 
 // ═══════════════════════════════════════
-//  FETCH REVENUE
+//  FETCH REVENUE（台股）
 // ═══════════════════════════════════════
 async function fetchRevenue(stockId, token) {
   try {
@@ -2761,25 +2979,16 @@ async function fetchRevenue(stockId, token) {
   return [];
 }
 
-// ═══════════════════════════════════════
-//  FETCH EPS
-// ═══════════════════════════════════════
 async function fetchEPS(stockId, token) {
   try {
     const today = new Date();
     const start = new Date(); start.setFullYear(start.getFullYear() - 3);
     const fmt = d => d.toISOString().slice(0, 10);
-    const params = {
-      dataset:    'TaiwanStockFinancialStatements',
-      data_id:    stockId,
-      start_date: fmt(start),
-      end_date:   fmt(today),
-    };
+    const params = { dataset:'TaiwanStockFinancialStatements', data_id:stockId, start_date:fmt(start), end_date:fmt(today) };
     if (token) params.token = token;
     const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
     const j = await r.json();
     if (!j?.data?.length) return [];
-    // 回傳全部財報資料，renderRevenue 自行篩選各指標
     return j.data.sort((a, b) => a.date.localeCompare(b.date));
   } catch { return []; }
 }
@@ -2787,7 +2996,6 @@ async function fetchEPS(stockId, token) {
 function renderRevenue(data, eps) {
   const el = document.getElementById('revenueContent');
   let html = '';
-
   if(!data?.length){
     html += '<div style="color:var(--muted);font-size:.75rem;margin-bottom:12px;">無法取得月營收資料</div>';
   } else {
@@ -2808,17 +3016,11 @@ function renderRevenue(data, eps) {
     const fmtRev = v => !v ? '-' : v >= 1e9 ? (v/1e9).toFixed(2)+'B' : v >= 1e6 ? (v/1e6).toFixed(0)+'M' : (v/1e3).toFixed(0)+'K';
     const fmtPct = v => v === null ? '-' : (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
     const pctCls = (v, p=5, n=-5) => v === null ? 'neu' : v > p ? 'pos' : v < n ? 'neg' : 'neu';
-
     html += `
       <div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);">月營收</div>
       <div style="margin-bottom:14px;">
       <table style="border-collapse:collapse;font-size:.76rem;width:100%;table-layout:fixed;">
-        <colgroup>
-          <col style="width:26%">
-          <col style="width:26%">
-          <col style="width:24%">
-          <col style="width:24%">
-        </colgroup>
+        <colgroup><col style="width:26%"><col style="width:26%"><col style="width:24%"><col style="width:24%"></colgroup>
         <tr>
           <td style="padding:2px 0 6px;color:var(--muted);font-size:.62rem;">月份</td>
           <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">營收</td>
@@ -2837,111 +3039,67 @@ function renderRevenue(data, eps) {
     `;
   }
 
-  // ── 季度財報：EPS + 毛利率 + 營益率 ──
-  // 從原始財報資料分別篩出三個指標，按日期組合成季度列
-  const allFinData = eps || [];  // fetchEPS 現在回傳全部財報資料
-  const qDateMap = {};  // { '2025-12-31': { eps, grossMargin, opMargin } }
-
-  const typeMap = {
-    eps:         ['BasicEPS','EPS'],
-    grossMargin: ['GrossProfit','毛利率','GrossProfitMargin'],
-    opMargin:    ['OperatingIncome','營業利益率','OperatingIncomeMargin'],
-    revenue:     ['Revenue','OperatingRevenue','TotalRevenue'],
-    grossProfit: ['GrossProfit'],
-    opIncome:    ['OperatingIncome'],
-  };
-
-  // 建立日期 → 各值的 map
+  const allFinData = eps || [];
+  const qDateMap = {};
   allFinData.forEach(d => {
     const dt = d.date;
     if (!qDateMap[dt]) qDateMap[dt] = { eps: null, grossPct: null, opPct: null };
     const t = d.type || '';
     const v = Number(d.value);
-    if (['BasicEPS','EPS'].includes(t) || (d.origin_name && d.origin_name.includes('每股'))) {
-      qDateMap[dt].eps = v;
-    }
-    // 毛利率：直接是百分比欄位，或需要從毛利/收入計算
-    if (t === 'GrossProfitMargin' || t === 'GrossMargin') {
-      qDateMap[dt].grossPct = v;  // 已是百分比
-    }
-    if (t === 'OperatingIncomeMargin' || t === 'OperatingMargin') {
-      qDateMap[dt].opPct = v;  // 已是百分比
-    }
-    // 備用：收入/毛利/營益三欄原始值，供後面計算
-    if (['Revenue','OperatingRevenue','TotalRevenue'].includes(t)) {
-      qDateMap[dt].rev = v;
-    }
+    if (['BasicEPS','EPS'].includes(t) || (d.origin_name && d.origin_name.includes('每股'))) { qDateMap[dt].eps = v; }
+    if (t === 'GrossProfitMargin' || t === 'GrossMargin') { qDateMap[dt].grossPct = v; }
+    if (t === 'OperatingIncomeMargin' || t === 'OperatingMargin') { qDateMap[dt].opPct = v; }
+    if (['Revenue','OperatingRevenue','TotalRevenue'].includes(t)) { qDateMap[dt].rev = v; }
     if (t === 'GrossProfit') { qDateMap[dt].grossProfit = v; }
     if (t === 'OperatingIncome') { qDateMap[dt].opIncome = v; }
   });
-
-  // 補算毛利率/營益率（若沒有直接欄位，用毛利÷收入）
   Object.keys(qDateMap).forEach(dt => {
     const q = qDateMap[dt];
-    if (q.grossPct === null && q.grossProfit != null && q.rev > 0) {
-      q.grossPct = q.grossProfit / q.rev * 100;
-    }
-    if (q.opPct === null && q.opIncome != null && q.rev > 0) {
-      q.opPct = q.opIncome / q.rev * 100;
-    }
+    if (q.grossPct === null && q.grossProfit != null && q.rev > 0) { q.grossPct = q.grossProfit / q.rev * 100; }
+    if (q.opPct === null && q.opIncome != null && q.rev > 0) { q.opPct = q.opIncome / q.rev * 100; }
   });
-
-  // 過濾有 EPS 的季度，排序取最新8季
   const qRows = Object.entries(qDateMap)
     .filter(([dt, q]) => q.eps !== null)
     .sort((a, b) => b[0].localeCompare(a[0]))
     .slice(0, 8);
-
-  // 季度標籤
   const toQLabel = dt => {
     const yr = parseInt(dt.slice(0,4));
     const mo = parseInt(dt.slice(5,7));
     const qMap = {3:'Q1',6:'Q2',9:'Q3',12:'Q4'};
     return qMap[mo] ? yr+'-'+qMap[mo] : dt.slice(0,7);
   };
-
   const fmtPct = v => v === null ? '-' : v.toFixed(1)+'%';
   const pctColor = v => v === null ? 'var(--muted2)' : v >= 30 ? 'var(--up)' : v >= 15 ? 'var(--text)' : 'var(--dn)';
-
   html += `<div style="font-size:.63rem;font-weight:700;letter-spacing:1px;color:var(--muted2);margin-bottom:6px;font-family:var(--mono);padding-top:8px;border-top:1px solid var(--border);">季度財報</div>`;
   if (!qRows.length) {
     html += '<div style="color:var(--muted);font-size:.72rem;padding-bottom:4px;">季度財報暫無資料（需填入 FinMind Token）</div>';
   } else {
-    // 判斷有無毛利率/營益率資料
     const hasMargin = qRows.some(([,q]) => q.grossPct !== null || q.opPct !== null);
-    html += `
-      <table style="border-collapse:collapse;font-size:.76rem;width:100%;table-layout:fixed;">
-        <colgroup>
-          <col style="width:26%">
-          <col style="width:${hasMargin ? '26%' : '74%'}">
-          ${hasMargin ? '<col style="width:24%"><col style="width:24%">' : ''}
-        </colgroup>
-        <tr>
-          <td style="padding:2px 0 6px;color:var(--muted);font-size:.62rem;">季度</td>
-          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">EPS</td>
-          ${hasMargin ? `
-          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">毛利率</td>
-          <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">營益率</td>` : ''}
-        </tr>
-        ${qRows.map(([dt, q]) => {
-          const epsVal = q.eps;
-          const epsColor = epsVal >= 0 ? 'var(--up)' : 'var(--dn)';
-          return `
-          <tr style="border-top:1px solid var(--border);">
-            <td style="padding:5px 0;color:var(--muted2);font-family:var(--mono);font-size:.75rem;">${toQLabel(dt)}</td>
-            <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-weight:700;color:${epsColor};font-size:.88rem;">${epsVal.toFixed(2)}</td>
-            ${hasMargin ? `
-            <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-size:.8rem;color:${pctColor(q.grossPct)};">${fmtPct(q.grossPct)}</td>
-            <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-size:.8rem;color:${pctColor(q.opPct)};">${fmtPct(q.opPct)}</td>` : ''}
-          </tr>`;
-        }).join('')}
-      </table>`;
-    if (!hasMargin) {
+    html += `<table style="border-collapse:collapse;font-size:.76rem;width:100%;table-layout:fixed;">
+      <colgroup><col style="width:26%"><col style="width:${hasMargin ? '26%' : '74%'}">
+      ${hasMargin ? '<col style="width:24%"><col style="width:24%">' : ''}</colgroup>
+      <tr>
+        <td style="padding:2px 0 6px;color:var(--muted);font-size:.62rem;">季度</td>
+        <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">EPS</td>
+        ${hasMargin ? `<td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">毛利率</td>
+        <td style="padding:2px 0 6px;text-align:right;color:var(--muted);font-size:.62rem;">營益率</td>` : ''}
+      </tr>
+      ${qRows.map(([dt, q]) => {
+        const epsVal = q.eps;
+        const epsColor = epsVal >= 0 ? 'var(--up)' : 'var(--dn)';
+        return `<tr style="border-top:1px solid var(--border);">
+          <td style="padding:5px 0;color:var(--muted2);font-family:var(--mono);font-size:.75rem;">${toQLabel(dt)}</td>
+          <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-weight:700;color:${epsColor};font-size:.88rem;">${epsVal.toFixed(2)}</td>
+          ${hasMargin ? `<td style="padding:5px 0;text-align:right;font-family:var(--mono);font-size:.8rem;color:${pctColor(q.grossPct)};">${fmtPct(q.grossPct)}</td>
+          <td style="padding:5px 0;text-align:right;font-family:var(--mono);font-size:.8rem;color:${pctColor(q.opPct)};">${fmtPct(q.opPct)}</td>` : ''}
+        </tr>`;
+      }).join('')}
+    </table>`;
+    if (!qRows.some(([,q]) => q.grossPct !== null || q.opPct !== null)) {
       html += `<div style="font-size:.62rem;color:var(--muted);margin-top:5px;">毛利率/營益率：此標的財報無此欄位</div>`;
     }
     html += '</div>';
   }
-
   el.innerHTML = html;
 }
 
@@ -3010,9 +3168,7 @@ document.addEventListener('keydown', e => {
       document.getElementById('dateTo').value = '';
       if(priceData.length) analyze();
       break;
-    case 't': case 'T':
-      toggleTrendChannel();
-      break;
+    case 't': case 'T': toggleTrendChannel(); break;
   }
 });
 
@@ -3024,9 +3180,7 @@ document.addEventListener('keydown', e => {
   const chartsCol   = document.getElementById('chartsCol');
   const analysisCol = document.getElementById('analysisCol');
   if (!resizer || !chartsCol || !analysisCol) return;
-
   let isDown = false, startX = 0, startAnalW = 0;
-
   const onDown = (e) => {
     isDown = true;
     startX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -3060,7 +3214,6 @@ document.addEventListener('keydown', e => {
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
   };
-
   resizer.addEventListener('mousedown',  onDown);
   resizer.addEventListener('touchstart', onDown, { passive: true });
   document.addEventListener('mousemove', onMove);
@@ -3092,7 +3245,7 @@ window.addEventListener('load', () => {
   }, 200);
 });
 
-// 自動從 OTC 報告連結載入股票代號
+// 自動從 URL 參數載入股票代號
 (function() {
   const params = new URLSearchParams(location.search);
   const stockParam = params.get('stock');
@@ -3102,7 +3255,6 @@ window.addEventListener('load', () => {
   }
 })();
 
-// ★ setActivePeriod：同步更新新位置的 .pt 按鈕樣式
 function setActivePeriod(p) {
   document.querySelectorAll('.pt').forEach(t => {
     const isActive = parseInt(t.dataset.p) === p;
@@ -3112,7 +3264,6 @@ function setActivePeriod(p) {
   if(priceData.length) redraw();
 }
 
-// ★ selectStratBtn：四個策略按鈕點擊處理
 function selectStratBtn(key) {
   document.querySelectorAll('.strat-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.strat === key);
@@ -3122,7 +3273,6 @@ function selectStratBtn(key) {
   onStrategyChange();
 }
 
-// ★ renderScore 呼叫後同步策略按鈕高亮（策略可能由 autoStrategy 切換）
 function syncStratBtns() {
   const sel = document.getElementById('strategySelect');
   if (!sel) return;
@@ -3130,7 +3280,6 @@ function syncStratBtns() {
     b.classList.toggle('active', b.dataset.strat === sel.value);
   });
 }
-
 </script>
 </body>
 </html>
