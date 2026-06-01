@@ -731,12 +731,12 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
       <!-- MA toggle chips -->
       <div class="ma-toggle-bar">
         <span style="font-size:.65rem;color:var(--muted);font-family:var(--mono);margin-right:2px;">均線</span>
-        <div class="ma-chip-btn" data-ma="5"  style="background:rgba(232,184,75,.15);border-color:#e8b84b;color:#e8b84b;"  onclick="toggleMA(5)">MA5</div>
-        <div class="ma-chip-btn" data-ma="10" style="background:rgba(74,158,255,.15);border-color:#4a9eff;color:#4a9eff;" onclick="toggleMA(10)">MA10</div>
+        <div class="ma-chip-btn" data-ma="5"  data-off="1" style="background:rgba(232,184,75,.15);border-color:#e8b84b;color:#e8b84b;"  onclick="toggleMA(5)">MA5</div>
+        <div class="ma-chip-btn" data-ma="10" data-off="1" style="background:rgba(74,158,255,.15);border-color:#4a9eff;color:#4a9eff;" onclick="toggleMA(10)">MA10</div>
         <div class="ma-chip-btn" data-ma="20" style="background:rgba(255,107,157,.15);border-color:#ff6b9d;color:#ff6b9d;" onclick="toggleMA(20)">MA20</div>
         <div class="ma-chip-btn" data-ma="60" style="background:rgba(167,139,250,.15);border-color:#a78bfa;color:#a78bfa;" onclick="toggleMA(60)">MA60</div>
         <span style="font-family:var(--mono);font-size:.62rem;padding:3px 8px;border-radius:10px;background:rgba(255,200,50,.1);border:1px solid rgba(255,200,50,.3);color:rgba(255,200,50,.85);margin-left:4px;" title="成交量加權均價，代表市場平均持倉成本">VWAP</span>
-        <div class="ma-chip-btn" id="bbChip" data-bb="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
+        <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
       </div>
       <div class="chart-block">
@@ -1008,9 +1008,9 @@ let rsiOBSeries = null;
 let rsiOSSeries = null;
 let bbUpperSeries = null, bbLowerSeries = null, bbMidSeries = null;
 let kdKSeries = null, kdDSeries = null;
-let bbVisible = true;
+let bbVisible = false;
 let kdVisible = true;
-let maVisibility = { 5:true, 10:true, 20:true, 60:true };
+let maVisibility = { 5:false, 10:false, 20:true, 60:true };
 let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]');
 let recentHistory = JSON.parse(localStorage.getItem('kline_recent')||'[]');
 let currentStockId = '';
