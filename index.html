@@ -2747,10 +2747,17 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     const aTag = document.createElement('div');
     aTag.id = 'autoStratTag';
     aTag.style.cssText = 'font-size:.68rem;color:#29c5c5;margin-top:8px;font-family:var(--mono);padding:5px 10px;background:rgba(41,197,197,.1);border:1px solid rgba(41,197,197,.3);border-radius:6px;display:block;cursor:pointer;text-align:left;width:100%;box-sizing:border-box;';
-    aTag.title = '點擊套用此策略';
+    aTag.title = '點擊重新套用此策略';
     aTag.innerHTML = `💡 建議策略：<b style="color:#fff">${names[autoStrategy.key]}</b><br><span style="font-size:.6rem;color:var(--muted2);line-height:1.5">${autoStrategy.reason}</span>`;
     aTag.onclick = () => { const s=document.getElementById('strategySelect'); if(s){s.value=autoStrategy.key; onStrategyChange(); syncStratBtns();} };
     hdr.appendChild(aTag);
+
+    // 自動套用建議策略到 select 和按鈕（只 sync UI，不重跑分析，避免無限循環）
+    const sel = document.getElementById('strategySelect');
+    if (sel && sel.value !== autoStrategy.key) {
+      sel.value = autoStrategy.key;
+      // syncStratBtns 已在下方統一呼叫
+    }
   }
 
   if (volStructScore !== undefined) {
