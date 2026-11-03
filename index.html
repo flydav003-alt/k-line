@@ -1437,24 +1437,29 @@ async function fetchTWII() {
 }
 
 // ═══════════════════════════════════════
-//  即時行情（台股）
-//  日線來源 FinMind 要收盤後才更新，所以盤中的「當日 K 棒」由這裡補上：
+//  即時行情（台股）— 只在按「📡 即時」時才抓，「▶ 分析」維持原本的快速流程
 //  1) 證交所 MIS 官方即時（無延遲，約 5 秒更新一次）
 //  2) 備援：Yahoo 1分K 聚合成當日 K 棒（Yahoo 對 .TW/.TWO 本身就延遲約 20 分鐘）
+//  日線來源 FinMind 要收盤後才更新，所以「當日 K 棒」由這裡補上
 // ═══════════════════════════════════════
-const RT_INTERVAL_MS = 15000;   // 自動更新間隔（毫秒）；太短容易被免費 proxy 限流
+const RT_INTERVAL_MS      = 15000;   // 自動更新間隔（毫秒）；太短容易被免費 proxy 限流
+const RT_FETCH_TIMEOUT_MS = 14000;   // 單次抓即時行情的總時間上限，超過就放棄，不卡畫面
 let rtTimer  = null;
 let rtBusy   = false;
-let liveMeta = null;            // { source, time }：顯示在資訊列，標示資料來源與時間
+let liveMeta = null;                 // { source, time }：顯示在資訊列，標示資料來源與時間
 
 // 台北時間（不依賴裝置時區）：以 UTC+8 位移後用 getUTC* 讀取
 function taipeiNow()      { return new Date(Date.now() + 8*3600*1000); }
-function taipeiDateStr()  { return taipeiNow().toISOString().slice(0,10); }
 function taipeiTimeStr()  { return taipeiNow().toISOString().slice(11,19); }
 function taipeiMinutes()  { const d = taipeiNow(); return d.getUTCHours()*60 + d.getUTCMinutes(); }
 function isTWWeekday()    { const w = taipeiNow().getUTCDay(); return w !== 0 && w !== 6; }
 // 盤中：週一～五 09:00–13:30（多留 5 分鐘抓收盤最終價）
 function isTWMarketOpen() { const m = taipeiMinutes(); return isTWWeekday() && m >= 9*60 && m <= 13*60+35; }
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function withTimeout(p, ms) {
+  return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+}
 
 // ── 來源 1：證交所 MIS（上市 tse / 上櫃 otc 一次問，只會回傳存在的那個）──
 async function fetchTWSERealtime(stockId) {
@@ -1500,41 +1505,58 @@ async function fetchTWSERealtime(stockId) {
 }
 
 // ── 來源 2：Yahoo 1分K → 聚合成「當日一根日K」（不能只拿最後一根 1分K）──
+// .TW / .TWO 同時問，誰有資料用誰；query1 失敗才換 query2
 async function fetchYahooTodayBar(stockId) {
-  for (const suffix of ['.TW', '.TWO']) {
-    for (const node of ['query1', 'query2']) {
-      const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockId + suffix)}?interval=1m&range=1d&includePrePost=false&_=${Date.now()}`;
-      const bars = await tryYahooUrl(url);
-      if (!bars || !bars.length) continue;
-      const day   = bars[bars.length - 1].date;
-      const today = bars.filter(b => b.date === day);
-      const highs = today.map(b => b.max || b.close);
-      const lows  = today.map(b => b.min || b.close).filter(v => v > 0);
-      currentSuffix = suffix;
-      return {
-        date:  day,
-        open:  today[0].open || today[0].close,
-        max:   Math.max(...highs),
-        min:   Math.min(...lows),
-        close: today[today.length - 1].close,
-        Trading_Volume: today.reduce((s, b) => s + (b.Trading_Volume || 0), 0),
-        time:  today[today.length - 1].time || '',
-        source: 'Yahoo 1分K(約延遲20分)',
-      };
-    }
+  const aggregate = bars => {
+    const day   = bars[bars.length - 1].date;
+    const today = bars.filter(b => b.date === day);
+    const highs = today.map(b => b.max || b.close);
+    const lows  = today.map(b => b.min || b.close).filter(v => v > 0);
+    return {
+      date:  day,
+      open:  today[0].open || today[0].close,
+      max:   Math.max(...highs),
+      min:   Math.min(...lows),
+      close: today[today.length - 1].close,
+      Trading_Volume: today.reduce((s, b) => s + (b.Trading_Volume || 0), 0),
+      time:  today[today.length - 1].time || '',
+      source: 'Yahoo 1分K(約延遲20分)',
+    };
+  };
+  const attempt = async (suffix, node) => {
+    const url  = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockId + suffix)}?interval=1m&range=1d&includePrePost=false&_=${Date.now()}`;
+    const bars = await tryYahooUrl(url);
+    if (!bars || !bars.length) throw new Error('empty');
+    return { suffix, bar: aggregate(bars) };
+  };
+  for (const node of ['query1', 'query2']) {
+    try {
+      const r = await Promise.any(['.TW', '.TWO'].map(s => attempt(s, node)));
+      currentSuffix = r.suffix;
+      return r.bar;
+    } catch {}
   }
   return null;
 }
 
+// 先問證交所；它失敗或超過 2.5 秒沒回應，就同時啟動 Yahoo 備援（證交所優先）。整體有時間上限。
 async function fetchLiveBar(stockId) {
-  const twse = await fetchTWSERealtime(stockId).catch(() => null);
-  if (twse) {
-    currentSuffix = twse.ex === 'otc' ? '.TWO' : '.TW';
-    if (twse.name && !stockNameCache[stockId]) stockNameCache[stockId] = twse.name;
-    return twse;
+  const run = async () => {
+    const twseP = fetchTWSERealtime(stockId).catch(() => null);
+    const early = await Promise.race([twseP, sleep(2500).then(() => 'slow')]);
+    if (early && early !== 'slow') return early;
+    const yahooP = fetchYahooTodayBar(stockId).catch(() => null);
+    const twse = await twseP;
+    if (twse) return twse;
+    console.warn('[即時] 證交所來源失敗，改用 Yahoo 1分K（約延遲 20 分鐘）');
+    return await yahooP;
+  };
+  const bar = await withTimeout(run(), RT_FETCH_TIMEOUT_MS).catch(() => null);
+  if (bar && bar.source.startsWith('TWSE')) {
+    currentSuffix = bar.ex === 'otc' ? '.TWO' : '.TW';
+    if (bar.name && !stockNameCache[stockId]) stockNameCache[stockId] = bar.name;
   }
-  console.warn('[即時] 證交所來源失敗，改用 Yahoo 1分K（約延遲 20 分鐘）');
-  return await fetchYahooTodayBar(stockId).catch(() => null);
+  return bar;
 }
 
 // 把當日 K 棒併進日線陣列（同日覆蓋、新的一天就新增）
@@ -1547,22 +1569,16 @@ function mergeLiveBar(pd, bar) {
   return false;
 }
 
-// 是否需要補即時 K 棒：盤中，或收盤後但 FinMind 還沒有今天的資料
-function needLiveBar(pd) {
-  if (!isTWWeekday() || taipeiMinutes() < 9*60) return false;
-  const last = pd[pd.length - 1];
-  return isTWMarketOpen() || !last || last.date < taipeiDateStr();
-}
-
+// 回傳 { status: 'merged' | 'final-exists' | 'stale' | 'failed', bar }
 async function applyLiveBar(pd, stockId) {
   const bar = await fetchLiveBar(stockId);
-  if (!bar) return null;                                   // 失敗就維持原狀
+  if (!bar) return { status: 'failed' };                   // 失敗就維持原狀
   const last    = pd[pd.length - 1];
   const sameDay = !!last && last.date === bar.date;
   const open    = isTWMarketOpen();
-  if (sameDay && !open) return bar;                        // 收盤後 FinMind 已有當日定稿，不覆蓋
+  if (sameDay && !open) return { status: 'final-exists', bar };   // 收盤後 FinMind 已有當日定稿，不覆蓋
   const prevDay = sameDay ? pd[pd.length - 2] : last;
-  if (!mergeLiveBar(pd, bar)) return null;
+  if (!mergeLiveBar(pd, bar)) return { status: 'stale', bar };
   liveMeta = { source: bar.source, time: bar.time || taipeiTimeStr() };
   if (open && prevDay) {
     const todayVol   = bar.Trading_Volume;
@@ -1574,10 +1590,10 @@ async function applyLiveBar(pd, stockId) {
       time: taipeiTimeStr(),
     };
   }
-  return bar;
+  return { status: 'merged', bar };
 }
 
-// ── 📡 即時按鈕：載入並開啟自動更新（再按一次停止）──
+// ── 📡 即時按鈕：先用原本的快速流程出圖，再在背景補即時 K 棒；盤中會持續自動更新（再按一次停止）──
 function setRtButton(on) {
   const b = document.getElementById('btnRealtime');
   if (!b) return;
@@ -1599,8 +1615,8 @@ async function rtTick() {
   if (!pd.length || !stockId) return;
   rtBusy = true;
   try {
-    const bar = await applyLiveBar(pd, stockId);
-    if (pd === priceData && bar) {
+    const res = await applyLiveBar(pd, stockId);
+    if (pd === priceData && res.status === 'merged') {
       renderMeta(stockId, stockNameCache[stockId] || '', 'TW');
       redraw(true);                                        // 保留目前縮放位置
     }
@@ -1613,17 +1629,42 @@ async function analyzeRealtime() {
   if (rtTimer) { stopRealtime('已停止自動更新'); return; }
   const stockId = document.getElementById('stockInput').value.trim();
   if (!stockId) { setStatus('請輸入股票代號','error'); return; }
-  await analyzeTW(stockId);                                // 載入歷史日線 + 補入當日即時 K 棒
-  if (currentStockId !== stockId || !priceData.length) return;
-  if (!isTWMarketOpen()) {
-    setStatus('目前非盤中（台股 09:00–13:30），已載入最新資料，未啟動自動更新', 'success');
-    setTimeout(() => clearStatus(), 5000);
+  if (document.getElementById('dateTo')?.value) {
+    setStatus('回測日期模式不套用即時行情，請先按「✕ 清除」', 'error');
     return;
   }
-  setRtButton(true);
-  rtTimer = setInterval(rtTick, RT_INTERVAL_MS);
-  setStatus(`📡 即時模式已啟動，每 ${RT_INTERVAL_MS/1000} 秒更新一次`, 'success');
-  setTimeout(() => clearStatus(), 4000);
+  // 這檔已經在畫面上 → 直接補即時；否則先走原本的快速載入（圖馬上出來）
+  if (currentStockId !== stockId || !priceData.length) await analyzeTW(stockId);
+  if (currentStockId !== stockId || !priceData.length) return;   // 載入失敗，analyzeTW 已顯示錯誤
+
+  const pd = priceData;
+  setStatus(`📡 正在抓 ${stockId} 即時行情（背景進行，圖表可先看）...`, 'loading');
+  const res = await applyLiveBar(pd, stockId);
+  if (pd !== priceData) return;                            // 抓取期間切換了個股
+  if (res.status === 'failed') {
+    setStatus('即時行情抓取失敗：證交所與 Yahoo 都沒回應（多半是免費 proxy 被擋或逾時）。目前顯示的是 FinMind 日線，可稍後再按一次；按 F12 看 Console 的 [TWSE] / [Yahoo] 訊息可判斷原因。', 'error');
+    return;
+  }
+  if (res.status === 'final-exists') {
+    setStatus('FinMind 已有今日收盤資料，不需補即時行情', 'success');
+    setTimeout(() => clearStatus(), 4000);
+    return;
+  }
+  if (res.status === 'stale') {
+    setStatus(`取得的即時資料日期（${res.bar.date}）早於目前最後一根 K 棒，已略過`, 'error');
+    return;
+  }
+  renderMeta(stockId, stockNameCache[stockId] || '', 'TW');
+  redraw(true);
+  const info = `${res.bar.source} ${liveMeta.time}，現價 ${res.bar.close}`;
+  if (isTWMarketOpen()) {
+    setRtButton(true);
+    rtTimer = setInterval(rtTick, RT_INTERVAL_MS);
+    setStatus(`📡 已補入即時行情（${info}），每 ${RT_INTERVAL_MS/1000} 秒自動更新`, 'success');
+  } else {
+    setStatus(`📡 已補入當日資料（${info}）；目前非盤中，不啟動自動更新`, 'success');
+  }
+  setTimeout(() => clearStatus(), 6000);
 }
 
 // ═══════════════════════════════════════
@@ -1712,13 +1753,8 @@ async function analyzeTW(stockId) {
       fetchRevenue(stockId, token),
       fetchEPS(stockId, token),
     ]);
-    // 盤中（或收盤後 FinMind 尚未更新）→ 補上當日即時 K 棒；回測模式不補
     liveMeta = null;
     intradayVolInfo = null;
-    if (!customTo && needLiveBar(pd)) {
-      setStatus(`正在補入 ${stockId} 即時行情...`, 'loading');
-      await applyLiveBar(pd, stockId);
-    }
     priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
     usInstitutional = []; usFinancials = [];
     currentStockId = stockId;
