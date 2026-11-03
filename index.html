@@ -677,6 +677,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <span class="kbd-hint" title="切換60日">1</span>
     <span class="kbd-hint" title="切換120日">2</span>
     <span class="kbd-hint" title="切換240日">3</span>
+    <span class="kbd-hint" title="切換480日">4</span>
     <span class="kbd-hint" title="T: 趨勢通道">T</span>
     <span class="kbd-hint" title="Esc: 清除回測">Esc</span>
   </div>
@@ -732,6 +733,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           <div class="pt active" data-p="60" onclick="setActivePeriod(60)">60日</div>
           <div class="pt" data-p="120" onclick="setActivePeriod(120)">120日</div>
           <div class="pt" data-p="240" onclick="setActivePeriod(240)">240日</div>
+          <div class="pt" data-p="480" onclick="setActivePeriod(480)">480日</div>
           <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" style="cursor:pointer;user-select:none;">
             趨勢通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
           </div>
@@ -745,6 +747,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         <div class="ma-chip-btn" data-ma="10" data-off="1" style="background:rgba(74,158,255,.15);border-color:#4a9eff;color:#4a9eff;" onclick="toggleMA(10)">MA10</div>
         <div class="ma-chip-btn" data-ma="20" style="background:rgba(255,107,157,.15);border-color:#ff6b9d;color:#ff6b9d;" onclick="toggleMA(20)">MA20</div>
         <div class="ma-chip-btn" data-ma="60" style="background:rgba(167,139,250,.15);border-color:#a78bfa;color:#a78bfa;" onclick="toggleMA(60)">MA60</div>
+        <div class="ma-chip-btn" data-ma="120" data-off="1" style="background:rgba(52,211,153,.15);border-color:#34d399;color:#34d399;" onclick="toggleMA(120)">MA120</div>
+        <div class="ma-chip-btn" data-ma="240" data-off="1" style="background:rgba(251,146,60,.15);border-color:#fb923c;color:#fb923c;" onclick="toggleMA(240)">MA240</div>
         <span style="font-family:var(--mono);font-size:.62rem;padding:3px 8px;border-radius:10px;background:rgba(255,200,50,.1);border:1px solid rgba(255,200,50,.3);color:rgba(255,200,50,.85);margin-left:4px;" title="成交量加權均價，代表市場平均持倉成本">VWAP</span>
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="0" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
@@ -1101,7 +1105,7 @@ let kChart      = null;
 let volChart    = null;
 let macdChartObj= null;
 let candleSeries= null;
-let ma5Series   = null, ma10Series = null, ma20Series = null, ma60Series = null;
+let ma5Series   = null, ma10Series = null, ma20Series = null, ma60Series = null, ma120Series = null, ma240Series = null;
 let volSeries   = null, volMaSeries = null;
 let macdSeries  = null, signalSeries= null, histSeries = null;
 let trendLines  = [];
@@ -1115,7 +1119,7 @@ let bbUpperSeries = null, bbLowerSeries = null, bbMidSeries = null;
 let kdKSeries = null, kdDSeries = null;
 let bbVisible = true;
 let kdVisible = true;
-let maVisibility = { 5:false, 10:false, 20:true, 60:true };
+let maVisibility = { 5:false, 10:false, 20:true, 60:true, 120:false, 240:false };
 let wlQuotes = {};      // 追蹤清單報價：id -> { price, chg }
 let wlDate   = '';      // MIS 回傳的交易日，用來判斷休市日就不必輪詢
 let wlBusy   = false;
@@ -1271,7 +1275,7 @@ function toggleMA(p) {
   maVisibility[p] = !maVisibility[p];
   const btn = document.querySelector(`.ma-chip-btn[data-ma="${p}"]`);
   if(btn) btn.dataset.off = maVisibility[p] ? '0' : '1';
-  const serMap = { 5: ma5Series, 10: ma10Series, 20: ma20Series, 60: ma60Series };
+  const serMap = { 5: ma5Series, 10: ma10Series, 20: ma20Series, 60: ma60Series, 120: ma120Series, 240: ma240Series };
   const s = serMap[p];
   if(s) { try { s.applyOptions({ visible: maVisibility[p] }); } catch{} }
 }
@@ -1542,7 +1546,7 @@ async function tryYahooUrl(targetUrl) {
 async function fetchYahooPrice(stockId) {
   const suffixes = ['.TW', '.TWO'];
   const nodes    = ['query1', 'query2'];
-  const ranges   = ['1y', '400d'];
+  const ranges   = ['2y', '1y'];
   for (const suffix of suffixes) {
     const symbol = stockId + suffix;
     for (const rng of ranges) {
@@ -1566,7 +1570,7 @@ async function fetchYahooPrice(stockId) {
 // ═══════════════════════════════════════
 async function fetchUSPrice(ticker) {
   const nodes  = ['query1', 'query2'];
-  const ranges = ['1y', '2y'];
+  const ranges = ['2y', '1y'];
   const symbol = ticker.toUpperCase();
   for (const rng of ranges) {
     for (const node of nodes) {
@@ -1928,7 +1932,7 @@ async function fetchPrice(stockId, token, customFrom='', customTo='') {
   const fmt = d => d.toISOString().slice(0,10);
   const endBase = customTo ? new Date(customTo) : new Date();
   const startBase = new Date(endBase);
-  startBase.setDate(startBase.getDate() - 400);
+  startBase.setDate(startBase.getDate() - 1100);
   const startDate = fmt(startBase);
   const endDate   = fmt(endBase);
   let url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${stockId}&start_date=${startDate}&end_date=${endDate}`;
@@ -2292,16 +2296,18 @@ function buildCharts(data, keepRange = false) {
     setTimeout(() => addVolumeMarkers(data, avgV), 50);
   }
 
-  const maColors = { 5:'#e8b84b', 10:'#4a9eff', 20:'#ff6b9d', 60:'#a78bfa' };
+  const maColors = { 5:'#e8b84b', 10:'#4a9eff', 20:'#ff6b9d', 60:'#a78bfa', 120:'#34d399', 240:'#fb923c' };
   const addMA = (p, col) => {
     const s = kChart.addLineSeries({ color:col, lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, visible: maVisibility[p] });
-    s.setData(calcMA(data, p));
+    s.setData(calcMA(priceData, p).filter(x => x.time >= data[0].date));
     return s;
   };
   ma5Series  = addMA(5,  maColors[5]);
   ma10Series = addMA(10, maColors[10]);
   ma20Series = addMA(20, maColors[20]);
   ma60Series = addMA(60, maColors[60]);
+  ma120Series = addMA(120, maColors[120]);
+  ma240Series = addMA(240, maColors[240]);
 
   // VWAP
   {
@@ -2671,10 +2677,14 @@ function runAnalysis(slicedData, twiiRaw) {
   const strat = getCurrentStrategy();
 
   const last=data[n-1], prev=data[n-2];
-  const ma5a=ma(data,5), ma10a=ma(data,10), ma20a=ma(data,20), ma60a=ma(data,60);
-  const rsiA=rsi(data,14), kdjA=kdjCalc(data,9), bbA=bbCalc(data,20), avgVA=avgVol(data,20);
-  const macdA=macdCalcArr(data);
-  const atrA=calcATR(data,14);
+  // 指標用完整歷史計算（含暖機期），再取與顯示區間對齊的尾段
+  const ctx = (priceData.length > n && priceData[priceData.length-1].date === data[n-1].date) ? priceData.slice(-(n+300)) : data;
+  const T = a => a.slice(-n);
+  const ma5a=T(ma(ctx,5)), ma10a=T(ma(ctx,10)), ma20a=T(ma(ctx,20)), ma60a=T(ma(ctx,60));
+  const ma120a=T(ma(ctx,120)), ma240a=T(ma(ctx,240));
+  const rsiA=T(rsi(ctx,14)), kdjA=T(kdjCalc(ctx,9)), bbA=T(bbCalc(ctx,20)), avgVA=T(avgVol(ctx,20));
+  const macdA=T(macdCalcArr(ctx));
+  const atrA=T(calcATR(ctx,14));
 
   const lma5=ma5a[n-1], lma10=ma10a[n-1], lma20=ma20a[n-1], lma60=ma60a[n-1];
   const pma5=ma5a[n-2], pma10=ma10a[n-2];
@@ -2811,6 +2821,10 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  { const l120=ma120a[n-1], l240=ma240a[n-1];
+    if (l240) { const up=last.close>l240; signals.push({type:up?'bull':'bear',cat:'均線',text:`股價在年線（MA240 ${l240.toFixed(1)}）${up?'之上，長線多頭':'之下，長線偏弱'}`}); if(up) bullPts+=3*w.ma; else bearPts+=3*w.ma; }
+    else if (l120) { const up=last.close>l120; signals.push({type:up?'bull':'bear',cat:'均線',text:`股價在半年線（MA120 ${l120.toFixed(1)}）${up?'之上，中長線偏多':'之下，中長線偏弱'}`}); if(up) bullPts+=2*w.ma; else bearPts+=2*w.ma; } }
+
   // ── 量價 ──
   if(isBull&&volRatio>1.5){
     signals.push({type:'bull',cat:'量價',text:`大量紅K（量比均${volRatio.toFixed(1)}倍），多方積極攻擊`}); bullPts+=10*w.vol;
@@ -2849,6 +2863,7 @@ function runAnalysis(slicedData, twiiRaw) {
   // ── K線型態 ──
   {
     const prev2 = n>=3 ? data[n-3] : null;
+    const _b0=bullPts, _s0=bearPts;
     const r60 = data.slice(-Math.min(60,n));
     const hi60 = Math.max(...r60.map(d=>d.max));
     const lo60 = Math.min(...r60.map(d=>d.min));
@@ -2880,7 +2895,7 @@ function runAnalysis(slicedData, twiiRaw) {
       else bearPts += pts;
     };
 
-    if (range > 0 && downShadow >= body*2 && upShadow <= body*0.5 && body > 0) pushPattern('bull', '錘頭線', 'bull', 1.2);
+    if (range > 0 && downShadow >= body*2 && upShadow <= body*0.5 && body > 0 && pos60 < 0.6) pushPattern('bull', '錘頭線', 'bull', 1.2);
     if (range > 0 && upShadow >= body*2 && downShadow <= body*0.5 && body > 0 && pos60 < 0.4) pushPattern('bull', '倒錘頭', 'bull', 1.0);
     if (range > 0 && upShadow >= range*0.7 && downShadow <= range*0.05) pushPattern('bear', '墓碑十字', 'bear', 1.2);
     if (range > 0 && body <= range*0.08) {
@@ -2907,6 +2922,37 @@ function runAnalysis(slicedData, twiiRaw) {
       if (b0.close<b0.open && Math.abs(b1.close-b1.open)<(b1.max-b1.min)*0.3 && b2.close>b2.open && b2.close>=(b0.open+b0.close)/2) pushPattern('bull', '晨星', 'bull', 1.2, 5);
       if (b0.close>b0.open && Math.abs(b1.close-b1.open)<(b1.max-b1.min)*0.3 && b2.close<b2.open && b2.close<=(b0.open+b0.close)/2) pushPattern('bear', '暮星', 'bear', 1.2, 5);
     }
+    // ── 強化K線判斷（ATR標準化、趨勢背景、缺口、假突破）──
+    const atrN = lATR || range || 1;
+    const dnTrend = (lma20 && ma20a[n-6]) ? (lma20 < ma20a[n-6] && last.close < lma20) : pos60 < 0.4;
+    const upTrend = (lma20 && ma20a[n-6]) ? (lma20 > ma20a[n-6] && last.close > lma20) : pos60 > 0.6;
+    if (range > 0 && body > 0 && downShadow >= body*2 && upShadow <= body*0.5 && pos60 >= 0.6) pushPattern('bear', '吊人線（高檔錘形）', 'bear', 1.2);
+    const pbody = Math.abs(prev.close - prev.open);
+    if (pbody >= atrN*0.8 && body <= pbody*0.5 && Math.max(last.open,last.close) < Math.max(prev.open,prev.close) && Math.min(last.open,last.close) > Math.min(prev.open,prev.close)) {
+      if (prev.close < prev.open && dnTrend) pushPattern('bull', '多頭孕線', 'bull', 0.8);
+      else if (prev.close > prev.open && upTrend) pushPattern('bear', '空頭孕線', 'bear', 0.8);
+    }
+    if (last.min > prev.max) {
+      const g = (last.min - prev.max) / prev.close * 100, strong = volRatio >= 1.3;
+      signals.push({ type: strong ? 'bull' : 'neutral', cat:'K線型態', text:`「向上跳空缺口」${g.toFixed(1)}%｜${strong ? '帶量，突破缺口可信度高' : '量能不足，留意回補缺口'}${pos60 > 0.85 ? '；高檔缺口留意竭盡' : ''}` });
+      if (strong) bullPts += 8*w.pattern;
+    } else if (last.max < prev.min) {
+      const g = (prev.min - last.max) / prev.close * 100, strong = volRatio >= 1.3;
+      signals.push({ type: strong ? 'bear' : 'neutral', cat:'K線型態', text:`「向下跳空缺口」${g.toFixed(1)}%｜${strong ? '帶量下殺，空方確立' : '量能不足，留意缺口回補反彈'}` });
+      if (strong) bearPts += 8*w.pattern;
+    }
+    if (currentMarket === 'TW' && prev.close > 0) {
+      const chg = (last.close - prev.close) / prev.close;
+      if (chg >= 0.095 && last.close >= last.max - 1e-9) { signals.push({ type:'bull', cat:'K線型態', text:`「漲停收盤」${(chg*100).toFixed(1)}%｜鎖在最高價，強勢；隔日留意開盤是否續強` }); bullPts += 10*w.pattern; }
+      else if (chg <= -0.095 && last.close <= last.min + 1e-9) { signals.push({ type:'bear', cat:'K線型態', text:`「跌停收盤」${(chg*100).toFixed(1)}%｜鎖在最低價，賣壓極大` }); bearPts += 10*w.pattern; }
+    }
+    if (n >= 8 && range > 0 && range <= Math.min(...data.slice(-7).map(d => d.max - d.min)) && last.max <= prev.max && last.min >= prev.min)
+      signals.push({ type:'neutral', cat:'K線型態', text:'「壓縮K線」近7日最小振幅且內困前一日｜變盤前兆，等待放量突破方向' });
+    if (n >= 22) {
+      const pre = data.slice(-21, -1), preHi = Math.max(...pre.map(d => d.max)), preLo = Math.min(...pre.map(d => d.min));
+      if (last.max > preHi && last.close < preHi && upShadow >= range*0.4) pushPattern('bear', '假突破（上攻失敗）', 'bear', 1.0, 3);
+      if (last.min < preLo && last.close > preLo && downShadow >= range*0.4) pushPattern('bull', '破底翻（下殺失敗）', 'bull', 1.0, 3);
+    }
     if (isBear && volRatio > 2.5) {
       signals.push({ type:'bear', cat:'K線型態', text: `「爆量長黑」量比均量${volRatio.toFixed(1)}倍 + 收黑｜主力出貨訊號，${posTag}出現${pos60>0.5?'，高度警戒':'，低檔可觀察是否為止跌量'}` });
       bearPts += 12*w.pattern;
@@ -2919,6 +2965,8 @@ function runAnalysis(slicedData, twiiRaw) {
       signals.push({ type:'bull', cat:'K線型態', text: `「爆量突破」量比均量${volRatio.toFixed(1)}倍，同時創近期新高｜強烈追多訊號，${posTag}` });
       bullPts += 13*w.pattern;
     }
+    if (bullPts-_b0 > 25) bullPts = _b0+25;
+    if (bearPts-_s0 > 25) bearPts = _s0+25;
   }
 
   // ── 支撐壓力 ──
@@ -3757,6 +3805,7 @@ document.addEventListener('keydown', e => {
     case '1': setActivePeriod(60);  break;
     case '2': setActivePeriod(120); break;
     case '3': setActivePeriod(240); break;
+    case '4': setActivePeriod(480); break;
     case 'Escape':
       document.getElementById('dateTo').value = '';
       if(priceData.length) analyze();
