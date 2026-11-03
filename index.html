@@ -1544,7 +1544,9 @@ function diagSummary() {
 
 // 通用：同時打多個 proxy，誰先成功用誰；parser 負責把原始 JSON 轉成需要的資料
 async function fetchViaProxies(targetUrl, parser, tag = 'Proxy') {
-  const attempts = PROXY_LIST.map(makeProxy => {
+  const _proxies = (typeof YAHOO_WORKER !== 'undefined' && YAHOO_WORKER && /finance\.yahoo\.com/.test(targetUrl))
+    ? [u => `${YAHOO_WORKER}?url=${encodeURIComponent(u)}`].concat(PROXY_LIST) : PROXY_LIST;
+  const attempts = _proxies.map(makeProxy => {
     const proxyUrl = makeProxy(targetUrl);
     return fetchWithTimeout(proxyUrl, 5000)
       .then(async r => {
@@ -1684,6 +1686,8 @@ async function fetchTWII() {
 // 自架 Cloudflare Worker 網址（填入後優先使用；留空則沿用公用 proxy）
 // 例：'https://twse-proxy.你的帳號.workers.dev'
 const TWSE_WORKER = 'https://twse-proxy.flydav003.workers.dev';
+// Yahoo 代理：與 TWSE 共用同一個 Worker（需在 Worker 加上 ?url= 轉發，見 worker-yahoo-snippet.js）；留空則只用公共 proxy
+const YAHOO_WORKER = TWSE_WORKER;
 const RT_INTERVAL_MS      = 15000;   // 自動更新間隔（毫秒）；太短容易被免費 proxy 限流
 const RT_FETCH_TIMEOUT_MS = 14000;   // 單次抓即時行情的總時間上限，超過就放棄，不卡畫面
 let rtTimer  = null;
@@ -2034,7 +2038,14 @@ async function analyzeTW(stockId) {
   const customTo = document.getElementById('dateTo')?.value || '';
   try {
     const [pd, cd, sn, rd, epsd] = await Promise.all([
-      fetchPrice(stockId, token, '', customTo),
+      fetchPrice(stockId, token, '', customTo).catch(async e => {
+        console.warn('[FinMind股價失敗，改用Yahoo]', e.message);
+        const y = await fetchYahooPrice(stockId);
+        const r = customTo ? y.filter(d => d.date <= customTo) : y;
+        if (!r.length) throw e;
+        setStatus('FinMind 股價暫時無法取得，已改用 Yahoo 資料（籌碼／營收可能缺漏）', 'loading');
+        return r;
+      }),
       fetchChip(stockId, token),
       fetchStockName(stockId),
       fetchRevenue(stockId, token),
@@ -3290,7 +3301,8 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
 // ═══════════════════════════════════════
 function renderSignals(signals, score, bullPts, bearPts) {
   const el = document.getElementById('signalList');
-  if(!signals.length){ el.innerHTML='<div style="color:var(--muted);font-size:.78rem">無明顯訊號</div>'; return; }
+  const cp = currentPatterns();
+  if(!signals.length){ el.innerHTML=renderCurrentPatterns(cp)+'<div style="color:var(--muted);font-size:.78rem">無明顯訊號</div>'; return; }
   const order = { bull:0, neutral:1, bear:2 };
   const sorted = signals.map((x,i)=>[x,i]).sort((p,q)=> (order[p[0].type]-order[q[0].type]) || (p[1]-q[1])).map(x=>x[0]);
   const nb = signals.filter(x=>x.type==='bull').length, nn = signals.filter(x=>x.type==='neutral').length, nr = signals.filter(x=>x.type==='bear').length;
@@ -3304,11 +3316,11 @@ function renderSignals(signals, score, bullPts, bearPts) {
     <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px;background:var(--border);">
       <div style="width:${bullShare}%;background:var(--up);"></div><div style="width:${100-bullShare}%;background:var(--dn);"></div></div>
     <div style="font-size:.72rem;color:var(--muted2);">多方訊號 <b style="color:var(--up)">${nb}</b> ｜ 中性 ${nn} ｜ 空方訊號 <b style="color:var(--dn)">${nr}</b>　多空力道 ${bullShare}% : ${100-bullShare}%</div></div>`;
-  el.innerHTML = head + sorted.map(s=>`
+  el.innerHTML = renderCurrentPatterns(cp) + head + sorted.map(s=>`
     <div class="sig ${s.type}">
       <span class="sig-tag">${s.cat}</span>${s.text}
     </div>
-  `).join('') + renderPatternStats();
+  `).join('') + renderPatternStats(cp);
 }
 
 // ── 歷史K線型態：偵測（純函式，可用於任一根K棒）──
@@ -3343,8 +3355,8 @@ function detectPatternsAt(a, i, atr, m20){
   if(b.min<pL&&b.close>pL&&dn>=rng*0.4) out.push({name:'破底翻',dir:'bull'});
   return out;
 }
-function patternStats(H=5){
-  const a=vd(); if(!a||a.length<60) return [];
+function patternStats(H=5, arr){
+  const a=arr||vd(); if(!a||a.length<60) return [];
   const atr=calcATR(a,14), m20=ma(a,20), map={};
   for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20).forEach(x=>{
     const r=(a[i+H].close-a[i].close)/a[i].close*100;
@@ -3353,16 +3365,45 @@ function patternStats(H=5){
   });
   return Object.entries(map).map(([k,v])=>({name:k,...v,rate:v.win/v.n*100,avg:v.sum/v.n})).sort((x,y)=>y.n-x.n);
 }
-function renderPatternStats(){
+// ── 目前正在出現的型態（日／週／月 同時偵測，不受目前選的週期影響）──
+function currentPatterns(){
+  const out=[], names=new Set();
+  if(!priceData || priceData.length<30) return {out,names};
+  [['D','日K'],['W','週K'],['M','月K']].forEach(([tf,label])=>{
+    const a = tf==='D' ? priceData : aggBars(priceData, tf);
+    if(!a || a.length<30) return;
+    const i=a.length-1, hits=detectPatternsAt(a,i,calcATR(a,14),ma(a,20));
+    const st={}; patternStats(5,a).forEach(x=>st[x.name]=x);
+    hits.forEach(h=>names.add(h.name));
+    out.push({tf,label,date:a[i].date,hits:hits.map(h=>({...h,st:st[h.name]||null}))});
+  });
+  return {out,names};
+}
+function renderCurrentPatterns(cp){
+  if(!cp.out.length) return '';
+  const rows=cp.out.map(r=>{
+    const body = r.hits.length ? r.hits.map(h=>{
+      const c=h.dir==='bull'?'var(--up)':'var(--dn)', arrow=h.dir==='bull'?'▲':'▼';
+      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次，平均${h.st.avg>=0?'+':''}${h.st.avg.toFixed(1)}%）`:'';
+      return `<span style="color:${c};font-weight:700;">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
+    }).join('<br>') : '<span style="color:var(--muted);">目前無明顯型態</span>';
+    return `<div style="display:flex;gap:10px;padding:4px 0;border-top:1px solid var(--border);"><span style="min-width:44px;color:var(--gold2);font-weight:600;">${r.label}</span><div style="flex:1;font-size:.8rem;">${body}<div style="font-size:.62rem;color:var(--muted);">${r.date}</div></div></div>`;
+  }).join('');
+  return `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+    <div style="font-size:.82rem;font-weight:700;color:var(--gold);margin-bottom:2px;">💡 目前可能的K線型態（日／週／月）</div>${rows}
+    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">依最新一根K棒判斷；週K、月K的最新一根尚未收定，之後可能改變。</div></div>`;
+}
+function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
+  const lit = cp ? cp.names : new Set();
   const rows=st.map(x=>{
-    const few=x.n<5, c=x.dir==='bull'?'var(--up)':'var(--dn)';
-    return `<tr style="${few?'opacity:.5;':''}"><td style="padding:3px 6px;color:${c};">${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
+    const on=lit.has(x.name), c=x.dir==='bull'?'var(--up)':'var(--dn)';
+    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
-    <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（共${vd().length}根${{D:'日',W:'週',M:'月'}[currentTF]}K）</div>
+    <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5根報酬</td></tr>${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">勝率＝多方型態後5根K收漲／空方型態後5根K收跌的比例；次數少於5（灰色）僅供參考，且未計手續費與滑價。</div></div>`;
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。勝率＝多方型態後收漲／空方型態後收跌的比例；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
