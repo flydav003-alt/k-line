@@ -3370,13 +3370,23 @@ function detectPatternsAt(a, i, atr, m20, basic=false){
 function patternStats(H=5, arr){
   const a=arr||vd(); if(!a||a.length<60) return [];
   const atr=calcATR(a,14), m20=ma(a,20), map={};
-  for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20,true).forEach(x=>{
+  let bn=0, bu=0, bd=0;   // 基準：任意一根K（不看型態）
+  for(let i=22;i<a.length-H;i++){
     const r=(a[i+H].close-a[i].close)/a[i].close*100;
-    if(Math.abs(r)>40) return;   // 疑似除權／減資／分割造成的價格斷層，不納入統計
+    if(Math.abs(r)>40) continue;   // 疑似除權／減資／分割造成的價格斷層，不納入統計
+    bn++; if(r>0) bu++; else if(r<0) bd++;
+    detectPatternsAt(a,i,atr,m20,true).forEach(x=>{
     const m=map[x.name]||(map[x.name]={dir:x.dir,n:0,win:0,sum:0});
     m.n++; m.sum+=(x.dir==='bear'?-r:r); if(r*(x.dir==='bear'?-1:1)>0) m.win++;
-  });
-  return Object.entries(map).map(([k,v])=>({name:k,...v,rate:v.win/v.n*100,avg:v.sum/v.n})).sort((x,y)=>y.n-x.n);
+    });
+  }
+  const base = { n:bn, up: bn?bu/bn*100:0, down: bn?bd/bn*100:0 };
+  const res = Object.entries(map).map(([k,v])=>{
+    const rate=v.win/v.n*100;
+    return {name:k,...v,rate,avg:v.sum/v.n,diff:rate-(v.dir==='bull'?base.up:base.down)};
+  }).sort((x,y)=>y.n-x.n);
+  res.base = base;
+  return res;
 }
 // ── 目前正在出現的型態（日／週／月 同時偵測，不受目前選的週期影響）──
 function currentPatterns(){
@@ -3385,7 +3395,7 @@ function currentPatterns(){
   [['D','日K'],['W','週K'],['M','月K']].forEach(([tf,label])=>{
     const a = tf==='D' ? priceData : aggBars(priceData, tf);
     if(!a || a.length<30) return;
-    const atr=calcATR(a,14), m20=ma(a,20), st={}; patternStats(5,a).forEach(x=>st[x.name]=x);
+    const atr=calcATR(a,14), m20=ma(a,20), st={}; const _ps=patternStats(5,a); _ps.forEach(x=>st[x.name]=x);
     const hits=[];
     for(let k=0;k<3;k++){
       const i=a.length-1-k;
@@ -3400,7 +3410,8 @@ function renderCurrentPatterns(cp){
   const rows=cp.out.map(r=>{
     const body = r.hits.length ? r.hits.map(h=>{
       const c=h.dir==='bull'?'var(--up)':'var(--dn)', arrow=h.dir==='bull'?'▲':'▼';
-      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次，平均${h.st.avg>=0?'+':''}${h.st.avg.toFixed(1)}%）`:'';
+      const dv=h.st?h.st.diff:0, dc=dv>=5?'#ffd166':dv<=-5?'#4a9eff':'var(--muted2)';
+      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次）<span style="color:${dc};">較基準${dv>=0?'+':''}${dv.toFixed(0)}%</span>`:'';
       const when=h.k===0?'最新':`前${h.k}根 ${h.date.slice(5)}`;
       return `<span style="color:var(--muted2);font-size:.64rem;">[${when}]</span> <span style="color:${c};font-weight:${h.k===0?700:500};${h.k===0?'':'opacity:.8;'}">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
     }).join('<br>') : '<span style="color:var(--muted);">目前無明顯型態</span>';
@@ -3413,14 +3424,16 @@ function renderCurrentPatterns(cp){
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
   const lit = cp ? cp.names : new Set();
+  const bs = st.base, baseRow = `<tr style="border-bottom:1px solid var(--border);color:var(--gold2);"><td style="padding:3px 6px;">任意一根K（基準）</td><td style="text-align:right;font-family:var(--mono)">${bs.n}</td><td colspan="3" style="text-align:right;font-size:.68rem;">5根後上漲 ${bs.up.toFixed(0)}%／下跌 ${bs.down.toFixed(0)}%</td></tr>`;
   const rows=st.map(x=>{
     const on=lit.has(x.name), c=x.dir==='bull'?'var(--up)':'var(--dn)';
-    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
+    const dc=x.diff>=5?'#ffd166':x.diff<=-5?'#4a9eff':'var(--muted2)';
+    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
-    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5根報酬(依方向)</td></tr>${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td></tr>${baseRow}${rows}</table>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；黃＝高出5%以上、藍＝低於5%以上、灰＝差不多。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
