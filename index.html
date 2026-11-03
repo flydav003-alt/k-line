@@ -112,6 +112,16 @@ header{
 
 /* US 模式下輸入框稍寬 */
 body.us-mode #stockInput{ width:110px; }
+#stockInput{ width:150px; }
+.sg-wrap{ position:relative; display:flex; }
+.sg-box{ display:none; position:absolute; top:100%; left:0; margin-top:4px; min-width:260px; max-height:340px;
+  overflow-y:auto; background:var(--s2); border:1px solid var(--border2); border-radius:8px; z-index:300;
+  box-shadow:0 8px 24px rgba(0,0,0,.5); }
+.sg-item{ display:flex; gap:10px; align-items:baseline; padding:7px 12px; cursor:pointer; font-size:.8rem; color:var(--text); }
+.sg-item .sg-id{ font-family:var(--mono); color:var(--gold); min-width:58px; }
+.sg-item .sg-ind{ margin-left:auto; font-size:.62rem; color:var(--muted); }
+.sg-item.on, .sg-item:hover{ background:var(--border); }
+.wl-px{ font-family:var(--mono); font-size:.68rem; }
 
 /* 策略選單 */
 #strategySelect{
@@ -644,7 +654,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
   </div>
 
   <div class="search-wrap">
-    <input type="text" id="stockInput" placeholder="2330" maxlength="8" />
+    <div class="sg-wrap"><input type="text" id="stockInput" placeholder="代號或股名" maxlength="12" autocomplete="off" /><div id="sgBox" class="sg-box"></div></div>
 
     <select id="strategySelect" style="display:none;" onchange="onStrategyChange()">
       <option value="balanced">平衡模式</option>
@@ -919,7 +929,7 @@ function switchMarket(mkt) {
 function autoDetectMarket(raw) {
   const val = raw.trim().toUpperCase();
   // 台股：純數字 4-6 碼，或 ETF（如 0050）
-  if (/^\d{4,6}$/.test(val)) return 'TW';
+  if (/^\d{4,6}[A-Z]?$/.test(val)) return 'TW';
   // 美股：純英文字母 1-5 碼
   if (/^[A-Z]{1,5}$/.test(val)) return 'US';
   return currentMarket;
@@ -1106,8 +1116,11 @@ let kdKSeries = null, kdDSeries = null;
 let bbVisible = true;
 let kdVisible = true;
 let maVisibility = { 5:false, 10:false, 20:true, 60:true };
-let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]');
-let recentHistory = JSON.parse(localStorage.getItem('kline_recent')||'[]');
+let wlQuotes = {};      // 追蹤清單報價：id -> { price, chg }
+let wlDate   = '';      // MIS 回傳的交易日，用來判斷休市日就不必輪詢
+let wlBusy   = false;
+let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c));
+let recentHistory = JSON.parse(localStorage.getItem('kline_recent')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c));
 let currentStockId = '';
 let revenueData = [];
 let epsData     = [];
@@ -1117,19 +1130,128 @@ let currentSuffix   = '.TW';
 let usInstitutional = [];
 let usFinancials    = [];
 
-let stockNameCache = {};
+let stockNameCache = (() => {
+  try {
+    const o = JSON.parse(localStorage.getItem('kline_names') || '{}');
+    const out = {};
+    Object.keys(o).forEach(k => { if (typeof o[k] === 'string' && o[k]) out[k] = o[k]; });
+    return out;
+  } catch { return {}; }
+})();
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const isValidCode = c => typeof c === 'string' && /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c);
+
+function rememberName(id, name) {
+  if (!id || !name || stockNameCache[id] === name) return;
+  stockNameCache[id] = name;
+  try { localStorage.setItem('kline_names', JSON.stringify(stockNameCache)); } catch {}
+}
+
+// ── 台股名稱清單（中文搜尋、清單顯示中文名）：FinMind TaiwanStockInfo，快取 7 天 ──
+const STOCKLIST_KEY = 'kline_stocklist_v1';
+const STOCKLIST_TTL = 7 * 24 * 3600 * 1000;
+let stockList = [];              // [{ id, name, ind }]
+let stockMap = {};               // id -> entry
+let stockNameIndex = {};         // name -> id
+let stockListReady = false;
+
+function applyStockList(rows) {
+  stockList = rows.map(r => ({ id: r[0], name: r[1], ind: r[2] || '' }));
+  stockMap = {}; stockNameIndex = {};
+  stockList.forEach(x => { stockMap[x.id] = x; if (!(x.name in stockNameIndex)) stockNameIndex[x.name] = x.id; });
+  stockListReady = stockList.length > 0;
+  renderWatchlist(); renderRecent();
+}
+async function loadStockList() {
+  try {
+    const c = JSON.parse(localStorage.getItem(STOCKLIST_KEY) || 'null');
+    if (c && Array.isArray(c.d) && c.d.length > 500) {
+      applyStockList(c.d);
+      if (Date.now() - c.t < STOCKLIST_TTL) return;
+    }
+  } catch {}
+  try {
+    let url = 'https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo';
+    if (FINMIND_TOKEN !== 'YOUR_TOKEN_HERE') url += '&token=' + encodeURIComponent(FINMIND_TOKEN);
+    const r = await fetchWithTimeout(url, 20000);
+    const j = await r.json();
+    if (j.status !== 200 || !Array.isArray(j.data)) throw new Error(j.msg || '格式異常');
+    const seen = new Map();
+    j.data.forEach(x => {
+      if (x && /^\d{4,6}[A-Z]?$/.test(x.stock_id || '') && x.stock_name && !seen.has(x.stock_id))
+        seen.set(x.stock_id, [x.stock_id, x.stock_name, x.industry_category || '']);
+    });
+    const d = [...seen.values()];
+    if (d.length > 500) {
+      applyStockList(d);
+      try { localStorage.setItem(STOCKLIST_KEY, JSON.stringify({ t: Date.now(), d })); } catch {}
+    }
+  } catch (e) { console.warn('[股票清單]', e.message); }
+}
+function nameOf(id) { return stockNameCache[id] || (stockMap[id] && stockMap[id].name) || ''; }
+
+function searchStocks(q, limit = 8) {
+  q = String(q || '').trim().toUpperCase();
+  if (!q || !stockListReady) return [];
+  const out = [];
+  for (const x of stockList) {
+    const nm = x.name.toUpperCase();
+    let sc = -1;
+    if (x.id === q || nm === q) sc = 0;
+    else if (x.id.startsWith(q)) sc = 1;
+    else if (nm.startsWith(q)) sc = 2;
+    else if (nm.includes(q)) sc = 3;
+    else if (q.length >= 2 && x.id.includes(q)) sc = 4;
+    if (sc >= 0) out.push([sc, x]);
+  }
+  out.sort((a, b) => a[0] - b[0] || a[1].id.length - b[1].id.length || a[1].id.localeCompare(b[1].id));
+  return out.slice(0, limit).map(o => o[1]);
+}
+// 代號 / 中文股名 → 代號；無法辨識回傳 ''
+function resolveStockInput(raw) {
+  const v = String(raw || '').trim();
+  if (!v) return '';
+  const up = v.toUpperCase();
+  if (/^\d{4,6}[A-Z]?$/.test(up) || /^[A-Z]{1,5}$/.test(up)) return up;
+  if (stockNameIndex[v]) return stockNameIndex[v];
+  const hit = searchStocks(v, 1)[0];
+  return hit ? hit.id : '';
+}
 
 function displayLabel(stockId) {
-  const name = stockNameCache[stockId];
+  const name = nameOf(stockId);
   return name
-    ? `${stockId} <span style="font-size:.62rem;color:var(--muted2);font-weight:400;">${name}</span>`
+    ? `${stockId} <span style="font-size:.62rem;color:var(--muted2);font-weight:400;">${escHtml(name)}</span>`
     : stockId;
 }
 
 // ═══════════════════════════════════════
 //  UI HELPERS
 // ═══════════════════════════════════════
-document.getElementById('stockInput').onkeydown = e => { if(e.key==='Enter') analyze(); };
+(function initSuggest() {
+  const inp = document.getElementById('stockInput'), box = document.getElementById('sgBox');
+  let items = [], idx = -1;
+  const close = () => { box.style.display = 'none'; items = []; idx = -1; };
+  const paint = () => {
+    box.innerHTML = items.map((x, i) =>
+      `<div class="sg-item${i === idx ? ' on' : ''}" data-id="${x.id}"><span class="sg-id">${x.id}</span><span>${escHtml(x.name)}</span><span class="sg-ind">${escHtml(x.ind)}</span></div>`).join('');
+    box.style.display = items.length ? 'block' : 'none';
+  };
+  const choose = id => { inp.value = id; close(); analyze(); };
+  inp.addEventListener('input', () => { items = searchStocks(inp.value, 8); idx = -1; paint(); });
+  inp.addEventListener('keydown', e => {
+    if (e.isComposing || e.keyCode === 229) return;          // 中文輸入法選字中，不要觸發
+    if (e.key === 'ArrowDown' && items.length) { e.preventDefault(); idx = (idx + 1) % items.length; paint(); }
+    else if (e.key === 'ArrowUp' && items.length) { e.preventDefault(); idx = (idx - 1 + items.length) % items.length; paint(); }
+    else if (e.key === 'Escape') { close(); }
+    else if (e.key === 'Enter') { if (idx >= 0 && items[idx]) choose(items[idx].id); else { close(); analyze(); } }
+  });
+  inp.addEventListener('blur', () => setTimeout(close, 150));
+  box.addEventListener('mousedown', e => {
+    const el = e.target.closest('.sg-item');
+    if (el) { e.preventDefault(); choose(el.dataset.id); }
+  });
+})();
 
 // 輸入框失焦時自動判斷市場
 document.getElementById('stockInput').onblur = e => {
@@ -1211,16 +1333,17 @@ function renderWatchlist() {
   if(emptyMsg) emptyMsg.style.display = watchlist.length ? 'none' : 'inline';
   items.innerHTML = (watchlist.length ? '' : '<span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（點右側按鈕加入代號）</span>') + watchlist.map(code => `
     <div class="wl-item" onclick="loadFromWatchlist('${code}')" title="${code}">
-      ${displayLabel(code)}
+      ${displayLabel(code)}${quoteBadge(code)}
       <span class="wl-del" onclick="removeFromWatchlist(event,'${code}')">✕</span>
     </div>`).join('');
 }
 function addToWatchlist() {
-  const id = document.getElementById('stockInput').value.trim();
-  if(!id || watchlist.includes(id)) return;
+  const id = resolveStockInput(document.getElementById('stockInput').value);
+  if(!id || !isValidCode(id) || watchlist.includes(id)) return;
   watchlist.push(id);
   localStorage.setItem('kline_watchlist', JSON.stringify(watchlist));
   renderWatchlist();
+  refreshWatchlistQuotes();
 }
 function removeFromWatchlist(e, code) {
   e.stopPropagation();
@@ -1235,6 +1358,53 @@ function loadFromWatchlist(code) {
   analyze();
 }
 renderWatchlist();
+
+// ── 追蹤清單即時報價（證交所 MIS，一次查全部；需設定 TWSE_WORKER）──
+function quoteBadge(code) {
+  const q = wlQuotes[code];
+  if (!q || q.price == null) return '';
+  const up = q.chg > 0, dn = q.chg < 0;
+  const color = up ? 'var(--up)' : dn ? 'var(--green)' : 'var(--muted2)';
+  const pct = q.chg == null ? '' : ` ${up ? '▲' : dn ? '▼' : ''}${Math.abs(q.chg).toFixed(2)}%`;
+  return `<span class="wl-px" style="color:${color}">${q.price.toFixed(2)}${pct}</span>`;
+}
+function parseWatchQuotes(j) {
+  const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+  (j && j.msgArray || []).forEach(it => {
+    if (!it || !it.c) return;
+    const z = num(it.z), y = num(it.y);
+    if (it.n) rememberName(it.c, it.n);
+    if (/^\d{8}$/.test(it.d || '')) wlDate = `${it.d.slice(0,4)}-${it.d.slice(4,6)}-${it.d.slice(6,8)}`;
+    wlQuotes[it.c] = { price: z, chg: (z != null && y) ? (z - y) / y * 100 : null };
+  });
+}
+async function refreshWatchlistQuotes() {
+  if (wlBusy || !TWSE_WORKER) return;
+  const ids = watchlist.filter(c => /^\d{4,6}[A-Z]?$/.test(c)).slice(0, 30);
+  if (!ids.length) return;
+  wlBusy = true;
+  try {
+    const ex = ids.map(id => `tse_${id}.tw|otc_${id}.tw`).join('|');
+    const r = await fetchWithTimeout(`${TWSE_WORKER}?ex_ch=${encodeURIComponent(ex)}`, 8000);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    parseWatchQuotes(await r.json());
+    renderWatchlist();
+  } catch (e) { console.warn('[追蹤清單報價]', e.message); }
+  finally { wlBusy = false; }
+}
+function wlTick(force) {
+  if (document.hidden) return;
+  const stale = wlDate && wlDate !== taipeiDateStr();
+  if (!force && (!isTWMarketOpen() || stale)) return;
+  refreshWatchlistQuotes();
+}
+// 等整份 script 載入完再啟動（TWSE_WORKER 等常數在後面才宣告）
+setTimeout(() => {
+  loadStockList();
+  refreshWatchlistQuotes();
+  setInterval(wlTick, 15000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wlTick(true); });
+}, 0);
 
 function setStatus(msg, type) {
   const el = document.getElementById('statusBar');
@@ -1435,7 +1605,7 @@ async function fetchUSName(ticker) {
     const meta = raw?.chart?.result?.[0]?.meta
       || raw?.quoteSummary?.result?.[0]?.price;
     const name = meta?.longName || meta?.shortName || ticker.toUpperCase();
-    stockNameCache[ticker] = name;
+    rememberName(ticker, name);
     return name;
   } catch { return ticker.toUpperCase(); }
 }
@@ -1484,11 +1654,34 @@ let liveMeta = null;                 // { source, time }：顯示在資訊列，
 
 // 台北時間（不依賴裝置時區）：以 UTC+8 位移後用 getUTC* 讀取
 function taipeiNow()      { return new Date(Date.now() + 8*3600*1000); }
+function taipeiDateStr()  { return taipeiNow().toISOString().slice(0,10); }
 function taipeiTimeStr()  { return taipeiNow().toISOString().slice(11,19); }
 function taipeiMinutes()  { const d = taipeiNow(); return d.getUTCHours()*60 + d.getUTCMinutes(); }
 function isTWWeekday()    { const w = taipeiNow().getUTCDay(); return w !== 0 && w !== 6; }
 // 盤中：週一～五 09:00–13:30（多留 5 分鐘抓收盤最終價）
 function isTWMarketOpen() { const m = taipeiMinutes(); return isTWWeekday() && m >= 9*60 && m <= 13*60+35; }
+
+// 盤中累積成交量佔全日的比例（近似值：開盤、尾盤量較大的 U 型分布；可依自己的觀察調整）
+const INTRADAY_VOL_PROFILE = [[0,0],[30,0.22],[90,0.40],[150,0.55],[210,0.70],[240,0.82],[270,1]];
+function intradayVolShare(minFromOpen) {
+  const P = INTRADAY_VOL_PROFILE;
+  if (minFromOpen <= 0) return 0;
+  if (minFromOpen >= P[P.length-1][0]) return 1;
+  for (let i = 1; i < P.length; i++) {
+    if (minFromOpen <= P[i][0]) {
+      const [x0, y0] = P[i-1], [x1, y1] = P[i];
+      return y0 + (y1 - y0) * (minFromOpen - x0) / (x1 - x0);
+    }
+  }
+  return 1;
+}
+// 盤中套用中：今日量要換算成預估全日量，否則「量縮」「量大幅萎縮」等量價訊號會被半天量誤判
+function intradayActive() { return currentMarket === 'TW' && !!intradayVolInfo && isTWMarketOpen(); }
+function effectiveLastVol(bar) {
+  if (!intradayActive()) return bar.Trading_Volume;
+  const sh = intradayVolInfo.volShare;
+  return sh >= 0.10 ? bar.Trading_Volume / sh : null;      // 開盤前 10 分鐘樣本太少，回傳 null（視為持平）
+}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function withTimeout(p, ms) {
@@ -1598,7 +1791,7 @@ async function fetchLiveBar(stockId) {
   const bar = await withTimeout(run(), RT_FETCH_TIMEOUT_MS).catch(() => null);
   if (bar && bar.source.startsWith('TWSE')) {
     currentSuffix = bar.ex === 'otc' ? '.TWO' : '.TW';
-    if (bar.name && !stockNameCache[stockId]) stockNameCache[stockId] = bar.name;
+    if (bar.name) rememberName(stockId, bar.name);
   }
   return bar;
 }
@@ -1619,7 +1812,7 @@ async function applyLiveBar(pd, stockId) {
   if (!bar) return { status: 'failed' };                   // 失敗就維持原狀
   const last    = pd[pd.length - 1];
   const sameDay = !!last && last.date === bar.date;
-  const open    = isTWMarketOpen();
+  const open    = isTWMarketOpen() && bar.date === taipeiDateStr();   // 平日休市（國定假日）時 MIS 日期不是今天
   if (sameDay && !open) return { status: 'final-exists', bar };   // 收盤後 FinMind 已有當日定稿，不覆蓋
   const prevDay = sameDay ? pd[pd.length - 2] : last;
   if (!mergeLiveBar(pd, bar)) return { status: 'stale', bar };
@@ -1631,6 +1824,7 @@ async function applyLiveBar(pd, stockId) {
       todayVol, prevDayVol,
       ratio: prevDayVol > 0 ? todayVol / prevDayVol : null,
       dayProgress: Math.max(0, Math.min(1, (taipeiMinutes() - 9*60) / 270)),
+      volShare: intradayVolShare(taipeiMinutes() - 9*60),
       time: taipeiTimeStr(),
     };
   }
@@ -1661,7 +1855,7 @@ async function rtTick() {
   try {
     const res = await applyLiveBar(pd, stockId);
     if (pd === priceData && res.status === 'merged') {
-      renderMeta(stockId, stockNameCache[stockId] || '', 'TW');
+      renderMeta(stockId, nameOf(stockId), 'TW');
       redraw(true);                                        // 保留目前縮放位置
     }
   } finally { rtBusy = false; }
@@ -1671,8 +1865,9 @@ async function rtTick() {
 async function analyzeRealtime() {
   if (currentMarket === 'US') { analyze(); return; }
   if (rtTimer) { stopRealtime('已停止自動更新'); return; }
-  const stockId = document.getElementById('stockInput').value.trim();
-  if (!stockId) { setStatus('請輸入股票代號','error'); return; }
+  const stockId = resolveStockInput(document.getElementById('stockInput').value);
+  if (!stockId) { setStatus('請輸入股票代號或股名','error'); return; }
+  document.getElementById('stockInput').value = stockId;
   if (document.getElementById('dateTo')?.value) {
     setStatus('回測日期模式不套用即時行情，請先按「✕ 清除」', 'error');
     return;
@@ -1701,7 +1896,7 @@ async function analyzeRealtime() {
     setStatus(`取得的即時資料日期（${res.bar.date}）早於目前最後一根 K 棒，已略過`, 'error');
     return;
   }
-  renderMeta(stockId, stockNameCache[stockId] || '', 'TW');
+  renderMeta(stockId, nameOf(stockId), 'TW');
   redraw(true);
   const info = `${res.bar.source} ${liveMeta.time}，現價 ${res.bar.close}`;
   if (isTWMarketOpen()) {
@@ -1718,13 +1913,13 @@ async function analyzeRealtime() {
 //  FETCH — FinMind（台股）
 // ═══════════════════════════════════════
 async function fetchStockName(stockId) {
-  if (stockNameCache[stockId]) return stockNameCache[stockId];
+  if (nameOf(stockId)) return nameOf(stockId);
   try {
     const r = await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo&data_id=${stockId}`);
     const j = await r.json();
     const item = j.data?.find(d => d.stock_id === stockId);
     const name = item?.stock_name || '';
-    stockNameCache[stockId] = name;
+    rememberName(stockId, name);
     return name;
   } catch { return ''; }
 }
@@ -1771,8 +1966,15 @@ async function fetchChip(stockId, token) {
 //  MAIN ANALYZE
 // ═══════════════════════════════════════
 async function analyze() {
-  const rawInput = document.getElementById('stockInput').value.trim();
-  if (!rawInput) { setStatus('請輸入股票代號','error'); return; }
+  let rawInput = document.getElementById('stockInput').value.trim();
+  if (!rawInput) { setStatus('請輸入股票代號或股名','error'); return; }
+  const rid = resolveStockInput(rawInput);
+  if (!rid) {
+    setStatus(stockListReady ? `找不到「${escHtml(rawInput)}」，請輸入代號或台股股名` : '股名清單載入中，請先輸入代號，或稍後再試一次', 'error');
+    if (!stockListReady) loadStockList();
+    return;
+  }
+  if (rid !== rawInput) { document.getElementById('stockInput').value = rid; rawInput = rid; }
 
   // 自動偵測市場
   const detectedMkt = autoDetectMarket(rawInput);
@@ -1807,7 +2009,7 @@ async function analyzeTW(stockId) {
     currentStockId = stockId;
     addToRecent(stockId);
     clearStatus();
-    renderMeta(stockId, sn || stockNameCache[stockId] || '', 'TW');
+    renderMeta(stockId, sn || nameOf(stockId), 'TW');
     twiiData = [];
     redraw();
     fetchTWII().then(twiid => {
@@ -1840,7 +2042,7 @@ async function analyzeUS(ticker) {
     usInstitutional = [];
     currentStockId = ticker;
     addToRecent(ticker);
-    stockNameCache[ticker] = name;
+    rememberName(ticker, name);
     clearStatus();
     renderMeta(ticker, name, 'US');
     redraw();
@@ -1910,11 +2112,12 @@ function renderMeta(stockId, stockName, market) {
     <span class="meta-pill">量 <b>${volText}</b></span>
     ${!isUS && liveMeta ? `<span class="meta-pill">📡 <b>${liveMeta.source}</b> ${liveMeta.time}</span>` : ''}
     ${!isUS && intradayVolInfo ? (() => {
-      const { todayVol, prevDayVol, ratio, dayProgress, time } = intradayVolInfo;
-      const projectedVol = dayProgress > 0.05 ? todayVol / dayProgress : null;
+      const { todayVol, prevDayVol, ratio, volShare, time } = intradayVolInfo;
+      const projectedVol = volShare >= 0.10 ? todayVol / volShare : null;
       const projRatio = (projectedVol && prevDayVol > 0) ? projectedVol / prevDayVol : null;
-      const ratioColor = ratio >= 1.5 ? 'var(--up)' : ratio >= 0.8 ? 'var(--text)' : 'var(--muted2)';
-      const ratioLabel = ratio >= 2.0 ? '🔥爆量' : ratio >= 1.5 ? '📈量增' : ratio >= 0.8 ? '量正常' : '縮量';
+      const cmp = projRatio ?? ratio;     // 用預估全日量比較，不用「半天量 vs 昨日全天」
+      const ratioColor = cmp >= 1.5 ? 'var(--up)' : cmp >= 0.8 ? 'var(--text)' : 'var(--muted2)';
+      const ratioLabel = cmp >= 2.0 ? '🔥爆量' : cmp >= 1.5 ? '📈量增' : cmp >= 0.8 ? '量正常' : '縮量';
       return `<span class="meta-pill" style="border-left:1px solid var(--border);padding-left:14px;">
         📡 即時量能 <b style="color:${ratioColor}"> ${(todayVol/1000).toFixed(0)}張 (${ratioLabel}，昨日${(ratio*100).toFixed(0)}%)</b>
         ${projRatio ? `<span style="color:var(--muted2);font-size:.7rem;"> ｜ 預估全日${(projectedVol/1000).toFixed(0)}張（昨日${(projRatio*100).toFixed(0)}%）</span>` : ''}
@@ -2485,8 +2688,10 @@ function runAnalysis(slicedData, twiiRaw) {
   const upShadow=last.max-Math.max(last.close,last.open);
   const downShadow=Math.min(last.close,last.open)-last.min;
   const isBull=last.close>last.open, isBear=last.close<last.open;
-  const volRatio=lavg?(last.Trading_Volume/lavg):1;
+  const _evol = effectiveLastVol(last);
+  const volRatio=lavg?(_evol==null?1:_evol/lavg):1;
   const w = strat.w;
+  if (intradayActive()) signals.push({type:'neutral',cat:'盤中',text:'盤中暫定：今日K棒尚未收定，型態與量價訊號可能隨成交變動；量能已依時段換算為預估全日量'});
 
   // ── 均線 ──
   if(lma5&&lma10&&lma20&&lma60){
@@ -2860,8 +3065,9 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
-  const vol1     = last.Trading_Volume;
-  const vol5avg  = n >= 5  ? data.slice(-5).reduce((s,d)=>s+d.Trading_Volume,0)/5 : vol1;
+  const _evol2   = effectiveLastVol(last);
+  const vol1     = _evol2 ?? (lavg || last.Trading_Volume);
+  const vol5avg  = n >= 5  ? data.slice(-5).reduce((s,d,i,a)=>s+(i===a.length-1?vol1:d.Trading_Volume),0)/5 : vol1;
   const vol20avg = lavg || (n >= 20 ? data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20 : vol1);
   let volStructScore = 5;
   if      (vol1 > vol20avg * 2.0)  volStructScore += 3;
@@ -3227,8 +3433,9 @@ function renderBias(data) {
     return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🚀 極度超跌，強力彈升訊號</span>`;
   };
   const avgV20 = data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20;
-  const avgV5  = data.slice(-5).reduce((s,d)=>s+d.Trading_Volume,0)/5;
-  const volRatio = last.Trading_Volume / avgV20;
+  const _evolB = effectiveLastVol(last);
+  const avgV5  = data.slice(-5).reduce((s,d,i,a)=>s+(i===a.length-1&&_evolB!=null?_evolB:d.Trading_Volume),0)/5;
+  const volRatio = _evolB == null ? 1 : _evolB / avgV20;
   const vol5Ratio = avgV5 / avgV20;
   const volLevel = volRatio>2.5?'爆量🔥':volRatio>1.5?'量增📈':volRatio>1.2?'偏量':volRatio<0.5?'極縮🔇':volRatio<0.7?'縮量':'正常';
   const volColor = volRatio>1.5?'var(--up)':volRatio<0.6?'var(--muted2)':'var(--text)';
