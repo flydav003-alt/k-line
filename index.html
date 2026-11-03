@@ -3367,6 +3367,7 @@ function detectPatternsAt(a, i, atr, m20, basic=false){
   }
   return out;
 }
+function diffWord(d){ return d>=5?'有效':d<=-5?'反效果':'無差別'; }
 function patternStats(H=5, arr){
   const a=arr||vd(); if(!a||a.length<60) return [];
   const atr=calcATR(a,14), m20=ma(a,20), map={};
@@ -3411,7 +3412,7 @@ function renderCurrentPatterns(cp){
     const body = r.hits.length ? r.hits.map(h=>{
       const c=h.dir==='bull'?'var(--up)':'var(--dn)', arrow=h.dir==='bull'?'▲':'▼';
       const dv=h.st?h.st.diff:0, dc=dv>=5?'#ffd166':dv<=-5?'#4a9eff':'var(--muted2)';
-      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次）<span style="color:${dc};">較基準${dv>=0?'+':''}${dv.toFixed(0)}%</span>`:'';
+      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次）<span style="color:${dc};">較基準${dv>=0?'+':''}${dv.toFixed(0)}%（${diffWord(dv)}）</span>`:'';
       const when=h.k===0?'最新':`前${h.k}根 ${h.date.slice(5)}`;
       return `<span style="color:var(--muted2);font-size:.64rem;">[${when}]</span> <span style="color:${c};font-weight:${h.k===0?700:500};${h.k===0?'':'opacity:.8;'}">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
     }).join('<br>') : '<span style="color:var(--muted);">目前無明顯型態</span>';
@@ -3428,12 +3429,12 @@ function renderPatternStats(cp){
   const rows=st.map(x=>{
     const on=lit.has(x.name), c=x.dir==='bull'?'var(--up)':'var(--dn)';
     const dc=x.diff>=5?'#ffd166':x.diff<=-5?'#4a9eff':'var(--muted2)';
-    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
+    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}% <span style="font-size:.62rem;">${diffWord(x.diff)}</span></td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td></tr>${baseRow}${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；黃＝高出5%以上、藍＝低於5%以上、灰＝差不多。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；黃＝有效（高出基準5%以上）、藍＝反效果（低於基準5%以上，即比平常更常朝相反方向走）、灰＝無差別。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
