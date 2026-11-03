@@ -3437,12 +3437,12 @@ function renderPatternStats(cp){
   const rows=st.map(x=>{
     const on=lit.has(x.name), c=x.dir==='bull'?'var(--up)':'var(--dn)';
     const di=diffInfo(x), dc=di.c;
-    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}% <span style="font-size:.62rem;">${di.w}</span></td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%<span style="font-size:.6rem;color:var(--muted2);"> (${x.avgDiff>=0?'+':''}${x.avgDiff.toFixed(1)})</span></td></tr>`;
+    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}% <span style="font-size:.62rem;">${di.w}</span></td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td></tr>${baseRow}${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；黃＝順向有效（勝率高於基準，且差距超過約2倍隨機誤差）、藍＝反向偏離（明顯低於基準，型態可能要反著看）、灰＝無差別（差距在隨機誤差內，不能視為有訊息）。報酬欄括號內為相對基準平均報酬的差。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；黃＝順向有效（勝率高於基準，且差距超過約2倍隨機誤差）、藍＝反向偏離（明顯低於基準，型態可能要反著看）、灰＝無差別（差距在隨機誤差內，不能視為有訊息）。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
