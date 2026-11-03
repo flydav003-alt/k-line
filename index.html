@@ -3097,30 +3097,135 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  const _vAt = (i) => (i===n-1 && _evol!=null) ? _evol : data[i].Trading_Volume;
+  const _fp = v => (v>=0?'+':'')+v.toFixed(1)+'%';
+
+  // ── 相對大盤（5日 + 20日）──
   let relStrength = null;
-  if (twiiRaw && twiiRaw.length >= 3 && n >= 3) {
-    const stockChg3 = (data[n-1].close - data[n-4]?.close) / (data[n-4]?.close || data[n-1].close) * 100;
-    const twiiLast  = twiiRaw[twiiRaw.length-1];
-    const twiiPrev3 = twiiRaw[twiiRaw.length-4] || twiiRaw[0];
-    const twiiChg3  = twiiPrev3.close > 0 ? (twiiLast.close - twiiPrev3.close) / twiiPrev3.close * 100 : 0;
-    const outperform = stockChg3 - twiiChg3;
-    if (outperform > 3) {
-      relStrength = { type:'bull', text:`近3日個股漲${stockChg3.toFixed(1)}% vs 大盤漲${twiiChg3.toFixed(1)}%，跑贏大盤${outperform.toFixed(1)}%，相對強勢` };
-      bullPts += 6;
-    } else if (outperform > 0) {
-      relStrength = { type:'bull', text:`近3日個股漲${stockChg3.toFixed(1)}% vs 大盤漲${twiiChg3.toFixed(1)}%，小幅跑贏大盤` };
-      bullPts += 3;
-    } else if (outperform < -3) {
-      relStrength = { type:'bear', text:`近3日個股漲${stockChg3.toFixed(1)}% vs 大盤漲${twiiChg3.toFixed(1)}%，落後大盤${Math.abs(outperform).toFixed(1)}%，相對弱勢` };
-      bearPts += 5;
+  if (twiiRaw && twiiRaw.length >= 6 && n >= 6) {
+    const tChg = k => { const a1=twiiRaw[twiiRaw.length-1].close, b1=(twiiRaw[twiiRaw.length-1-k]||twiiRaw[0]).close; return b1>0?(a1-b1)/b1*100:0; };
+    const sChg = k => { const b1=data[n-1-k]?.close; return b1 ? (data[n-1].close-b1)/b1*100 : null; };
+    const s5=sChg(5), t5=tChg(5), o5=s5-t5;
+    let s20=null,t20=null,o20=null;
+    if (twiiRaw.length>=21 && n>=21) { s20=sChg(20); t20=tChg(20); o20=s20-t20; }
+    let rtype='neutral', rlabel='';
+    if (o20===null) {
+      if (o5>3)       { rtype='bull'; rlabel='跑贏大盤，相對強勢'; bullPts+=5; }
+      else if (o5>0)  { rtype='bull'; rlabel='小幅跑贏大盤'; bullPts+=2; }
+      else if (o5<-3) { rtype='bear'; rlabel='落後大盤，相對弱勢'; bearPts+=4; }
+      else            { rlabel='與大盤接近'; }
+    } else if (o5>0 && o20>0) {
+      rtype='bull'; rlabel='短、中期皆跑贏大盤，相對強勢'; bullPts += (o5>3||o20>5)?7:4;
+    } else if (o5<0 && o20<0) {
+      rtype='bear'; rlabel='短、中期皆落後大盤，相對弱勢'; bearPts += (o5<-3||o20<-5)?6:3;
+    } else if (o5>0) {
+      rlabel='短線轉強，但20日仍落後大盤（落後補漲／反彈中）'; bullPts+=2;
     } else {
-      relStrength = { type:'neutral', text:`近3日個股${stockChg3.toFixed(1)}% vs 大盤${twiiChg3.toFixed(1)}%，表現與大盤接近` };
+      rlabel='短線轉弱，但20日仍領先大盤（強勢股拉回）'; bearPts+=1;
+    }
+    relStrength = { type:rtype, text: `5日 個股${_fp(s5)} vs 大盤${_fp(t5)}（超額${_fp(o5)}）` + (o20!==null?`｜20日 個股${_fp(s20)} vs 大盤${_fp(t20)}（超額${_fp(o20)}）`:'') + `｜${rlabel}`, str: (rtype==='neutral'?1:(Math.abs(o5)>3||Math.abs(o20||0)>5?3:2)) };
+  }
+
+  // ── 突破品質 ──
+  let breakoutQ = null;
+  if (n >= 22) {
+    const prior = data.slice(-21,-1);
+    const hi20 = Math.max(...prior.map(d=>d.max)), lo20 = Math.min(...prior.map(d=>d.min));
+    if (last.max > hi20) {
+      const chkClose = last.close > hi20;
+      const chkVol   = volRatio >= 1.5;
+      const chkPos   = closePosition >= 0.7;
+      const hold = (()=>{ let c=0; for(let k=0;k<3;k++){ const i=n-1-k; if(i<21) break; const h=Math.max(...data.slice(i-20,i).map(d=>d.max)); if(data[i].close>h) c++; else break; } return c; })();
+      const pass = [chkClose,chkVol,chkPos].filter(Boolean).length;
+      const mk = (ok,t)=>`${ok?'✔':'✘'}${t}`;
+      const detail = `${mk(chkVol,'帶量'+volRatio.toFixed(1)+'倍')} ${mk(chkClose,'收盤站上'+hi20.toFixed(2))} ${mk(chkPos,'收在日內'+(closePosition*100).toFixed(0)+'%高位')}${hold>=2?`　已連續站穩${hold}日`:''}`;
+      if (!chkClose) { breakoutQ={type:'bear',str:3,text:`盤中突破20日高點但收盤回落，疑似假突破｜${detail}`}; bearPts+=5; }
+      else if (pass===3) { breakoutQ={type:'bull',str:3,text:`高品質突破20日高點｜${detail}`}; bullPts+=10; }
+      else if (pass===2) { breakoutQ={type:'bull',str:2,text:`突破20日高點，品質中等｜${detail}`}; bullPts+=5; }
+      else { breakoutQ={type:'neutral',str:1,text:`突破20日高點但品質偏弱，追價需謹慎｜${detail}`}; bullPts+=1; }
+    } else if (last.min < lo20) {
+      const chkClose = last.close < lo20, chkVol = volRatio >= 1.5;
+      if (chkClose) { breakoutQ={type:'bear',str:chkVol?3:2,text:`收盤跌破20日低點${lo20.toFixed(2)}${chkVol?'，且帶量'+volRatio.toFixed(1)+'倍，破底確立':'，量能未放大，留意是否為假跌破'}`}; bearPts+=chkVol?8:4; }
+      else { breakoutQ={type:'bull',str:2,text:`盤中跌破20日低點但收盤收回，下檔有承接（疑似假跌破）`}; bullPts+=3; }
     }
   }
 
+  // ── 回測量縮（強勢整理）──
+  let pullbackVol = null;
+  if (n >= 16) {
+    const look = data.slice(-10);
+    let hiIdx = 0; look.forEach((d,i)=>{ if (d.max >= look[hiIdx].max) hiIdx=i; });
+    const since = look.length-1-hiIdx;
+    const dropPct = (look[hiIdx].max - last.close)/look[hiIdx].max*100;
+    if (since>=2 && dropPct>=1.5 && lma20 && last.close > lma20*0.97) {
+      const hiAbs = n-10+hiIdx;
+      let pbSum=0,pbN=0; for(let i=hiAbs+1;i<n;i++){ pbSum+=_vAt(i); pbN++; }
+      let rsSum=0,rsN=0; for(let i=Math.max(0,hiAbs-4);i<=hiAbs;i++){ rsSum+=_vAt(i); rsN++; }
+      const r = (pbSum/pbN)/(rsSum/rsN);
+      const base = `自高點回落${dropPct.toFixed(1)}%（${since}日），回檔均量為上攻均量的${(r*100).toFixed(0)}%`;
+      if (r < 0.75)      { pullbackVol={type:'bull',str:2,text:`${base}，量縮回檔，屬強勢整理`}; bullPts+=6; }
+      else if (r > 1.1)  { pullbackVol={type:'bear',str:2,text:`${base}，回檔量反增，賣壓偏重`}; bearPts+=5; }
+      else               { pullbackVol={type:'neutral',str:1,text:`${base}，量能中性`}; }
+    }
+  }
+
+  // ── 跳空缺口是否回補（3日內）──
+  let gapInfo = null;
+  if (n >= 10) {
+    for (let i=n-1; i>=n-8 && i>=1; i--) {
+      const c=data[i], pr=data[i-1];
+      let dir=null;
+      if (c.min > pr.max) dir='up'; else if (c.max < pr.min) dir='dn';
+      if (!dir) continue;
+      const lvl = dir==='up' ? pr.max : pr.min;
+      const age = n-1-i;
+      let filledAt=-1;
+      for (let j=i+1;j<n;j++){ if (dir==='up' ? data[j].min<=lvl : data[j].max>=lvl) { filledAt=j-i; break; } }
+      const gp = (Math.abs(c.min-pr.max)/pr.max*100);
+      const gtxt = `${dir==='up'?'向上':'向下'}缺口${(dir==='up'?(c.min-pr.max):(pr.min-c.max)).toFixed(2)}（${c.date.slice(5)}）`;
+      if (age===0) { gapInfo={type:'neutral',str:1,text:`今日${dir==='up'?'向上':'向下'}跳空，觀察3日內是否回補`,signal:false}; }
+      else if (filledAt>0 && filledAt<=3) {
+        gapInfo = dir==='up' ? {type:'bear',str:2,text:`${gtxt}已於${filledAt}日內回補，強勢轉弱`,signal:true} : {type:'bull',str:2,text:`${gtxt}已於${filledAt}日內回補，空方缺口被收復`,signal:true};
+        if (dir==='up') bearPts+=5; else bullPts+=5;
+      } else if (filledAt>3) { gapInfo={type:'neutral',str:1,text:`${gtxt}於${filledAt}日後才回補`,signal:true}; }
+      else {
+        gapInfo = dir==='up' ? {type:'bull',str:age>=3?3:2,text:`${gtxt}至今${age}日未回補，缺口${age>=3?'已通過3日考驗，':''}下緣${lvl.toFixed(2)}為支撐`,signal:true} : {type:'bear',str:age>=3?3:2,text:`${gtxt}至今${age}日未回補，缺口${age>=3?'已通過3日考驗，':''}上緣${lvl.toFixed(2)}為壓力`,signal:true};
+        if (dir==='up') bullPts+= age>=3?6:4; else bearPts+= age>=3?6:4;
+      }
+      break;
+    }
+  }
+
+  // ── 漲停／跌停、連紅／連黑 ──
+  let limitInfo = null;
+  {
+    const unit = currentTF==='D'?'日':currentTF==='W'?'週':'月';
+    let redStreak=0, blackStreak=0;
+    for (let i=n-1;i>=0;i--){ if (data[i].close>data[i].open) redStreak++; else break; }
+    for (let i=n-1;i>=0;i--){ if (data[i].close<data[i].open) blackStreak++; else break; }
+    let limUp=false, limDn=false, upCnt10=0;
+    if (currentMarket !== 'US' && currentTF==='D' && n>=3) {
+      const isLU = i => { const pc=data[i-1].close; return pc>0 && data[i].close>=pc*1.095 && data[i].close>=data[i].max-1e-9; };
+      const isLD = i => { const pc=data[i-1].close; return pc>0 && data[i].close<=pc*0.905 && data[i].close<=data[i].min+1e-9; };
+      limUp = isLU(n-1); limDn = isLD(n-1);
+      for (let i=Math.max(1,n-10);i<n;i++) if (isLU(i)) upCnt10++;
+    }
+    const parts=[]; let ltype='neutral', lstr=1;
+    if (limUp)  { parts.push('今日漲停（收盤鎖在最高）'); ltype='bull'; lstr=3; bullPts+=8; }
+    if (limDn)  { parts.push('今日跌停（收盤鎖在最低）'); ltype='bear'; lstr=3; bearPts+=8; }
+    if (upCnt10>=2) parts.push(`近10日漲停${upCnt10}次，股性強勢`);
+    if (redStreak>=3)   { parts.push(`連紅${redStreak}${unit}${redStreak>=5?'，短線過熱，留意獲利了結':''}`); if(!limDn){ ltype=redStreak>=5?'neutral':'bull'; lstr=Math.max(lstr,2);} bullPts+= redStreak>=5?2:3; }
+    if (blackStreak>=3) { parts.push(`連黑${blackStreak}${unit}${blackStreak>=5?'，超跌可留意止跌':''}`); if(!limUp){ ltype=blackStreak>=5?'neutral':'bear'; lstr=Math.max(lstr,2);} bearPts+= blackStreak>=5?2:3; }
+    if (parts.length) limitInfo = { type:ltype, str:lstr, text: parts.join('｜'), redStreak, blackStreak, limUp, limDn, upCnt10 };
+  }
+  if (breakoutQ) signals.push({ type:breakoutQ.type, cat:'突破品質', text:breakoutQ.text, str:breakoutQ.str });
+  if (pullbackVol) signals.push({ type:pullbackVol.type, cat:'回測量縮', text:pullbackVol.text, str:pullbackVol.str });
+  if (gapInfo && gapInfo.signal) signals.push({ type:gapInfo.type, cat:'缺口回補', text:gapInfo.text, str:gapInfo.str });
+  if (limitInfo) signals.push({ type:limitInfo.type, cat:'漲跌停', text:limitInfo.text, str:limitInfo.str });
+
   if (volumeLaunch) signals.push({ type: volumeLaunch.type, cat:'量能啟動', text: volumeLaunch.text });
   if (bodyShrink)   signals.push({ type: bodyShrink.type,   cat:'K線收斂', text: bodyShrink.text });
-  if (relStrength)  signals.push({ type: relStrength.type,  cat:'相對強弱', text: relStrength.text });
+  if (relStrength)  signals.push({ type: relStrength.type,  cat:'相對強弱', text: relStrength.text, str: relStrength.str });
   signals.push({ type: closePosition>=0.5?'bull':'bear', cat:'收盤強度', text: `${closePosLabel}（${(closePosition*100).toFixed(0)}%位置）` });
   if (shadowIntention) signals.push({ type: upperRatio>0.35?'bear':lowerRatio>0.35?'bull':'neutral', cat:'影線意圖', text: shadowIntention });
 
@@ -3168,17 +3273,28 @@ function runAnalysis(slicedData, twiiRaw) {
   const vol1     = _evol2 ?? (lavg || last.Trading_Volume);
   const vol5avg  = n >= 5  ? data.slice(-5).reduce((s,d,i,a)=>s+(i===a.length-1?vol1:d.Trading_Volume),0)/5 : vol1;
   const vol20avg = lavg || (n >= 20 ? data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20 : vol1);
-  let volStructScore = 5;
-  if      (vol1 > vol20avg * 2.0)  volStructScore += 3;
-  else if (vol1 > vol20avg * 1.5)  volStructScore += 2;
-  else if (vol1 > vol20avg * 1.2)  volStructScore += 1;
-  else if (vol1 < vol20avg * 0.5)  volStructScore -= 2;
-  else if (vol1 < vol20avg * 0.7)  volStructScore -= 1;
-  if (vol5avg > vol20avg * 1.3)    volStructScore += 1;
-  else if (vol5avg < vol20avg*0.7) volStructScore -= 1;
-  if (isBull && vol1 > vol20avg*1.2) volStructScore += 1;
-  if (isBear && vol1 > vol20avg*1.5) volStructScore -= 1;
+  let volStructScore = 5; const _vr = [];
+  const _add = (d,t)=>{ volStructScore+=d; _vr.push(`${t} ${d>0?'+':''}${d}`); };
+  if      (vol1 > vol20avg * 2.0)  _add(3,`今日量${(vol1/vol20avg).toFixed(1)}倍均量`);
+  else if (vol1 > vol20avg * 1.5)  _add(2,`今日量${(vol1/vol20avg).toFixed(1)}倍均量`);
+  else if (vol1 > vol20avg * 1.2)  _add(1,`今日量${(vol1/vol20avg).toFixed(1)}倍均量`);
+  else if (vol1 < vol20avg * 0.5)  _add(-2,`今日量僅${(vol1/vol20avg).toFixed(1)}倍均量`);
+  else if (vol1 < vol20avg * 0.7)  _add(-1,`今日量僅${(vol1/vol20avg).toFixed(1)}倍均量`);
+  if (vol5avg > vol20avg * 1.3)    _add(1,'近5日量擴張');
+  else if (vol5avg < vol20avg*0.7) _add(-1,'近5日量收縮');
+  if (isBull && vol1 > vol20avg*1.2) _add(1,'紅K帶量');
+  if (isBear && vol1 > vol20avg*1.5) _add(-1,'黑K爆量');
   volStructScore = Math.max(0, Math.min(10, volStructScore));
+  window._volReasons = _vr.length ? _vr : ['量能無明顯異常（基準5分）'];
+  if (n >= 12) {
+    let uS=0,uN=0,dS=0,dN=0;
+    for (let i=n-10;i<n;i++){ const v=_vAt(i), pc=data[i-1].close; if (data[i].close>pc){uS+=v;uN++;} else if (data[i].close<pc){dS+=v;dN++;} }
+    if (uN>=2 && dN>=2) {
+      const ud = (uS/uN)/(dS/dN);
+      if (ud>=1.3)      { signals.push({type:'bull',cat:'量價',text:`近10日上漲日均量為下跌日的${ud.toFixed(1)}倍，資金偏買方`,str:2}); bullPts+=4; }
+      else if (ud<=0.77){ signals.push({type:'bear',cat:'量價',text:`近10日上漲日均量僅下跌日的${ud.toFixed(1)}倍，賣壓較重`,str:2}); bearPts+=4; }
+    }
+  }
   const volStructLabel = volStructScore>=8?'🔥 強勁':volStructScore>=6?'📈 偏強':volStructScore>=4?'➡ 正常':'📉 偏弱';
 
   const priceRange    = rhi - rlo || 1;
@@ -3232,7 +3348,7 @@ function runAnalysis(slicedData, twiiRaw) {
   const shortTermData = {
     closePosition, closePosLabel, closePosColor, closePosScore,
     upperRatio, lowerRatio, upperShadow, lowerShadow, bodySize, dayRange,
-    shadowIntention, volumeLaunch, bodyShrink, relStrength,
+    shadowIntention, volumeLaunch, bodyShrink, relStrength, breakoutQ, pullbackVol, gapInfo, limitInfo,
     volRatio, vol5avg, vol20avg, isBull, isBear, price: last.close,
   };
 
@@ -3294,7 +3410,7 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     const vTag = document.createElement('div');
     vTag.id = 'volStructTag';
     vTag.style.cssText = 'font-size:.63rem;margin-top:5px;font-family:var(--mono);padding:3px 8px;background:var(--s2);border:1px solid var(--border);border-radius:4px;display:block;color:var(--muted2);box-sizing:border-box;';
-    vTag.innerHTML = `量能結構 <span style="color:${bc};letter-spacing:0">${bar}</span> ${volStructScore}/10 ${volStructLabel}`;
+    vTag.innerHTML = `量能結構 <span style="color:${bc};letter-spacing:0">${bar}</span> ${volStructScore}/10 ${volStructLabel}<div style="font-size:.58rem;color:var(--muted);margin-top:3px;line-height:1.5;">${(window._volReasons||[]).join('｜')}</div>`;
     hdr.appendChild(vTag);
   }
   syncStratBtns();
@@ -3303,12 +3419,40 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
 // ═══════════════════════════════════════
 //  RENDER SIGNALS
 // ═══════════════════════════════════════
+const SIG_DIM = {'均線':'trend','週線強弱':'trend','月線強弱':'trend','均線糾結':'trend','支撐壓力':'trend','壓力強度':'trend','支撐強度':'trend',
+  'MACD':'mom','RSI':'mom','RSI背離':'mom','KD':'mom','布林':'mom','K線型態':'mom','K線收斂':'mom','收盤強度':'mom','影線意圖':'mom','相對強弱':'mom','突破品質':'mom','缺口回補':'mom','漲跌停':'mom',
+  '量價':'vol','量能啟動':'vol','回測量縮':'vol','籌碼':'chip'};
+const SIG_CORE = new Set(['盤中','均線','週線強弱','月線強弱','量價','量能啟動','回測量縮','K線型態','突破品質','缺口回補']);
+const SIG_BASE = {'均線':2,'週線強弱':2,'月線強弱':2,'均線糾結':2,'量價':2,'量能啟動':3,'K線型態':2,'突破品質':3,'回測量縮':2,'缺口回補':2,'漲跌停':3,'MACD':2,'RSI':1,'KD':1,'布林':1,'籌碼':2,'相對強弱':2,'收盤強度':1,'影線意圖':1,'K線收斂':1,'支撐壓力':1,'壓力強度':1,'支撐強度':1,'RSI背離':2,'盤中':3};
+function sigStrength(x){
+  if (x.str) return x.str;
+  let b = SIG_BASE[x.cat] || 1;
+  if (/強烈|極度|極強|爆量|確立|多頭排列|空頭排列|黃金交叉|死亡交叉|帶量|嚴重|漲停|跌停/.test(x.text)) b++;
+  if (/待確認|不足|僅|觀察|普通|留意/.test(x.text)) b--;
+  return Math.max(1, Math.min(3, b));
+}
+function sigDots(n, type){
+  const c = type==='bull'?'var(--up)':type==='bear'?'var(--dn)':'var(--muted2)';
+  return `<span title="訊號強度 ${n}/3" style="color:${c};letter-spacing:1px;font-size:.62rem;margin-right:5px;">${'●'.repeat(n)}<span style="opacity:.3">${'●'.repeat(3-n)}</span></span>`;
+}
+function dimScores(signals){
+  const dims = { trend:{name:'趨勢',b:0,r:0,u:0,n:0}, mom:{name:'動能',b:0,r:0,u:0,n:0}, vol:{name:'量能',b:0,r:0,u:0,n:0}, chip:{name:'籌碼',b:0,r:0,u:0,n:0} };
+  signals.forEach(x=>{
+    const d = dims[SIG_DIM[x.cat]]; if(!d) return;
+    const st = sigStrength(x); d.n++;
+    if (x.type==='bull') d.b+=st; else if (x.type==='bear') d.r+=st; else d.u+=st*0.5;
+  });
+  Object.values(dims).forEach(d=>{ d.score = d.n ? Math.round(50 + (d.b-d.r)/Math.max(d.b+d.r+d.u,4)*50) : null; });
+  return dims;
+}
 function renderSignals(signals, score, bullPts, bearPts) {
   const el = document.getElementById('signalList');
   const cp = currentPatterns();
   if(!signals.length){ el.innerHTML=renderCurrentPatterns(cp)+'<div style="color:var(--muted);font-size:.78rem">無明顯訊號</div>'; return; }
   const order = { bull:0, neutral:1, bear:2 };
-  const sorted = signals.map((x,i)=>[x,i]).sort((p,q)=> (order[p[0].type]-order[q[0].type]) || (p[1]-q[1])).map(x=>x[0]);
+  const meta = signals.map((x,i)=>({x,i,st:sigStrength(x),core:SIG_CORE.has(x.cat)}));
+  const cmp = (p,q)=> (q.st-p.st) || (order[p.x.type]-order[q.x.type]) || (p.i-q.i);
+  const coreL = meta.filter(m=>m.core).sort(cmp), auxL = meta.filter(m=>!m.core).sort(cmp);
   const nb = signals.filter(x=>x.type==='bull').length, nn = signals.filter(x=>x.type==='neutral').length, nr = signals.filter(x=>x.type==='bear').length;
   const tot = (bullPts||0) + (bearPts||0);
   const bullShare = tot > 0 ? Math.round(bullPts/tot*100) : 50;
@@ -3316,15 +3460,35 @@ function renderSignals(signals, score, bullPts, bearPts) {
   const head = `<div style="background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
       <span style="font-weight:700;color:${verdict[1]};font-size:1rem;">綜合判斷：${verdict[0]}</span>
-      <span style="font-family:var(--mono);color:var(--muted2);font-size:.78rem;">評分 ${score ?? '-'}/100</span></div>
+      <span style="font-family:var(--mono);color:var(--muted2);font-size:.78rem;">總分 ${score ?? '-'}/100</span></div>
     <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px;background:var(--border);">
       <div style="width:${bullShare}%;background:var(--up);"></div><div style="width:${100-bullShare}%;background:var(--dn);"></div></div>
     <div style="font-size:.72rem;color:var(--muted2);">多方訊號 <b style="color:var(--up)">${nb}</b> ｜ 中性 ${nn} ｜ 空方訊號 <b style="color:var(--dn)">${nr}</b>　多空力道 ${bullShare}% : ${100-bullShare}%</div></div>`;
-  el.innerHTML = renderCurrentPatterns(cp) + head + sorted.map(s=>`
-    <div class="sig ${s.type}">
-      <span class="sig-tag">${s.cat}</span>${s.text}
-    </div>
-  `).join('') + renderPatternStats(cp);
+  // 四維分數與共振
+  const dm = dimScores(signals), dl = Object.values(dm).filter(d=>d.score!==null);
+  const dc = v => v>=60?'var(--up)':v<=40?'var(--dn)':'var(--gold)';
+  const nBull = dl.filter(d=>d.score>=60).length, nBear = dl.filter(d=>d.score<=40).length;
+  let reso, resoC;
+  if (dl.length>=3 && nBull===dl.length)      { reso=`✅ ${dl.length}維全數偏多，訊號高度共振`; resoC='var(--up)'; }
+  else if (dl.length>=3 && nBear===dl.length) { reso=`⚠ ${dl.length}維全數偏空，訊號高度共振`; resoC='var(--dn)'; }
+  else if (nBull>=3)                          { reso=`${nBull}/${dl.length}維偏多，共振偏多；${dl.filter(d=>d.score<60).map(d=>d.name).join('、')}尚未跟上`; resoC='var(--up)'; }
+  else if (nBear>=3)                          { reso=`${nBear}/${dl.length}維偏空，共振偏空`; resoC='var(--dn)'; }
+  else if (nBull>=1 && nBear>=1)              { reso=`多空分歧：${dl.filter(d=>d.score>=60).map(d=>d.name).join('、')}偏多，但${dl.filter(d=>d.score<=40).map(d=>d.name).join('、')}偏空，訊號不一致，降低信心`; resoC='var(--gold)'; }
+  else                                        { reso='各維度未形成明確方向，以觀望為主'; resoC='var(--muted2)'; }
+  const dimHtml = `<div style="background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+    <div style="font-size:.66rem;color:var(--muted2);font-family:var(--mono);letter-spacing:1px;margin-bottom:6px;">◆ 四維分數（總分 ${score ?? '-'}）</div>
+    ${Object.values(dm).map(d=> d.score===null ? `<div style="display:flex;align-items:center;gap:8px;font-size:.72rem;margin:3px 0;color:var(--muted);"><span style="width:34px;">${d.name}</span><span>無訊號</span></div>` :
+      `<div style="display:flex;align-items:center;gap:8px;font-size:.72rem;margin:3px 0;"><span style="width:34px;color:var(--muted2);">${d.name}</span>
+        <div style="flex:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;"><div style="width:${d.score}%;height:100%;background:${dc(d.score)};"></div></div>
+        <span style="width:26px;text-align:right;font-family:var(--mono);color:${dc(d.score)};">${d.score}</span>
+        <span style="width:62px;font-size:.62rem;color:var(--muted);">${d.n}訊號</span></div>`).join('')}
+    <div style="font-size:.72rem;margin-top:6px;color:${resoC};">${reso}</div></div>`;
+  const rowHtml = m=>`<div class="sig ${m.x.type}"><span class="sig-tag">${m.x.cat}</span>${sigDots(m.st,m.x.type)}${m.x.text}</div>`;
+  const legend = `<div style="font-size:.62rem;color:var(--muted);margin:2px 0 6px;">強度：●●● 強　●●○ 中　●○○ 弱（強的排前面）</div>`;
+  const auxHtml = auxL.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:.74rem;color:var(--muted2);padding:4px 0;">輔助訊號（${auxL.length}）　RSI／KD／MACD／布林／籌碼／影線等，點擊展開</summary>${auxL.map(rowHtml).join('')}</details>` : '';
+  el.innerHTML = renderCurrentPatterns(cp) + head + dimHtml
+    + `<div style="font-size:.66rem;color:var(--gold2);font-family:var(--mono);letter-spacing:1px;margin:4px 0 2px;">◆ 核心訊號（${coreL.length}）</div>` + legend
+    + coreL.map(rowHtml).join('') + auxHtml + renderPatternStats(cp);
 }
 
 // ── 歷史K線型態：偵測（純函式，可用於任一根K棒）──
@@ -3369,9 +3533,9 @@ function detectPatternsAt(a, i, atr, m20, basic=false){
 }
 // 顯著性判斷：差距要超過約2倍隨機誤差才算有訊息，否則視為無差別
 function diffInfo(x){
-  if(x.z>=2)  return { w:'順向有效', c:'#ffd166' };
-  if(x.z<=-2) return { w:'反向偏離', c:'#4a9eff' };
-  return { w:'無差別', c:'var(--muted2)' };
+  if(x.z>=2)  return { w:'', c:'#ffd166' };
+  if(x.z<=-2) return { w:'', c:'#4a9eff' };
+  return { w:'', c:'var(--muted2)' };
 }
 function patternStats(H=5, arr){
   const a=arr||vd(); if(!a||a.length<60) return [];
@@ -3420,7 +3584,7 @@ function renderCurrentPatterns(cp){
     const body = r.hits.length ? r.hits.map(h=>{
       const c=h.dir==='bull'?'var(--up)':'var(--dn)', arrow=h.dir==='bull'?'▲':'▼';
       const dv=h.st?h.st.diff:0, di=h.st?diffInfo(h.st):{w:'',c:'var(--muted2)'}, dc=di.c;
-      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次）<span style="color:${dc};">較基準${dv>=0?'+':''}${dv.toFixed(0)}%（${di.w}）</span>`:'';
+      const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次）<span style="color:${dc};">較基準${dv>=0?'+':''}${dv.toFixed(0)}%${di.w?'（'+di.w+'）':''}</span>`:'';
       const when=h.k===0?'最新':`前${h.k}根 ${h.date.slice(5)}`;
       return `<span style="color:var(--muted2);font-size:.64rem;">[${when}]</span> <span style="color:${c};font-weight:${h.k===0?700:500};${h.k===0?'':'opacity:.8;'}">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
     }).join('<br>') : '<span style="color:var(--muted);">目前無明顯型態</span>';
@@ -3442,7 +3606,7 @@ function renderPatternStats(cp){
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td></tr>${baseRow}${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；黃＝順向有效（勝率高於基準，且差距超過約2倍隨機誤差）、藍＝反向偏離（明顯低於基準，型態可能要反著看）、灰＝無差別（差距在隨機誤差內，不能視為有訊息）。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；較基準數字顏色：黃＝勝率明顯高於基準（差距超過約2倍隨機誤差）、藍＝明顯低於基準、灰＝差距在隨機誤差內。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
@@ -3676,6 +3840,31 @@ function renderBias(data) {
   if(bias20!==null && Math.abs(bias20)>10) warnings.push(`MA20乖離過大（${bFmt(bias20)}），均值回歸風險`);
   if(volRatio>3 && last.close<last.open) warnings.push('爆量長黑，賣壓警示');
   if(volRatio>3 && last.close>last.open) warnings.push('爆量長紅，突破訊號確認');
+  // 量價配合
+  const pc = n>=2 ? data[n-2].close : p, chgPct = pc ? (p-pc)/pc*100 : 0;
+  let pvTxt, pvColor='var(--text)';
+  if (chgPct>0.3 && volRatio>1.2)       { pvTxt='價漲量增 ✅ 健康上攻'; pvColor='var(--up)'; }
+  else if (chgPct>0.3 && volRatio<0.8)  { pvTxt='價漲量縮 ⚠ 動能背離，追價留意'; pvColor='#ff9f40'; }
+  else if (chgPct<-0.3 && volRatio>1.2) { pvTxt='價跌量增 ⚠ 賣壓沉重'; pvColor='var(--dn)'; }
+  else if (chgPct<-0.3 && volRatio<0.8) { pvTxt='價跌量縮 ✓ 賣壓減輕，等止跌'; pvColor='var(--muted2)'; }
+  else                                  { pvTxt='量價中性'; pvColor='var(--muted2)'; }
+  // 量能百分位（近60日）
+  const win = data.slice(-60), todayV = _evolB==null ? last.Trading_Volume : _evolB;
+  const pctRank = win.length>1 ? Math.round(win.slice(0,-1).filter(d=>d.Trading_Volume<todayV).length/(win.length-1)*100) : null;
+  // 連續放量／縮量（日對日）
+  let upRun=0, dnRun=0;
+  for (let i=n-1;i>=1;i--){ const v=i===n-1?todayV:data[i].Trading_Volume; if (v>data[i-1].Trading_Volume) upRun++; else break; }
+  for (let i=n-1;i>=1;i--){ const v=i===n-1?todayV:data[i].Trading_Volume; if (v<data[i-1].Trading_Volume) dnRun++; else break; }
+  const runTxt = upRun>=2 ? `連續放量 ${upRun} 日` : dnRun>=2 ? `連續縮量 ${dnRun} 日` : '無連續放縮';
+  const runColor = upRun>=2 ? 'var(--up)' : dnRun>=2 ? 'var(--muted2)' : 'var(--muted2)';
+  // 上漲日量 / 下跌日量
+  const udRatio = (k) => {
+    if (n<k+1) return null; let uS=0,uN=0,dS=0,dN=0;
+    for (let i=n-k;i<n;i++){ const v=i===n-1?todayV:data[i].Trading_Volume, c0=data[i-1].close; if (data[i].close>c0){uS+=v;uN++;} else if (data[i].close<c0){dS+=v;dN++;} }
+    return (uN&&dN) ? (uS/uN)/(dS/dN) : null;
+  };
+  const udFmt = (r) => r===null ? '-' : `<span style="color:${r>=1.3?'var(--up)':r<=0.77?'var(--dn)':'var(--text)'}">${r.toFixed(2)}${r>=1.3?' 偏買':r<=0.77?' 偏賣':' 均衡'}</span>`;
+  const ud10 = udRatio(10), ud20 = udRatio(20);
   const isUS = currentMarket === 'US';
   const volUnit = isUS ? 'M股' : '張';
   const volFmt = v => isUS ? (v/1e6).toFixed(2)+' M' : (v/1000).toFixed(0)+' 張';
@@ -3691,6 +3880,11 @@ function renderBias(data) {
       <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">今日成交量</td><td style="padding:6px 0;text-align:right;font-family:var(--mono);">${volFmt(last.Trading_Volume)}</td></tr>
       <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">近5日量趨勢</td><td style="padding:6px 0;text-align:right;color:${vol5Color};">${vol5Trend}</td></tr>
       <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">20日均量</td><td style="padding:6px 0;text-align:right;font-family:var(--mono);">${volFmt(avgV20)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">量價配合</td><td style="padding:6px 0;text-align:right;color:${pvColor};">${pvTxt}（${chgPct>=0?'+':''}${chgPct.toFixed(1)}%）</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">量能百分位（近60日）</td><td style="padding:6px 0;text-align:right;font-family:var(--mono);">${pctRank===null?'-':'第 '+pctRank+' 百分位'+(pctRank>=90?' 🔥':pctRank<=10?' 🔇':'')}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">連續放量／縮量</td><td style="padding:6px 0;text-align:right;color:${runColor};">${runTxt}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);">上漲日量÷下跌日量</td><td style="padding:6px 0;text-align:right;font-family:var(--mono);">10日 ${udFmt(ud10)}　20日 ${udFmt(ud20)}</td></tr>
+      <tr style="border-top:1px solid var(--border);"><td style="padding:6px 12px 6px 0;color:var(--muted2);vertical-align:top;">量能結構分解</td><td style="padding:6px 0;text-align:right;font-size:.66rem;color:var(--muted2);line-height:1.6;">${(window._volReasons||[]).join('<br>')}</td></tr>
     </table>
     ${warnings.map(w=>`<div style="margin-top:6px;padding:6px 8px;background:rgba(255,77,109,.08);border-left:2px solid var(--red);border-radius:4px;font-size:.72rem;color:var(--red);">⚠ ${w}</div>`).join('')}
   `;
@@ -3755,9 +3949,14 @@ function renderShortTerm(d) {
         <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 量能狀態</div>
         <div style="font-size:.75rem;color:${volTrend.color};">今日量 ${volTrend.label}（均量${d.volRatio.toFixed(1)}倍）${d.bodyShrink?'<br>⚡ '+d.bodyShrink.text:''}</div>
       </div>`}
+      ${[['突破品質',d.breakoutQ],['回測量縮（強勢整理）',d.pullbackVol],['跳空缺口回補（3日內）',d.gapInfo],['漲跌停／連紅連黑',d.limitInfo]].map(([t,o])=> o ? `
+      <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${o.type==='bull'?'rgba(255,77,109,.25)':o.type==='bear'?'rgba(0,200,150,.25)':'var(--border)'};">
+        <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ ${t}</div>
+        <div style="font-size:.76rem;line-height:1.55;color:${o.type==='bull'?'var(--up)':o.type==='bear'?'var(--dn)':'var(--text)'};">${o.text}</div>
+      </div>` : '').join('')}
       ${d.relStrength ? `
       <div style="background:var(--s2);border-radius:8px;padding:10px 12px;border:1px solid ${d.relStrength.type==='bull'?'rgba(255,77,109,.25)':d.relStrength.type==='bear'?'rgba(0,200,150,.25)':'var(--border)'};">
-        <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 相對大盤強弱（近3日）</div>
+        <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:5px;letter-spacing:1px;">◆ 相對大盤強弱（5日／20日）</div>
         <div style="font-size:.78rem;color:${d.relStrength.type==='bull'?'var(--up)':d.relStrength.type==='bear'?'var(--dn)':'var(--muted2)'};">${d.relStrength.text}</div>
       </div>` : `
       <div style="background:var(--s2);border-radius:8px;padding:8px 12px;border:1px solid var(--border);">
