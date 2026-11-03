@@ -1105,6 +1105,10 @@ function onStrategyChange() {
 // ═══════════════════════════════════════
 let priceData   = [];
 let currentTF = 'D';
+// 清掉無效K棒（價格為0／缺值，常見於停牌日或資料源缺漏），避免造成假跳空與 -100% 報酬
+function cleanBars(a){
+  return (a||[]).filter(d => [d.open,d.max,d.min,d.close].every(v => Number.isFinite(v) && v > 0) && d.max >= d.min);
+}
 let _vdKey = '', _vdVal = [];
 function aggBars(a, tf){
   const map = new Map();
@@ -2053,7 +2057,7 @@ async function analyzeTW(stockId) {
     ]);
     liveMeta = null;
     intradayVolInfo = null;
-    priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
+    priceData = cleanBars(pd); chipData = cd; revenueData = rd; epsData = epsd;
     usInstitutional = []; usFinancials = [];
     currentStockId = stockId;
     addToRecent(stockId);
@@ -2080,7 +2084,7 @@ async function analyzeUS(ticker) {
   document.getElementById('mainContent').classList.add('show');
   try {
     const { price, fin, name } = await fetchUSData(ticker);
-    priceData = price;
+    priceData = cleanBars(price);
     chipData  = [];
     revenueData = [];
     epsData = [];
@@ -3368,8 +3372,9 @@ function patternStats(H=5, arr){
   const atr=calcATR(a,14), m20=ma(a,20), map={};
   for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20,true).forEach(x=>{
     const r=(a[i+H].close-a[i].close)/a[i].close*100;
+    if(Math.abs(r)>40) return;   // 疑似除權／減資／分割造成的價格斷層，不納入統計
     const m=map[x.name]||(map[x.name]={dir:x.dir,n:0,win:0,sum:0});
-    m.n++; m.sum+=r; if((x.dir==='bull'&&r>0)||(x.dir==='bear'&&r<0)) m.win++;
+    m.n++; m.sum+=(x.dir==='bear'?-r:r); if(r*(x.dir==='bear'?-1:1)>0) m.win++;
   });
   return Object.entries(map).map(([k,v])=>({name:k,...v,rate:v.win/v.n*100,avg:v.sum/v.n})).sort((x,y)=>y.n-x.n);
 }
@@ -3414,8 +3419,8 @@ function renderPatternStats(cp){
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
-    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5根報酬</td></tr>${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。勝率＝多方型態後收漲／空方型態後收跌的比例；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5根報酬(依方向)</td></tr>${rows}</table>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
