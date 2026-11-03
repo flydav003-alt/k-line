@@ -654,7 +654,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     </select>
 
     <button class="btn-analyze" onclick="analyze()">▶ 分析</button>
-    <button class="btn-realtime" id="btnRealtime" onclick="analyzeRealtime()" title="用1分K抓法取得最新一根，完成全圖分析">📡 即時</button>
+    <button class="btn-realtime" id="btnRealtime" onclick="analyzeRealtime()" title="盤中即時：補入證交所官方即時K棒，並每15秒自動更新（再按一次停止）">📡 即時</button>
 
     <div class="date-range-bar">
       <span style="font-size:.7rem;color:var(--muted2);white-space:nowrap;">回測至</span>
@@ -1273,21 +1273,28 @@ const PROXY_LIST = [
   url => url, // 直連（可能 CORS 失敗但值得一試）
 ];
 
-function parseYahooJSON(raw) {
-  // allorigins /get 包一層 { contents }
-  const j = (raw && typeof raw === 'object' && typeof raw.contents === 'string')
+// allorigins /get 會包一層 { contents }，這裡統一拆開
+function unwrapProxy(raw) {
+  return (raw && typeof raw === 'object' && typeof raw.contents === 'string')
     ? JSON.parse(raw.contents) : raw;
+}
+
+function parseYahooJSON(raw) {
+  const j = unwrapProxy(raw);
   const result = j?.chart?.result?.[0];
   if (!result) throw new Error('Yahoo 查無資料');
   const ts = result.timestamp;
   const q  = result.indicators.quote[0];
   if (!ts?.length) throw new Error('Yahoo 無價格資料');
+  // 用交易所時區（Yahoo 回傳的 gmtoffset）換算日期，避免裝置時區造成日期錯位
+  const off = Number.isFinite(result.meta?.gmtoffset) ? result.meta.gmtoffset : -new Date().getTimezoneOffset() * 60;
   return ts.map((t, i) => {
-    const d   = new Date(t * 1000);
+    const d   = new Date((t + off) * 1000);
     const pad = n => String(n).padStart(2, '0');
-    const dateStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const dateStr = `${d.getUTCFullYear()}-${pad(d.getUTCMonth()+1)}-${pad(d.getUTCDate())}`;
     return {
       date:           dateStr,
+      time:           `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`,
       open:           q.open[i]   ?? 0,
       max:            q.high[i]   ?? 0,
       min:            q.low[i]    ?? 0,
@@ -1297,32 +1304,35 @@ function parseYahooJSON(raw) {
   }).filter(d => d.close > 0);
 }
 
-async function tryYahooUrl(targetUrl) {
+// 通用：同時打多個 proxy，誰先成功用誰；parser 負責把原始 JSON 轉成需要的資料
+async function fetchViaProxies(targetUrl, parser, tag = 'Proxy') {
   const attempts = PROXY_LIST.map(makeProxy => {
     const proxyUrl = makeProxy(targetUrl);
     return fetchWithTimeout(proxyUrl, 5000)
       .then(async r => {
-        if (!r.ok) throw new Error('not ok');
-        const ct = r.headers.get('content-type') || '';
-        const raw = ct.includes('application/json') || ct.includes('text/plain')
-          ? await r.json().catch(async () => JSON.parse(await r.text()))
-          : await r.json();
-        const data = parseYahooJSON(raw);
-        if (!data.length) throw new Error('empty');
-        console.log('[Yahoo] proxy OK:', proxyUrl.slice(0,60));
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const text = await r.text();
+        let raw;
+        try { raw = JSON.parse(text); } catch { throw new Error('非 JSON 回應'); }
+        const data = parser(raw);
+        if (!data || (Array.isArray(data) && !data.length)) throw new Error('empty');
+        console.log(`[${tag}] proxy OK:`, proxyUrl.slice(0,60));
         return data;
       })
       .catch(e => {
-        console.warn('[Yahoo] proxy failed:', proxyUrl.slice(0,60), e.message);
+        console.warn(`[${tag}] proxy failed:`, proxyUrl.slice(0,60), e.message);
         throw e;
       });
   });
-
   try {
     return await Promise.any(attempts);
   } catch {
     return null;
   }
+}
+
+async function tryYahooUrl(targetUrl) {
+  return fetchViaProxies(targetUrl, parseYahooJSON, 'Yahoo');
 }
 
 // ═══════════════════════════════════════
@@ -1426,78 +1436,194 @@ async function fetchTWII() {
   return [];
 }
 
-async function fetchYahooLatest(stockId) {
-  const suffixes = ['.TW', '.TWO'];
-  const nodes    = ['query1', 'query2'];
-  for (const suffix of suffixes) {
-    const symbol = stockId + suffix;
-    for (const node of nodes) {
-      const url1m = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=false`;
-      const url1d = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d&includePrePost=false`;
-      try {
-        const [intraday, daily] = await Promise.all([
-          tryYahooUrl(url1m).catch(() => null),
-          tryYahooUrl(url1d).catch(() => null),
-        ]);
-        if (intraday && intraday.length > 0) {
-          const last = intraday[intraday.length - 1];
-          const todayVol = intraday.reduce((s, d) => s + (d.Trading_Volume || 0), 0);
-          const prevDayVol = daily && daily.length >= 2 ? daily[daily.length - 2].Trading_Volume : 0;
-          const ratio = prevDayVol > 0 ? todayVol / prevDayVol : null;
-          const now = new Date();
-          const marketMinutes = Math.max(0, (now.getHours()*60 + now.getMinutes()) - 9*60);
-          const dayProgress = Math.min(1, marketMinutes / 270);
-          intradayVolInfo = { todayVol, prevDayVol, ratio, dayProgress, time: now.toLocaleTimeString('zh-TW') };
-          return last;
-        }
-      } catch(e) {}
+// ═══════════════════════════════════════
+//  即時行情（台股）
+//  日線來源 FinMind 要收盤後才更新，所以盤中的「當日 K 棒」由這裡補上：
+//  1) 證交所 MIS 官方即時（無延遲，約 5 秒更新一次）
+//  2) 備援：Yahoo 1分K 聚合成當日 K 棒（Yahoo 對 .TW/.TWO 本身就延遲約 20 分鐘）
+// ═══════════════════════════════════════
+const RT_INTERVAL_MS = 15000;   // 自動更新間隔（毫秒）；太短容易被免費 proxy 限流
+let rtTimer  = null;
+let rtBusy   = false;
+let liveMeta = null;            // { source, time }：顯示在資訊列，標示資料來源與時間
+
+// 台北時間（不依賴裝置時區）：以 UTC+8 位移後用 getUTC* 讀取
+function taipeiNow()      { return new Date(Date.now() + 8*3600*1000); }
+function taipeiDateStr()  { return taipeiNow().toISOString().slice(0,10); }
+function taipeiTimeStr()  { return taipeiNow().toISOString().slice(11,19); }
+function taipeiMinutes()  { const d = taipeiNow(); return d.getUTCHours()*60 + d.getUTCMinutes(); }
+function isTWWeekday()    { const w = taipeiNow().getUTCDay(); return w !== 0 && w !== 6; }
+// 盤中：週一～五 09:00–13:30（多留 5 分鐘抓收盤最終價）
+function isTWMarketOpen() { const m = taipeiMinutes(); return isTWWeekday() && m >= 9*60 && m <= 13*60+35; }
+
+// ── 來源 1：證交所 MIS（上市 tse / 上櫃 otc 一次問，只會回傳存在的那個）──
+async function fetchTWSERealtime(stockId) {
+  const ex  = `tse_${stockId}.tw|otc_${stockId}.tw`;
+  const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(ex)}&json=1&delay=0&_=${Date.now()}`;
+  const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+  const firstOf = s => num(String(s || '').split('_')[0]);   // 五檔字串 "592_593_..." 取第一檔
+
+  const parse = raw => {
+    const j = unwrapProxy(raw);
+    const items = (j?.msgArray || []).filter(x => x && x.c === stockId);
+    if (!items.length) throw new Error('MIS 查無此代號');
+    // z=最新成交價；'-' 代表尚無成交
+    const it = items.find(x => num(x.z) !== null) || items.find(x => num(x.o) !== null);
+    if (!it) throw new Error('MIS 尚無成交');
+
+    const o = num(it.o), h = num(it.h), l = num(it.l), y = num(it.y);
+    let c = num(it.z), approx = false;
+    if (c === null) {                       // 該筆更新沒有成交 → 用最佳買賣價中間值
+      const a = firstOf(it.a), b = firstOf(it.b);
+      if (a && b) { c = (a + b) / 2; approx = true; }
+    }
+    if (c === null || o === null) throw new Error('MIS 尚無成交');
+
+    const d = String(it.d || '');
+    if (!/^\d{8}$/.test(d)) throw new Error('MIS 日期格式異常');
+    const v = num(it.v);                    // 當日累積成交量，單位：張
+    return {
+      date: `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`,
+      open: o,
+      max:  Math.max(h ?? c, o, c),
+      min:  Math.min(l ?? c, o, c),
+      close: c,
+      Trading_Volume: (v ?? 0) * 1000,      // 張 → 股（和 FinMind 的單位一致）
+      prevClose: y,
+      time: it.t || '',
+      name: it.n || '',
+      ex:   it.ex || '',
+      source: approx ? 'TWSE即時(買賣中價)' : 'TWSE即時',
+    };
+  };
+  return fetchViaProxies(url, parse, 'TWSE');
+}
+
+// ── 來源 2：Yahoo 1分K → 聚合成「當日一根日K」（不能只拿最後一根 1分K）──
+async function fetchYahooTodayBar(stockId) {
+  for (const suffix of ['.TW', '.TWO']) {
+    for (const node of ['query1', 'query2']) {
+      const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockId + suffix)}?interval=1m&range=1d&includePrePost=false&_=${Date.now()}`;
+      const bars = await tryYahooUrl(url);
+      if (!bars || !bars.length) continue;
+      const day   = bars[bars.length - 1].date;
+      const today = bars.filter(b => b.date === day);
+      const highs = today.map(b => b.max || b.close);
+      const lows  = today.map(b => b.min || b.close).filter(v => v > 0);
+      currentSuffix = suffix;
+      return {
+        date:  day,
+        open:  today[0].open || today[0].close,
+        max:   Math.max(...highs),
+        min:   Math.min(...lows),
+        close: today[today.length - 1].close,
+        Trading_Volume: today.reduce((s, b) => s + (b.Trading_Volume || 0), 0),
+        time:  today[today.length - 1].time || '',
+        source: 'Yahoo 1分K(約延遲20分)',
+      };
     }
   }
-  intradayVolInfo = null;
   return null;
+}
+
+async function fetchLiveBar(stockId) {
+  const twse = await fetchTWSERealtime(stockId).catch(() => null);
+  if (twse) {
+    currentSuffix = twse.ex === 'otc' ? '.TWO' : '.TW';
+    if (twse.name && !stockNameCache[stockId]) stockNameCache[stockId] = twse.name;
+    return twse;
+  }
+  console.warn('[即時] 證交所來源失敗，改用 Yahoo 1分K（約延遲 20 分鐘）');
+  return await fetchYahooTodayBar(stockId).catch(() => null);
+}
+
+// 把當日 K 棒併進日線陣列（同日覆蓋、新的一天就新增）
+function mergeLiveBar(pd, bar) {
+  if (!bar || !(bar.close > 0)) return false;
+  const last = pd[pd.length - 1];
+  const live = { date: bar.date, open: bar.open, max: bar.max, min: bar.min, close: bar.close, Trading_Volume: bar.Trading_Volume };
+  if (last && last.date === bar.date) { pd[pd.length - 1] = { ...last, ...live }; return true; }
+  if (!last || bar.date > last.date) { pd.push(live); return true; }
+  return false;
+}
+
+// 是否需要補即時 K 棒：盤中，或收盤後但 FinMind 還沒有今天的資料
+function needLiveBar(pd) {
+  if (!isTWWeekday() || taipeiMinutes() < 9*60) return false;
+  const last = pd[pd.length - 1];
+  return isTWMarketOpen() || !last || last.date < taipeiDateStr();
+}
+
+async function applyLiveBar(pd, stockId) {
+  const bar = await fetchLiveBar(stockId);
+  if (!bar) return null;                                   // 失敗就維持原狀
+  const last    = pd[pd.length - 1];
+  const sameDay = !!last && last.date === bar.date;
+  const open    = isTWMarketOpen();
+  if (sameDay && !open) return bar;                        // 收盤後 FinMind 已有當日定稿，不覆蓋
+  const prevDay = sameDay ? pd[pd.length - 2] : last;
+  if (!mergeLiveBar(pd, bar)) return null;
+  liveMeta = { source: bar.source, time: bar.time || taipeiTimeStr() };
+  if (open && prevDay) {
+    const todayVol   = bar.Trading_Volume;
+    const prevDayVol = prevDay.Trading_Volume || 0;
+    intradayVolInfo = {
+      todayVol, prevDayVol,
+      ratio: prevDayVol > 0 ? todayVol / prevDayVol : null,
+      dayProgress: Math.max(0, Math.min(1, (taipeiMinutes() - 9*60) / 270)),
+      time: taipeiTimeStr(),
+    };
+  }
+  return bar;
+}
+
+// ── 📡 即時按鈕：載入並開啟自動更新（再按一次停止）──
+function setRtButton(on) {
+  const b = document.getElementById('btnRealtime');
+  if (!b) return;
+  b.classList.toggle('rt-active', on);
+  b.textContent = on ? '📡 即時中（點擊停止）' : '📡 即時';
+}
+
+function stopRealtime(msg) {
+  if (rtTimer) { clearInterval(rtTimer); rtTimer = null; }
+  setRtButton(false);
+  if (msg) { setStatus(msg, 'success'); setTimeout(() => clearStatus(), 4000); }
+}
+
+async function rtTick() {
+  if (rtBusy || document.hidden) return;
+  if (currentMarket !== 'TW') { stopRealtime(); return; }
+  if (document.getElementById('dateTo')?.value) return;    // 回測模式不套用即時
+  const pd = priceData, stockId = currentStockId;          // 抓取期間若切換個股，不能污染新資料
+  if (!pd.length || !stockId) return;
+  rtBusy = true;
+  try {
+    const bar = await applyLiveBar(pd, stockId);
+    if (pd === priceData && bar) {
+      renderMeta(stockId, stockNameCache[stockId] || '', 'TW');
+      redraw(true);                                        // 保留目前縮放位置
+    }
+  } finally { rtBusy = false; }
+  if (!isTWMarketOpen()) stopRealtime('已收盤，自動更新停止（已套用最後一筆）');
 }
 
 async function analyzeRealtime() {
   if (currentMarket === 'US') { analyze(); return; }
+  if (rtTimer) { stopRealtime('已停止自動更新'); return; }
   const stockId = document.getElementById('stockInput').value.trim();
   if (!stockId) { setStatus('請輸入股票代號','error'); return; }
-  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
-  setStatus(`📡 正在抓取 ${stockId} 即時最新收盤（1分K抓法）...`, 'loading');
-  document.getElementById('splash').style.display = 'none';
-  document.getElementById('mainContent').classList.add('show');
-  try {
-    const latestBar = await fetchYahooLatest(stockId);
-    const [pd, cd, sn, rd, epsd] = await Promise.all([
-      fetchPrice(stockId, token),
-      fetchChip(stockId, token),
-      fetchStockName(stockId),
-      fetchRevenue(stockId, token),
-      fetchEPS(stockId, token),
-    ]);
-    if (latestBar) {
-      const lastHist = pd[pd.length - 1];
-      if (lastHist && lastHist.date === latestBar.date) {
-        lastHist.close = latestBar.close;
-        lastHist.max   = Math.max(lastHist.max, latestBar.close);
-        lastHist.min   = Math.min(lastHist.min, latestBar.close);
-        if (latestBar.Trading_Volume > 0) lastHist.Trading_Volume = latestBar.Trading_Volume;
-      } else if (!lastHist || latestBar.date > lastHist.date) {
-        pd.push(latestBar);
-      }
-      setStatus(`即時成功！最新收盤：${latestBar.close}（${latestBar.date}）`, 'success');
-    } else {
-      setStatus(`即時抓取失敗，改用 FinMind 最後一筆資料`, 'error');
-    }
-    priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
-    currentStockId = stockId;
-    addToRecent(stockId);
-    setTimeout(() => clearStatus(), 4000);
-    renderMeta(stockId, sn);
-    redraw();
-  } catch(err) {
-    setStatus(`即時失敗（${err.message}），改用 FinMind 歷史資料...`, 'error');
-    setTimeout(() => analyze(), 800);
+  await analyzeTW(stockId);                                // 載入歷史日線 + 補入當日即時 K 棒
+  if (currentStockId !== stockId || !priceData.length) return;
+  if (!isTWMarketOpen()) {
+    setStatus('目前非盤中（台股 09:00–13:30），已載入最新資料，未啟動自動更新', 'success');
+    setTimeout(() => clearStatus(), 5000);
+    return;
   }
+  setRtButton(true);
+  rtTimer = setInterval(rtTick, RT_INTERVAL_MS);
+  setStatus(`📡 即時模式已啟動，每 ${RT_INTERVAL_MS/1000} 秒更新一次`, 'success');
+  setTimeout(() => clearStatus(), 4000);
 }
 
 // ═══════════════════════════════════════
@@ -1586,13 +1712,19 @@ async function analyzeTW(stockId) {
       fetchRevenue(stockId, token),
       fetchEPS(stockId, token),
     ]);
+    // 盤中（或收盤後 FinMind 尚未更新）→ 補上當日即時 K 棒；回測模式不補
+    liveMeta = null;
+    intradayVolInfo = null;
+    if (!customTo && needLiveBar(pd)) {
+      setStatus(`正在補入 ${stockId} 即時行情...`, 'loading');
+      await applyLiveBar(pd, stockId);
+    }
     priceData = pd; chipData = cd; revenueData = rd; epsData = epsd;
     usInstitutional = []; usFinancials = [];
-    intradayVolInfo = null;
     currentStockId = stockId;
     addToRecent(stockId);
     clearStatus();
-    renderMeta(stockId, sn, 'TW');
+    renderMeta(stockId, sn || stockNameCache[stockId] || '', 'TW');
     twiiData = [];
     redraw();
     fetchTWII().then(twiid => {
@@ -1620,6 +1752,7 @@ async function analyzeUS(ticker) {
     epsData = [];
     twiiData = [];
     intradayVolInfo = null;
+    liveMeta = null;
     usFinancials = fin;
     usInstitutional = [];
     currentStockId = ticker;
@@ -1634,9 +1767,9 @@ async function analyzeUS(ticker) {
   }
 }
 
-function redraw() {
+function redraw(keepRange = false) {
   const sliced = priceData.slice(-currentPeriod);
-  buildCharts(sliced);
+  buildCharts(sliced, keepRange);
   runAnalysis(sliced, twiiData);
   if (currentMarket === 'TW') {
     renderRevenue(revenueData, epsData);
@@ -1692,6 +1825,7 @@ function renderMeta(stockId, stockName, market) {
     <span class="meta-pill">高 <b>${isUS ? '$'+last.max.toFixed(2) : last.max}</b></span>
     <span class="meta-pill">低 <b>${isUS ? '$'+last.min.toFixed(2) : last.min}</b></span>
     <span class="meta-pill">量 <b>${volText}</b></span>
+    ${!isUS && liveMeta ? `<span class="meta-pill">📡 <b>${liveMeta.source}</b> ${liveMeta.time}</span>` : ''}
     ${!isUS && intradayVolInfo ? (() => {
       const { todayVol, prevDayVol, ratio, dayProgress, time } = intradayVolInfo;
       const projectedVol = dayProgress > 0.05 ? todayVol / dayProgress : null;
@@ -1821,10 +1955,14 @@ function calcAvgVol(data, p=20) {
 // ═══════════════════════════════════════
 //  BUILD CHARTS
 // ═══════════════════════════════════════
-function buildCharts(data) {
+function buildCharts(data, keepRange = false) {
   const kEl  = document.getElementById('klineChart');
   const vEl  = document.getElementById('volumeChart');
   const mEl  = document.getElementById('macdChart');
+
+  // 即時自動更新時保留使用者目前的縮放/捲動位置
+  let savedRange = null;
+  if (keepRange && kChart) { try { savedRange = kChart.timeScale().getVisibleLogicalRange(); } catch {} }
 
   if(kChart){ kChart.remove(); kChart=null; }
   if(volChart){ volChart.remove(); volChart=null; }
@@ -2075,6 +2213,7 @@ function buildCharts(data) {
   allCharts.forEach(({ c }) => { c.timeScale().subscribeVisibleLogicalRangeChange(() => syncRange(c)); });
 
   allCharts.forEach(({ c }) => c.timeScale().fitContent());
+  if (savedRange) allCharts.forEach(({ c }) => { try { c.timeScale().setVisibleLogicalRange(savedRange); } catch {} });
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       const r = kChart.timeScale().getVisibleLogicalRange();
