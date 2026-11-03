@@ -1473,6 +1473,9 @@ async function fetchTWII() {
 //  2) 備援：Yahoo 1分K 聚合成當日 K 棒（Yahoo 對 .TW/.TWO 本身就延遲約 20 分鐘）
 //  日線來源 FinMind 要收盤後才更新，所以「當日 K 棒」由這裡補上
 // ═══════════════════════════════════════
+// 自架 Cloudflare Worker 網址（填入後優先使用；留空則沿用公用 proxy）
+// 例：'https://twse-proxy.你的帳號.workers.dev'
+const TWSE_WORKER = 'https://twse-proxy.flydav003.workers.dev';
 const RT_INTERVAL_MS      = 15000;   // 自動更新間隔（毫秒）；太短容易被免費 proxy 限流
 const RT_FETCH_TIMEOUT_MS = 14000;   // 單次抓即時行情的總時間上限，超過就放棄，不卡畫面
 let rtTimer  = null;
@@ -1532,6 +1535,15 @@ async function fetchTWSERealtime(stockId) {
       source: approx ? 'TWSE即時(買賣中價)' : 'TWSE即時',
     };
   };
+  if (TWSE_WORKER) {
+    try {
+      const r = await fetchWithTimeout(`${TWSE_WORKER}?ex_ch=${encodeURIComponent(ex)}`, 6000);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return parse(await r.json());
+    } catch (e) {
+      recordDiag('TWSE', TWSE_WORKER, url, e);
+    }
+  }
   return fetchViaProxies(url, parse, 'TWSE');
 }
 
