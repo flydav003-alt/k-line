@@ -1679,8 +1679,10 @@ async function analyzeRealtime() {
     return;
   }
   if (res.status === 'final-exists') {
-    setStatus('FinMind 已有今日收盤資料，不需補即時行情', 'success');
-    setTimeout(() => clearStatus(), 4000);
+    // FinMind 已有今日定稿 → 不覆蓋；但顯示即時來源抓到的內容，方便確認來源可用、數字一致
+    const fm = pd[pd.length - 1];
+    setStatus(`✓ 即時來源可用：${res.bar.source} ${res.bar.time || ''}，收 ${res.bar.close}（FinMind 今日收 ${fm.close}，已有定稿，所以不覆蓋）`, 'success');
+    setTimeout(() => clearStatus(), 10000);
     return;
   }
   if (res.status === 'stale') {
