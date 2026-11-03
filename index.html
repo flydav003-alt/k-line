@@ -730,6 +730,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
       <div class="charts-inner">
       <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
         <div class="chart-tabs" style="border-bottom:none;flex:1;">
+          <div class="pt tf active" data-tf="D" onclick="setTF('D')">日K</div>
+          <div class="pt tf" data-tf="W" onclick="setTF('W')">週K</div>
+          <div class="pt tf" data-tf="M" onclick="setTF('M')">月K</div>
+          <span style="display:inline-block;width:10px;"></span>
           <div class="pt active" data-p="60" onclick="setActivePeriod(60)">60日</div>
           <div class="pt" data-p="120" onclick="setActivePeriod(120)">120日</div>
           <div class="pt" data-p="240" onclick="setActivePeriod(240)">240日</div>
@@ -1091,7 +1095,7 @@ function getCurrentStrategy() {
 
 function onStrategyChange() {
   if (!priceData.length) return;
-  const sliced = priceData.slice(-currentPeriod);
+  const sliced = vd().slice(-currentPeriod);
   runAnalysis(sliced, twiiData);
   if (currentMarket === 'TW') renderRevenue(revenueData, epsData);
 }
@@ -1100,6 +1104,36 @@ function onStrategyChange() {
 //  STATE
 // ═══════════════════════════════════════
 let priceData   = [];
+let currentTF = 'D';
+let _vdKey = '', _vdVal = [];
+function aggBars(a, tf){
+  const map = new Map();
+  a.forEach(d => {
+    let k;
+    if (tf === 'M') k = d.date.slice(0,7);
+    else { const t = new Date(d.date + 'T00:00:00Z'); const dow = (t.getUTCDay()+6)%7; t.setUTCDate(t.getUTCDate()-dow); k = t.toISOString().slice(0,10); }
+    const g = map.get(k);
+    if (!g) map.set(k, { ...d });
+    else { g.max = Math.max(g.max, d.max); g.min = Math.min(g.min, d.min); g.close = d.close; g.date = d.date; g.Trading_Volume = (g.Trading_Volume||0) + (d.Trading_Volume||0); }
+  });
+  return [...map.values()];
+}
+// 目前週期（日/週/月）的K棒資料；日線即原始資料
+function vd(){
+  if (currentTF === 'D' || !priceData.length) return priceData;
+  const l = priceData[priceData.length-1];
+  const key = currentTF + priceData.length + l.date + l.close + l.Trading_Volume;
+  if (key !== _vdKey) { _vdVal = aggBars(priceData, currentTF); _vdKey = key; }
+  return _vdVal;
+}
+const TF_WIN = { D:[[60,'60日'],[120,'120日'],[240,'240日'],[480,'480日']], W:[[26,'26週'],[52,'52週'],[104,'104週'],[208,'208週']], M:[[24,'24月'],[36,'36月'],[60,'60月'],[120,'120月']] };
+function setTF(tf){
+  currentTF = tf;
+  document.querySelectorAll('.pt.tf').forEach(t => t.classList.toggle('active', t.dataset.tf === tf));
+  const tabs = document.querySelectorAll('.pt:not(.tf)'), w = TF_WIN[tf];
+  tabs.forEach((t,i) => { t.dataset.p = w[i][0]; t.textContent = w[i][1]; t.setAttribute('onclick', `setActivePeriod(${w[i][0]})`); });
+  setActivePeriod(w[tf==='D'?0:1][0]);
+}
 let chipData    = [];
 let kChart      = null;
 let volChart    = null;
@@ -1546,7 +1580,7 @@ async function tryYahooUrl(targetUrl) {
 async function fetchYahooPrice(stockId) {
   const suffixes = ['.TW', '.TWO'];
   const nodes    = ['query1', 'query2'];
-  const ranges   = ['2y', '1y'];
+  const ranges   = ['10y', '5y', '2y'];
   for (const suffix of suffixes) {
     const symbol = stockId + suffix;
     for (const rng of ranges) {
@@ -1570,7 +1604,7 @@ async function fetchYahooPrice(stockId) {
 // ═══════════════════════════════════════
 async function fetchUSPrice(ticker) {
   const nodes  = ['query1', 'query2'];
-  const ranges = ['2y', '1y'];
+  const ranges = ['10y', '5y', '2y'];
   const symbol = ticker.toUpperCase();
   for (const rng of ranges) {
     for (const node of nodes) {
@@ -1680,7 +1714,7 @@ function intradayVolShare(minFromOpen) {
   return 1;
 }
 // 盤中套用中：今日量要換算成預估全日量，否則「量縮」「量大幅萎縮」等量價訊號會被半天量誤判
-function intradayActive() { return currentMarket === 'TW' && !!intradayVolInfo && isTWMarketOpen(); }
+function intradayActive() { return currentTF === 'D' && currentMarket === 'TW' && !!intradayVolInfo && isTWMarketOpen(); }
 function effectiveLastVol(bar) {
   if (!intradayActive()) return bar.Trading_Volume;
   const sh = intradayVolInfo.volShare;
@@ -1932,7 +1966,7 @@ async function fetchPrice(stockId, token, customFrom='', customTo='') {
   const fmt = d => d.toISOString().slice(0,10);
   const endBase = customTo ? new Date(customTo) : new Date();
   const startBase = new Date(endBase);
-  startBase.setDate(startBase.getDate() - 1100);
+  startBase.setDate(startBase.getDate() - 2900);
   const startDate = fmt(startBase);
   const endDate   = fmt(endBase);
   let url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${stockId}&start_date=${startDate}&end_date=${endDate}`;
@@ -2019,7 +2053,7 @@ async function analyzeTW(stockId) {
     fetchTWII().then(twiid => {
       if (twiid && twiid.length > 0) {
         twiiData = twiid;
-        const sliced = priceData.slice(-currentPeriod);
+        const sliced = vd().slice(-currentPeriod);
         runAnalysis(sliced, twiiData);
       }
     }).catch(() => {});
@@ -2057,7 +2091,7 @@ async function analyzeUS(ticker) {
 }
 
 function redraw(keepRange = false) {
-  const sliced = priceData.slice(-currentPeriod);
+  const sliced = vd().slice(-currentPeriod);
   buildCharts(sliced, keepRange);
   runAnalysis(sliced, twiiData);
   if (currentMarket === 'TW') {
@@ -2299,7 +2333,7 @@ function buildCharts(data, keepRange = false) {
   const maColors = { 5:'#e8b84b', 10:'#4a9eff', 20:'#ff6b9d', 60:'#a78bfa', 120:'#34d399', 240:'#fb923c' };
   const addMA = (p, col) => {
     const s = kChart.addLineSeries({ color:col, lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, visible: maVisibility[p] });
-    s.setData(calcMA(priceData, p).filter(x => x.time >= data[0].date));
+    s.setData(calcMA(vd(), p).filter(x => x.time >= data[0].date));
     return s;
   };
   ma5Series  = addMA(5,  maColors[5]);
@@ -2524,7 +2558,7 @@ function toggleTrendChannel() {
   const status = document.getElementById('trendStatus');
   if(showTrend){
     status.style.background = 'var(--cyan)'; status.style.color = '#000'; status.textContent = 'ON';
-    if(priceData.length) drawTrendChannel(priceData.slice(-currentPeriod));
+    if(priceData.length) drawTrendChannel(vd().slice(-currentPeriod));
   } else {
     status.style.background = 'var(--border)'; status.style.color = 'var(--muted)'; status.textContent = 'OFF';
     trendLines.forEach(l => { try{ candleSeries?.removePriceLine(l); } catch{} });
@@ -2668,7 +2702,8 @@ function processChip(chipRaw) {
 //  ANALYSIS ENGINE（共用）
 // ═══════════════════════════════════════
 function runAnalysis(slicedData, twiiRaw) {
-  const data = slicedData || priceData.slice(-currentPeriod);
+  if (currentTF !== 'D') twiiRaw = [];
+  const data = slicedData || vd().slice(-currentPeriod);
   const n = data.length;
   if(n < 20) return;
 
@@ -2678,7 +2713,8 @@ function runAnalysis(slicedData, twiiRaw) {
 
   const last=data[n-1], prev=data[n-2];
   // 指標用完整歷史計算（含暖機期），再取與顯示區間對齊的尾段
-  const ctx = (priceData.length > n && priceData[priceData.length-1].date === data[n-1].date) ? priceData.slice(-(n+300)) : data;
+  const _vd = vd();
+  const ctx = (_vd.length > n && _vd[_vd.length-1].date === data[n-1].date) ? _vd.slice(-(n+300)) : data;
   const T = a => a.slice(-n);
   const ma5a=T(ma(ctx,5)), ma10a=T(ma(ctx,10)), ma20a=T(ma(ctx,20)), ma60a=T(ma(ctx,60));
   const ma120a=T(ma(ctx,120)), ma240a=T(ma(ctx,240));
@@ -3308,7 +3344,7 @@ function detectPatternsAt(a, i, atr, m20){
   return out;
 }
 function patternStats(H=5){
-  const a=priceData; if(!a||a.length<60) return [];
+  const a=vd(); if(!a||a.length<60) return [];
   const atr=calcATR(a,14), m20=ma(a,20), map={};
   for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20).forEach(x=>{
     const r=(a[i+H].close-a[i].close)/a[i].close*100;
@@ -3324,9 +3360,9 @@ function renderPatternStats(){
     return `<tr style="${few?'opacity:.5;':''}"><td style="padding:3px 6px;color:${c};">${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
-    <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5日表現（共${priceData.length}根K棒）</div>
-    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5日報酬</td></tr>${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">勝率＝多方型態後5日收漲／空方型態後5日收跌的比例；次數少於5（灰色）僅供參考，且未計手續費與滑價。</div></div>`;
+    <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（共${vd().length}根${{D:'日',W:'週',M:'月'}[currentTF]}K）</div>
+    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5根報酬</td></tr>${rows}</table>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">勝率＝多方型態後5根K收漲／空方型態後5根K收跌的比例；次數少於5（灰色）僅供參考，且未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
@@ -3862,7 +3898,7 @@ function addVolumeMarkers(data, avgVolArr) {
   });
   // 型態標記（用完整歷史偵測，只標顯示區間）
   try {
-    const A=priceData, off=A.length-data.length;
+    const A=vd(), off=A.length-data.length;
     if(off>=0){
       const atr=calcATR(A,14), m20=ma(A,20);
       data.forEach((d,j)=>{
@@ -3883,10 +3919,10 @@ function addVolumeMarkers(data, avgVolArr) {
 document.addEventListener('keydown', e => {
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
   switch(e.key){
-    case '1': setActivePeriod(60);  break;
-    case '2': setActivePeriod(120); break;
-    case '3': setActivePeriod(240); break;
-    case '4': setActivePeriod(480); break;
+    case '1': document.querySelectorAll('.pt:not(.tf)')[0]?.click(); break;
+    case '2': document.querySelectorAll('.pt:not(.tf)')[1]?.click(); break;
+    case '3': document.querySelectorAll('.pt:not(.tf)')[2]?.click(); break;
+    case '4': document.querySelectorAll('.pt:not(.tf)')[3]?.click(); break;
     case 'Escape':
       document.getElementById('dateTo').value = '';
       if(priceData.length) analyze();
@@ -3979,7 +4015,7 @@ window.addEventListener('load', () => {
 })();
 
 function setActivePeriod(p) {
-  document.querySelectorAll('.pt').forEach(t => {
+  document.querySelectorAll('.pt:not(.tf)').forEach(t => {
     const isActive = parseInt(t.dataset.p) === p;
     t.classList.toggle('active', isActive);
   });
