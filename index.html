@@ -3332,7 +3332,7 @@ function isBlackThree(b0,b1,b2){
   const ok=(x,pv)=> x.close<x.open && x.open>=Math.min(pv.open,pv.close) && x.open<=Math.max(pv.open,pv.close) && x.close<pv.close && (x.close-x.min) <= (x.open-x.close)*0.35;
   return b0.close<b0.open && ok(b1,b0) && ok(b2,b1);
 }
-function detectPatternsAt(a, i, atr, m20){
+function detectPatternsAt(a, i, atr, m20, basic=false){
   const out=[]; if(i<22) return out;
   const b=a[i], p=a[i-1], p2=a[i-2];
   const body=Math.abs(b.close-b.open), rng=b.max-b.min; if(!(rng>0)) return out;
@@ -3353,12 +3353,20 @@ function detectPatternsAt(a, i, atr, m20){
   const pre=a.slice(i-20,i), pH=Math.max(...pre.map(d=>d.max)), pL=Math.min(...pre.map(d=>d.min));
   if(b.max>pH&&b.close<pH&&up>=rng*0.4) out.push({name:'假突破',dir:'bear'});
   if(b.min<pL&&b.close>pL&&dn>=rng*0.4) out.push({name:'破底翻',dir:'bull'});
+  if(basic){
+    if(bull&&body>=A*1.2&&(b.max-b.close)<=rng*0.2) out.push({name:'長紅K',dir:'bull'});
+    if(bear&&body>=A*1.2&&(b.close-b.min)<=rng*0.2) out.push({name:'長黑K',dir:'bear'});
+    if(b.min>p.max) out.push({name:'向上跳空',dir:'bull'});
+    if(b.max<p.min) out.push({name:'向下跳空',dir:'bear'});
+    if(b.close>pH&&bull) out.push({name:'突破20K高點',dir:'bull'});
+    if(b.close<pL&&bear) out.push({name:'跌破20K低點',dir:'bear'});
+  }
   return out;
 }
 function patternStats(H=5, arr){
   const a=arr||vd(); if(!a||a.length<60) return [];
   const atr=calcATR(a,14), m20=ma(a,20), map={};
-  for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20).forEach(x=>{
+  for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20,true).forEach(x=>{
     const r=(a[i+H].close-a[i].close)/a[i].close*100;
     const m=map[x.name]||(map[x.name]={dir:x.dir,n:0,win:0,sum:0});
     m.n++; m.sum+=r; if((x.dir==='bull'&&r>0)||(x.dir==='bear'&&r<0)) m.win++;
@@ -3372,10 +3380,13 @@ function currentPatterns(){
   [['D','日K'],['W','週K'],['M','月K']].forEach(([tf,label])=>{
     const a = tf==='D' ? priceData : aggBars(priceData, tf);
     if(!a || a.length<30) return;
-    const i=a.length-1, hits=detectPatternsAt(a,i,calcATR(a,14),ma(a,20));
-    const st={}; patternStats(5,a).forEach(x=>st[x.name]=x);
-    hits.forEach(h=>names.add(h.name));
-    out.push({tf,label,date:a[i].date,hits:hits.map(h=>({...h,st:st[h.name]||null}))});
+    const atr=calcATR(a,14), m20=ma(a,20), st={}; patternStats(5,a).forEach(x=>st[x.name]=x);
+    const hits=[];
+    for(let k=0;k<3;k++){
+      const i=a.length-1-k;
+      detectPatternsAt(a,i,atr,m20,true).forEach(h=>{ names.add(h.name); hits.push({...h,k,date:a[i].date,st:st[h.name]||null}); });
+    }
+    out.push({tf,label,date:a[a.length-1].date,hits});
   });
   return {out,names};
 }
@@ -3385,13 +3396,14 @@ function renderCurrentPatterns(cp){
     const body = r.hits.length ? r.hits.map(h=>{
       const c=h.dir==='bull'?'var(--up)':'var(--dn)', arrow=h.dir==='bull'?'▲':'▼';
       const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次，平均${h.st.avg>=0?'+':''}${h.st.avg.toFixed(1)}%）`:'';
-      return `<span style="color:${c};font-weight:700;">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
+      const when=h.k===0?'最新':`前${h.k}根 ${h.date.slice(5)}`;
+      return `<span style="color:var(--muted2);font-size:.64rem;">[${when}]</span> <span style="color:${c};font-weight:${h.k===0?700:500};${h.k===0?'':'opacity:.8;'}">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
     }).join('<br>') : '<span style="color:var(--muted);">目前無明顯型態</span>';
     return `<div style="display:flex;gap:10px;padding:4px 0;border-top:1px solid var(--border);"><span style="min-width:44px;color:var(--gold2);font-weight:600;">${r.label}</span><div style="flex:1;font-size:.8rem;">${body}<div style="font-size:.62rem;color:var(--muted);">${r.date}</div></div></div>`;
   }).join('');
   return `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
     <div style="font-size:.82rem;font-weight:700;color:var(--gold);margin-bottom:2px;">💡 目前可能的K線型態（日／週／月）</div>${rows}
-    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">依最新一根K棒判斷；週K、月K的最新一根尚未收定，之後可能改變。</div></div>`;
+    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">列出最新及前2根K棒出現的型態（含長紅黑、跳空、突破20K高低點）；週K、月K最新一根尚未收定，之後可能改變。</div></div>`;
 }
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
