@@ -2917,8 +2917,8 @@ function runAnalysis(slicedData, twiiRaw) {
     }
     if (prev2) {
       const b0=prev2, b1=prev, b2=last;
-      if (b0.close>b0.open && b1.close>b1.open && b2.close>b2.open && b1.close>b0.close && b2.close>b1.close) pushPattern('bull', '紅三兵', 'bull', 1.0, 5);
-      if (b0.close<b0.open && b1.close<b1.open && b2.close<b2.open && b1.close<b0.close && b2.close<b1.close) pushPattern('bear', '黑三鴉', 'bear', 1.0, 5);
+      if (isRedThree(b0,b1,b2) && pos60 < 0.8) pushPattern('bull', '紅三兵', 'bull', 1.0, 5);
+      if (isBlackThree(b0,b1,b2) && pos60 > 0.2) pushPattern('bear', '黑三鴉', 'bear', 1.0, 5);
       if (b0.close<b0.open && Math.abs(b1.close-b1.open)<(b1.max-b1.min)*0.3 && b2.close>b2.open && b2.close>=(b0.open+b0.close)/2) pushPattern('bull', '晨星', 'bull', 1.2, 5);
       if (b0.close>b0.open && Math.abs(b1.close-b1.open)<(b1.max-b1.min)*0.3 && b2.close<b2.open && b2.close<=(b0.open+b0.close)/2) pushPattern('bear', '暮星', 'bear', 1.2, 5);
     }
@@ -3186,7 +3186,7 @@ function runAnalysis(slicedData, twiiRaw) {
   };
 
   renderScore(score, volStructScore, volStructLabel, autoStrategy);
-  renderSignals(signals);
+  renderSignals(signals, score, bullPts, bearPts);
   renderTrade(data, score, lma20, rhi, rlo, lATR);
   renderBias(data);
   renderShortTerm(shortTermData);
@@ -3252,14 +3252,81 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
 // ═══════════════════════════════════════
 //  RENDER SIGNALS
 // ═══════════════════════════════════════
-function renderSignals(signals) {
+function renderSignals(signals, score, bullPts, bearPts) {
   const el = document.getElementById('signalList');
   if(!signals.length){ el.innerHTML='<div style="color:var(--muted);font-size:.78rem">無明顯訊號</div>'; return; }
-  el.innerHTML = signals.map(s=>`
+  const order = { bull:0, neutral:1, bear:2 };
+  const sorted = signals.map((x,i)=>[x,i]).sort((p,q)=> (order[p[0].type]-order[q[0].type]) || (p[1]-q[1])).map(x=>x[0]);
+  const nb = signals.filter(x=>x.type==='bull').length, nn = signals.filter(x=>x.type==='neutral').length, nr = signals.filter(x=>x.type==='bear').length;
+  const tot = (bullPts||0) + (bearPts||0);
+  const bullShare = tot > 0 ? Math.round(bullPts/tot*100) : 50;
+  const verdict = score>=70 ? ['強勢偏多','var(--up)'] : score>=58 ? ['偏多','var(--up)'] : score>=43 ? ['中性觀望','var(--text)'] : score>=30 ? ['偏空','var(--dn)'] : ['弱勢偏空','var(--dn)'];
+  const head = `<div style="background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-weight:700;color:${verdict[1]};font-size:1rem;">綜合判斷：${verdict[0]}</span>
+      <span style="font-family:var(--mono);color:var(--muted2);font-size:.78rem;">評分 ${score ?? '-'}/100</span></div>
+    <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px;background:var(--border);">
+      <div style="width:${bullShare}%;background:var(--up);"></div><div style="width:${100-bullShare}%;background:var(--dn);"></div></div>
+    <div style="font-size:.72rem;color:var(--muted2);">多方訊號 <b style="color:var(--up)">${nb}</b> ｜ 中性 ${nn} ｜ 空方訊號 <b style="color:var(--dn)">${nr}</b>　多空力道 ${bullShare}% : ${100-bullShare}%</div></div>`;
+  el.innerHTML = head + sorted.map(s=>`
     <div class="sig ${s.type}">
       <span class="sig-tag">${s.cat}</span>${s.text}
     </div>
-  `).join('');
+  `).join('') + renderPatternStats();
+}
+
+// ── 歷史K線型態：偵測（純函式，可用於任一根K棒）──
+function isRedThree(b0,b1,b2){
+  const ok=(x,pv)=> x.close>x.open && x.open>=Math.min(pv.open,pv.close) && x.open<=Math.max(pv.open,pv.close) && x.close>pv.close && (x.max-x.close) <= (x.close-x.open)*0.35;
+  return b0.close>b0.open && ok(b1,b0) && ok(b2,b1);
+}
+function isBlackThree(b0,b1,b2){
+  const ok=(x,pv)=> x.close<x.open && x.open>=Math.min(pv.open,pv.close) && x.open<=Math.max(pv.open,pv.close) && x.close<pv.close && (x.close-x.min) <= (x.open-x.close)*0.35;
+  return b0.close<b0.open && ok(b1,b0) && ok(b2,b1);
+}
+function detectPatternsAt(a, i, atr, m20){
+  const out=[]; if(i<22) return out;
+  const b=a[i], p=a[i-1], p2=a[i-2];
+  const body=Math.abs(b.close-b.open), rng=b.max-b.min; if(!(rng>0)) return out;
+  const up=b.max-Math.max(b.open,b.close), dn=Math.min(b.open,b.close)-b.min, A=atr[i]||rng;
+  const w=a.slice(i-19,i+1), hi=Math.max(...w.map(d=>d.max)), lo=Math.min(...w.map(d=>d.min));
+  const pos=(b.close-lo)/(hi-lo+1e-4);
+  const dnT=(m20[i]&&m20[i-5])?m20[i]<m20[i-5]:pos<0.4, upT=(m20[i]&&m20[i-5])?m20[i]>m20[i-5]:pos>0.6;
+  const bull=b.close>b.open, bear=b.close<b.open, pbody=Math.abs(p.close-p.open);
+  if(body>0&&dn>=body*2&&up<=body*0.5&&rng>=A*0.8){ if(dnT&&pos<0.5) out.push({name:'錘頭',dir:'bull'}); else if(upT&&pos>0.6) out.push({name:'吊人線',dir:'bear'}); }
+  if(body>0&&up>=body*2&&dn<=body*0.5&&rng>=A*0.8){ if(upT&&pos>0.6) out.push({name:'射擊之星',dir:'bear'}); else if(dnT&&pos<0.5) out.push({name:'倒錘頭',dir:'bull'}); }
+  if(bull&&p.close<p.open&&b.open<=p.close&&b.close>=p.open&&body>=A*0.6&&dnT) out.push({name:'多頭吞噬',dir:'bull'});
+  if(bear&&p.close>p.open&&b.open>=p.close&&b.close<=p.open&&body>=A*0.6&&upT) out.push({name:'空頭吞噬',dir:'bear'});
+  if(isRedThree(p2,p,b)&&pos<0.8) out.push({name:'紅三兵',dir:'bull'});
+  if(isBlackThree(p2,p,b)&&pos>0.2) out.push({name:'黑三鴉',dir:'bear'});
+  const pb2=Math.abs(p2.close-p2.open), sm=pbody<=(p.max-p.min)*0.3;
+  if(p2.close<p2.open&&pb2>=A*0.6&&sm&&bull&&b.close>=(p2.open+p2.close)/2&&dnT) out.push({name:'晨星',dir:'bull'});
+  if(p2.close>p2.open&&pb2>=A*0.6&&sm&&bear&&b.close<=(p2.open+p2.close)/2&&upT) out.push({name:'暮星',dir:'bear'});
+  const pre=a.slice(i-20,i), pH=Math.max(...pre.map(d=>d.max)), pL=Math.min(...pre.map(d=>d.min));
+  if(b.max>pH&&b.close<pH&&up>=rng*0.4) out.push({name:'假突破',dir:'bear'});
+  if(b.min<pL&&b.close>pL&&dn>=rng*0.4) out.push({name:'破底翻',dir:'bull'});
+  return out;
+}
+function patternStats(H=5){
+  const a=priceData; if(!a||a.length<60) return [];
+  const atr=calcATR(a,14), m20=ma(a,20), map={};
+  for(let i=22;i<a.length-H;i++) detectPatternsAt(a,i,atr,m20).forEach(x=>{
+    const r=(a[i+H].close-a[i].close)/a[i].close*100;
+    const m=map[x.name]||(map[x.name]={dir:x.dir,n:0,win:0,sum:0});
+    m.n++; m.sum+=r; if((x.dir==='bull'&&r>0)||(x.dir==='bear'&&r<0)) m.win++;
+  });
+  return Object.entries(map).map(([k,v])=>({name:k,...v,rate:v.win/v.n*100,avg:v.sum/v.n})).sort((x,y)=>y.n-x.n);
+}
+function renderPatternStats(){
+  const st=patternStats(5); if(!st.length) return '';
+  const rows=st.map(x=>{
+    const few=x.n<5, c=x.dir==='bull'?'var(--up)':'var(--dn)';
+    return `<tr style="${few?'opacity:.5;':''}"><td style="padding:3px 6px;color:${c};">${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
+  }).join('');
+  return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
+    <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5日表現（共${priceData.length}根K棒）</div>
+    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">平均5日報酬</td></tr>${rows}</table>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">勝率＝多方型態後5日收漲／空方型態後5日收跌的比例；次數少於5（灰色）僅供參考，且未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
@@ -3793,7 +3860,21 @@ function addVolumeMarkers(data, avgVolArr) {
       markers.push({ time: d.date, position: 'aboveBar', color: 'rgba(100,116,139,0.7)', shape: 'circle', text: '縮', size: 0 });
     }
   });
-  try { candleSeries.setMarkers(markers.slice(-30)); } catch{}
+  // 型態標記（用完整歷史偵測，只標顯示區間）
+  try {
+    const A=priceData, off=A.length-data.length;
+    if(off>=0){
+      const atr=calcATR(A,14), m20=ma(A,20);
+      data.forEach((d,j)=>{
+        if(A[off+j]?.date!==d.date) return;
+        detectPatternsAt(A,off+j,atr,m20).forEach(x=>markers.push({
+          time:d.date, position:x.dir==='bull'?'belowBar':'aboveBar',
+          color:x.dir==='bull'?'#ff4d6d':'#00c896', shape:x.dir==='bull'?'arrowUp':'arrowDown', text:x.name, size:1 }));
+      });
+    }
+  } catch{}
+  markers.sort((p,q)=> p.time<q.time?-1:p.time>q.time?1:0);
+  try { candleSeries.setMarkers(markers.slice(-60)); } catch{}
 }
 
 // ═══════════════════════════════════════
