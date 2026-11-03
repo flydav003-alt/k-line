@@ -1275,8 +1275,13 @@ const PROXY_LIST = [
 
 // allorigins /get 會包一層 { contents }，這裡統一拆開
 function unwrapProxy(raw) {
-  return (raw && typeof raw === 'object' && typeof raw.contents === 'string')
-    ? JSON.parse(raw.contents) : raw;
+  if (raw && typeof raw === 'object' && 'contents' in raw) {
+    const code = raw.status?.http_code ? `（目標網站 HTTP ${raw.status.http_code}）` : '';
+    if (typeof raw.contents !== 'string' || !raw.contents.trim()) throw new Error('目標網站無內容' + code);
+    try { return JSON.parse(raw.contents); }
+    catch { throw new Error('目標網站回應非 JSON' + code + '：' + raw.contents.slice(0, 40).replace(/\s+/g, ' ')); }
+  }
+  return raw;
 }
 
 function parseYahooJSON(raw) {
@@ -1304,6 +1309,31 @@ function parseYahooJSON(raw) {
   }).filter(d => d.close > 0);
 }
 
+// 診斷紀錄：即時行情失敗時直接顯示在畫面上，不必開 Console
+let rtDiag = [];
+function recordDiag(tag, proxyUrl, targetUrl, e) {
+  let label = 'proxy';
+  try {
+    const u = new URL(proxyUrl);
+    label = proxyUrl === targetUrl ? '直連' : (u.host + (u.pathname.length > 1 ? u.pathname : ''));
+  } catch {}
+  let msg = e?.name === 'AbortError' ? '逾時無回應' : (e?.message || String(e));
+  if (/^(Failed to fetch|Load failed|NetworkError)/.test(msg)) msg = '連線被擋（CORS／網路）';
+  rtDiag.push({ tag, label, msg });
+  if (rtDiag.length > 300) rtDiag.shift();
+}
+function diagSummary() {
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  const groups = new Map();
+  rtDiag.forEach(d => { const k = JSON.stringify([d.tag, d.label, d.msg]); groups.set(k, (groups.get(k) || 0) + 1); });
+  const byTag = {};
+  groups.forEach((n, k) => {
+    const [tag, label, msg] = JSON.parse(k);
+    (byTag[tag] = byTag[tag] || []).push(`${esc(label)} → ${esc(msg)}${n > 1 ? ' ×' + n : ''}`);
+  });
+  return Object.entries(byTag).map(([tag, arr]) => `<b>${esc(tag)}</b>：${arr.join('；')}`).join('<br>');
+}
+
 // 通用：同時打多個 proxy，誰先成功用誰；parser 負責把原始 JSON 轉成需要的資料
 async function fetchViaProxies(targetUrl, parser, tag = 'Proxy') {
   const attempts = PROXY_LIST.map(makeProxy => {
@@ -1313,7 +1343,7 @@ async function fetchViaProxies(targetUrl, parser, tag = 'Proxy') {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const text = await r.text();
         let raw;
-        try { raw = JSON.parse(text); } catch { throw new Error('非 JSON 回應'); }
+        try { raw = JSON.parse(text); } catch { throw new Error('非 JSON 回應：' + text.slice(0, 40).replace(/\s+/g, ' ')); }
         const data = parser(raw);
         if (!data || (Array.isArray(data) && !data.length)) throw new Error('empty');
         console.log(`[${tag}] proxy OK:`, proxyUrl.slice(0,60));
@@ -1321,6 +1351,7 @@ async function fetchViaProxies(targetUrl, parser, tag = 'Proxy') {
       })
       .catch(e => {
         console.warn(`[${tag}] proxy failed:`, proxyUrl.slice(0,60), e.message);
+        recordDiag(tag, proxyUrl, targetUrl, e);
         throw e;
       });
   });
@@ -1471,7 +1502,7 @@ async function fetchTWSERealtime(stockId) {
   const parse = raw => {
     const j = unwrapProxy(raw);
     const items = (j?.msgArray || []).filter(x => x && x.c === stockId);
-    if (!items.length) throw new Error('MIS 查無此代號');
+    if (!items.length) throw new Error(`MIS 無資料（rtcode ${j?.rtcode ?? '?'}／${j?.rtmessage ?? '空回應'}）`);
     // z=最新成交價；'-' 代表尚無成交
     const it = items.find(x => num(x.z) !== null) || items.find(x => num(x.o) !== null);
     if (!it) throw new Error('MIS 尚無成交');
@@ -1541,6 +1572,7 @@ async function fetchYahooTodayBar(stockId) {
 
 // 先問證交所；它失敗或超過 2.5 秒沒回應，就同時啟動 Yahoo 備援（證交所優先）。整體有時間上限。
 async function fetchLiveBar(stockId) {
+  rtDiag = [];
   const run = async () => {
     const twseP = fetchTWSERealtime(stockId).catch(() => null);
     const early = await Promise.race([twseP, sleep(2500).then(() => 'slow')]);
@@ -1642,7 +1674,8 @@ async function analyzeRealtime() {
   const res = await applyLiveBar(pd, stockId);
   if (pd !== priceData) return;                            // 抓取期間切換了個股
   if (res.status === 'failed') {
-    setStatus('即時行情抓取失敗：證交所與 Yahoo 都沒回應（多半是免費 proxy 被擋或逾時）。目前顯示的是 FinMind 日線，可稍後再按一次；按 F12 看 Console 的 [TWSE] / [Yahoo] 訊息可判斷原因。', 'error');
+    setStatus('即時行情抓取失敗（圖表仍是 FinMind 日線，可稍後再按一次）。各來源失敗原因：<br>'
+      + (diagSummary() || '沒有收到任何回應紀錄（整體逾時）'), 'error');
     return;
   }
   if (res.status === 'final-exists') {
