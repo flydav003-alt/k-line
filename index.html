@@ -959,6 +959,7 @@ function switchMarket(mkt) {
 // 自動判斷輸入的是台股還是美股
 function autoDetectMarket(raw) {
   const val = raw.trim().toUpperCase();
+  if (val === 'TWII') return 'TW';   // 加權指數
   // 台股：純數字 4-6 碼，或 ETF（如 0050）
   if (/^\d{4,6}[A-Z]?$/.test(val)) return 'TW';
   // 美股：純英文字母 1-5 碼
@@ -1284,6 +1285,7 @@ function resolveStockInput(raw) {
   const v = String(raw || '').trim();
   if (!v) return '';
   const up = v.toUpperCase();
+  if (['TWII', '^TWII', '加權', '加權指數', '大盤', '台股大盤', '台灣加權'].includes(up) || ['加權', '加權指數', '大盤', '台股大盤', '台灣加權'].includes(v)) return 'TWII';
   if (/^\d{4,6}[A-Z]?$/.test(up) || /^[A-Z]{1,5}$/.test(up)) return up;
   if (stockNameIndex[v]) return stockNameIndex[v];
   const hit = searchStocks(v, 1)[0];
@@ -2341,10 +2343,37 @@ async function analyze() {
   const detectedMkt = autoDetectMarket(rawInput);
   if (detectedMkt !== currentMarket) switchMarket(detectedMkt);
 
-  if (currentMarket === 'US') {
+  if (rawInput.toUpperCase() === 'TWII') {
+    await analyzeIndex();
+  } else if (currentMarket === 'US') {
     await analyzeUS(rawInput.toUpperCase());
   } else {
     await analyzeTW(rawInput);
+  }
+}
+
+// ── 加權指數（^TWII）：只有價量K線，沒有籌碼／營收／EPS／大戶持股 ──
+async function analyzeIndex() {
+  setStatus('正在抓取加權指數資料...', 'loading');
+  document.getElementById('splash').style.display = 'none';
+  document.getElementById('mainContent').classList.add('show');
+  try {
+    const price = await fetchUSPrice('^TWII');
+    priceData = cleanBars(price);
+    chipData = []; revenueData = []; epsData = []; holderData = [];
+    renderHolders([], true);
+    usInstitutional = []; usFinancials = [];
+    twiiData = [];
+    intradayVolInfo = null;
+    liveMeta = null;
+    currentSuffix = '';
+    currentStockId = 'TWII';
+    addToRecent('TWII');
+    clearStatus();
+    renderMeta('TWII', '加權指數', 'TW');
+    redraw();
+  } catch (err) {
+    setStatus(err.message, 'error');
   }
 }
 
@@ -2449,7 +2478,9 @@ function renderMeta(stockId, stockName, market) {
   const nameTag = stockName
     ? `<span class="stock-name-tag">${stockName}</span>` : '';
 
-  const yahooLink = isUS
+  const yahooLink = stockId === 'TWII'
+    ? 'https://tw.stock.yahoo.com/quote/%5ETWII'
+    : isUS
     ? `https://finance.yahoo.com/quote/${stockId}`
     : `https://tw.stock.yahoo.com/quote/${stockId}${currentSuffix}`;
 
