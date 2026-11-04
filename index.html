@@ -2208,16 +2208,22 @@ async function fetchPrice(stockId, token, customFrom = '', customTo = '') {
 }
 
 // ── 大戶持股分級（集保戶股權分散表，週資料）──
-async function fetchHolders(stockId, token) {
+// 資料來源：集保結算所週資料，由 GitHub Actions（scripts/fetch_tdcc.py）每週存成靜態 JSON。
+// FinMind 的股權分散表需付費會員，所以改讀自己網站上的檔案（同網域，無 CORS 問題）。
+const HOLDERS_BASE = './data/holders/';
+async function fetchHolders(stockId) {
   holderErr = '';
   try {
-    const params = { dataset: 'TaiwanStockHoldingSharesPer', data_id: stockId, start_date: _addDays(taipeiDateStr(), -400), end_date: taipeiDateStr() };
-    if (token) params.token = token;
-    const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
+    const bust = Math.floor(Date.now() / 3.6e6);   // 每小時換一次，避免瀏覽器/CDN 快取舊檔太久
+    const r = await fetch(`${HOLDERS_BASE}${encodeURIComponent(stockId)}.json?v=${bust}`);
+    if (r.status === 404) { holderErr = '尚無此代號的集保資料（排程尚未執行，或此代號不在抓取清單）'; return []; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
-    if (j?.data?.length) return j.data;
-    holderErr = j?.msg ? String(j.msg) : `HTTP ${r.status}，回傳空資料`;
-    console.warn('[大戶持股]', j?.status, j?.msg || '(empty)');
+    const rows = [];
+    (j.weeks || []).forEach(w => (w.p || []).forEach((pct, i) =>
+      rows.push({ date: w.d, HoldingSharesLevel: String(i + 1), people: w.n?.[i], percent: pct })));   // 級距 1~15，與 processHolders 的編號格式一致
+    if (!rows.length) holderErr = '檔案內沒有資料';
+    return rows;
   } catch (e) { holderErr = e.message; console.warn('[大戶持股]', e.message); }
   return [];
 }
@@ -2261,7 +2267,7 @@ function renderHolders(series, quiet) {
   if (!el) return;
   const hs = holderSummary(series);
   if (!hs) {
-    el.innerHTML = quiet ? '' : `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);line-height:1.6;">🏦 大戶持股：尚未取得資料${holderErr ? `（${escHtml(holderErr)}）` : ''}<br>可能是 FinMind 的額度／權限限制；詳細訊息請看瀏覽器 Console 的「[大戶持股]」。</div>`;
+    el.innerHTML = quiet ? '' : `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);line-height:1.6;">🏦 大戶持股：尚未取得資料${holderErr ? `（${escHtml(holderErr)}）` : ''}<br>資料由 GitHub Actions 每週更新（週五盤後），排程第一次跑完後才會出現；持股「變化」需累積 2 週以上、4 週變化需 5 週以上。</div>`;
     return;
   }
   const col = v => v > 0.004 ? 'var(--up)' : v < -0.004 ? 'var(--dn)' : 'var(--muted2)';
@@ -2362,7 +2368,7 @@ async function analyzeTW(stockId) {
       fetchStockName(stockId),
       cachedFetch(`rev:${stockId}`,  12*3600*1000, () => fetchRevenue(stockId, token)),
       cachedFetch(`eps:${stockId}`,  12*3600*1000, () => fetchEPS(stockId, token)),
-      cachedFetch(`hold:${stockId}`, 12*3600*1000, () => fetchHolders(stockId, token)),
+      cachedFetch(`hold:${stockId}`, 12*3600*1000, () => fetchHolders(stockId)),
     ]);
     liveMeta = null;
     intradayVolInfo = null;
