@@ -862,6 +862,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
         <div class="section-body" id="body-secChip">
           <div id="chipContent"><div style="color:var(--muted);font-size:.78rem;">尚無資料</div></div>
+          <div id="holderContent"></div>
         </div>
       </div>
 
@@ -1157,6 +1158,7 @@ function setTF(tf){
   setActivePeriod(w[tf==='D'?0:1][0]);
 }
 let chipData    = [];
+let holderData  = [];
 let kChart      = null;
 let volChart    = null;
 let macdChartObj= null;
@@ -2057,20 +2059,196 @@ async function fetchStockName(stockId) {
   } catch { return ''; }
 }
 
-async function fetchPrice(stockId, token, customFrom='', customTo='') {
-  const fmt = d => d.toISOString().slice(0,10);
-  const endBase = customTo ? new Date(customTo) : new Date();
-  const startBase = new Date(endBase);
-  startBase.setDate(startBase.getDate() - 2900);
-  const startDate = fmt(startBase);
-  const endDate   = fmt(endBase);
+// ═══════════════════════════════════════
+//  IndexedDB 快取（日線增量更新／籌碼／營收／財報／大戶持股）
+// ═══════════════════════════════════════
+const IDB_NAME = 'kline_cache_v1', IDB_STORE = 'kv';
+let _idbP = null;
+function idbOpen() {
+  if (_idbP) return _idbP;
+  _idbP = new Promise((res, rej) => {
+    if (!window.indexedDB) return rej(new Error('no indexedDB'));
+    const r = indexedDB.open(IDB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(IDB_STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.onblocked = () => rej(new Error('idb blocked'));
+  });
+  _idbP.catch(() => { _idbP = null; });
+  return _idbP;
+}
+async function idbGet(k) {
+  try {
+    const db = await idbOpen();
+    return await new Promise((res, rej) => {
+      const q = db.transaction(IDB_STORE).objectStore(IDB_STORE).get(k);
+      q.onsuccess = () => res(q.result ?? null);
+      q.onerror = () => rej(q.error);
+    });
+  } catch { return null; }
+}
+async function idbSet(k, v) {
+  try {
+    const db = await idbOpen();
+    await new Promise((res, rej) => {
+      const t = db.transaction(IDB_STORE, 'readwrite');
+      t.objectStore(IDB_STORE).put(v, k);
+      t.oncomplete = res; t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+    });
+  } catch {}
+}
+// 通用 TTL 快取。空結果不寫入（避免把額度用盡／網路失敗存成「無資料」）；
+// 抓取失敗（回傳空）時退回舊快取，當作額度用盡時的保險。
+async function cachedFetch(key, ttlMs, fetcher) {
+  const c = await idbGet(key);
+  if (c && Array.isArray(c.data) && c.data.length && Date.now() - c.at < ttlMs) return c.data;
+  const data = await fetcher();
+  if (Array.isArray(data) && data.length) { idbSet(key, { data, at: Date.now() }); return data; }
+  if (c && Array.isArray(c.data) && c.data.length) return c.data;
+  return data || [];
+}
+
+const PX_KEEP_DAYS = 2900;
+const _addDays = (str, n) => { const t = new Date(str + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+// 「此刻起資料理應已有」的最近交易日：平日 15:00 後 = 今天，其餘回推到前一個平日。
+// 國定假日無從得知，遇到時只會多打一次很小的增量請求，結果仍正確。
+function expectedLastTradingDate() {
+  const d = taipeiNow();
+  const mins = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const dow = d.getUTCDay();
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  if (!(dow >= 1 && dow <= 5 && mins >= 15 * 60)) t.setUTCDate(t.getUTCDate() - 1);
+  while (t.getUTCDay() === 0 || t.getUTCDay() === 6) t.setUTCDate(t.getUTCDate() - 1);
+  return t.toISOString().slice(0, 10);
+}
+const pxSlim = r => ({ date: r.date, open: r.open, max: r.max, min: r.min, close: r.close, Trading_Volume: r.Trading_Volume });
+async function finmindPriceRaw(stockId, token, startDate, endDate) {
   let url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${stockId}&start_date=${startDate}&end_date=${endDate}`;
   if (token) url += `&token=${encodeURIComponent(token)}`;
   const r = await fetch(url);
   const j = await r.json();
   if (j.status !== 200) throw new Error(j.msg || '查無資料');
-  if (!j.data?.length) throw new Error('查無此代號');
-  return j.data;
+  return (j.data || []).map(pxSlim);
+}
+async function fetchPrice(stockId, token, customFrom = '', customTo = '') {
+  const key = 'px:' + stockId;
+  const c = await idbGet(key);
+  const usable = c && Array.isArray(c.bars) && c.bars.length > 250 && (Date.now() - c.fullAt) < 30 * 864e5;
+  const endDate = customTo || taipeiDateStr();
+
+  // (a) 回測模式：截止日落在快取範圍內 → 直接切片，零請求
+  if (usable && customTo && customTo <= c.bars[c.bars.length - 1].date) {
+    const sl = c.bars.filter(d => d.date <= customTo);
+    if (sl.length >= 250) return sl;
+  }
+  // (b) 一般模式：只補最新幾天
+  if (usable && !customTo) {
+    const last = c.bars[c.bars.length - 1].date;
+    if (last >= expectedLastTradingDate()) return c.bars;            // 已是最新 → 零請求
+    try {
+      const fresh = await finmindPriceRaw(stockId, token, _addDays(last, -10), endDate);
+      if (!fresh.length) return c.bars;
+      const byDate = new Map(c.bars.map(b => [b.date, b]));
+      // 完整性檢查：重疊區間收盤價對不上 → 視為還原／更正，改走完整重抓
+      const restated = fresh.some(r => { const o = byDate.get(r.date); return o && o.close > 0 && Math.abs(r.close / o.close - 1) > 0.005; });
+      if (!restated) {
+        fresh.forEach(r => byDate.set(r.date, r));
+        const cutoff = _addDays(endDate, -PX_KEEP_DAYS);
+        const bars = [...byDate.values()].filter(b => b.date >= cutoff).sort((a, b) => a.date < b.date ? -1 : 1);
+        idbSet(key, { bars, fullAt: c.fullAt });
+        return bars;
+      }
+    } catch (e) {
+      console.warn('[增量更新失敗，沿用快取]', e.message);
+      return c.bars;
+    }
+  }
+  // (c) 完整抓取（首次／快取過期／被還原／回測截止日早於快取）
+  const bars = await finmindPriceRaw(stockId, token, _addDays(endDate, -PX_KEEP_DAYS), endDate);
+  if (!bars.length) throw new Error('查無此代號');
+  if (!customTo) idbSet(key, { bars, fullAt: Date.now() });
+  return bars;
+}
+
+// ── 大戶持股分級（集保戶股權分散表，週資料）──
+async function fetchHolders(stockId, token) {
+  try {
+    const params = { dataset: 'TaiwanStockHoldingSharesPer', data_id: stockId, start_date: _addDays(taipeiDateStr(), -400), end_date: taipeiDateStr() };
+    if (token) params.token = token;
+    const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
+    const j = await r.json();
+    if (j?.data?.length) return j.data;
+  } catch {}
+  return [];
+}
+// 集保 15 級下限（股），用於欄位為 1~15 級別編號的情況
+const _TDCC_LB = [1,1000,5001,10001,15001,20001,30001,40001,50001,100001,200001,400001,600001,800001,1000001];
+const HOLDER_BIG = 400001;    // 400 張以上
+const HOLDER_HUGE = 1000001;  // 1,000 張以上
+const HOLDER_RETAIL_MAX = 50000; // 未滿 50 張
+function processHolders(raw) {
+  if (!raw?.length) return [];
+  const byDate = new Map();
+  raw.forEach(r => {
+    const lv = String(r.HoldingSharesLevel ?? '').trim();
+    if (!lv || /total|合計|差異|調整/i.test(lv)) return;
+    let lo;
+    if (/^\d{1,2}$/.test(lv)) { const k = Number(lv); if (k < 1 || k > 15) return; lo = _TDCC_LB[k-1]; }
+    else { const m = lv.replace(/,/g, '').match(/\d+/); if (!m) return; lo = Number(m[0]); }
+    const pct = Number(r.percent), ppl = Number(r.people) || 0;
+    if (!Number.isFinite(pct)) return;
+    let g = byDate.get(r.date);
+    if (!g) { g = { date: r.date, big: 0, bigN: 0, huge: 0, hugeN: 0, retail: 0, retailN: 0, all: 0, allN: 0 }; byDate.set(r.date, g); }
+    g.all += pct; g.allN += ppl;
+    if (lo >= HOLDER_BIG)  { g.big += pct;  g.bigN += ppl; }
+    if (lo >= HOLDER_HUGE) { g.huge += pct; g.hugeN += ppl; }
+    if (lo <= HOLDER_RETAIL_MAX) { g.retail += pct; g.retailN += ppl; }
+  });
+  return [...byDate.values()].sort((a, b) => a.date < b.date ? -1 : 1);
+}
+// 持股「變化」比「水位」重要：水位主要反映股本結構（例如權值股千張大戶占比天生就高）
+function holderSummary(h) {
+  if (!h || h.length < 2) return null;
+  const L = h[h.length-1], p1 = h[h.length-2], p4 = h[Math.max(0, h.length-5)], p12 = h[Math.max(0, h.length-13)];
+  const d = (k, p) => L[k] - p[k];
+  return { L, weeks: h.length,
+    d1big: d('big', p1), d4big: d('big', p4), d12big: d('big', p12),
+    d4huge: d('huge', p4), d4bigN: d('bigN', p4), d4retail: d('retail', p4) };
+}
+const HOLDER_SIGNAL_PP = 0.5;   // 近 4 週大戶占比變動 ≥ 0.5 個百分點才計分（可依標的特性調整）
+function renderHolders(series) {
+  const el = document.getElementById('holderContent');
+  if (!el) return;
+  const hs = holderSummary(series);
+  if (!hs) { el.innerHTML = ''; return; }
+  const col = v => v > 0.004 ? 'var(--up)' : v < -0.004 ? 'var(--dn)' : 'var(--muted2)';
+  const fp = (v, dp = 2) => `${v > 0 ? '+' : ''}${v.toFixed(dp)}`;
+  const rows = series.slice(-6).reverse();
+  const prevOf = d => { const i = series.indexOf(d); return i > 0 ? series[i-1] : null; };
+  const th = (t, a = 'right') => `<td style="padding:3px 6px 6px;text-align:${a};font-size:.63rem;color:var(--muted2);">${t}</td>`;
+  el.innerHTML = `
+    <div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:6px;letter-spacing:1px;">🏦 大戶持股（集保週資料）</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.74rem;margin-bottom:8px;">
+        <span>400張以上 <b style="font-family:var(--mono)">${hs.L.big.toFixed(2)}%</b></span>
+        <span style="color:${col(hs.d1big)}">1週 ${fp(hs.d1big)}pp</span>
+        <span style="color:${col(hs.d4big)}">4週 ${fp(hs.d4big)}pp</span>
+        <span style="color:${col(hs.d12big)}">12週 ${fp(hs.d12big)}pp</span>
+      </div>
+      <table style="border-collapse:collapse;font-size:.74rem;width:100%;">
+        <tr>${th('資料日','left')}${th('≥400張%')}${th('週變')}${th('≥1000張%')}${th('大戶人數')}${th('<50張%')}</tr>
+        ${rows.map(d => { const p = prevOf(d); const dv = p ? d.big - p.big : 0; return `
+        <tr style="border-top:1px solid var(--border);">
+          <td style="padding:4px 6px 4px 0;color:var(--muted2);font-family:var(--mono);">${d.date.slice(5)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${d.big.toFixed(2)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);color:${col(dv)}">${p ? fp(dv) : '—'}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${d.huge.toFixed(2)}</td>
+          <td style="padding:4px 6px;text-align:right;font-family:var(--mono);">${d.bigN.toLocaleString()}</td>
+          <td style="padding:4px 0 4px 6px;text-align:right;font-family:var(--mono);">${d.retail.toFixed(2)}</td>
+        </tr>`; }).join('')}
+      </table>
+      <div style="font-size:.62rem;color:var(--muted);margin-top:6px;line-height:1.6;">大戶＝持股400張以上，含法人、董監與庫存戶，不等於「主力」；週資料約隔週公布，請看變化趨勢而非單一水位。</div>
+    </div>`;
 }
 
 async function fetchChip(stockId, token) {
@@ -2128,7 +2306,7 @@ async function analyzeTW(stockId) {
   document.getElementById('mainContent').classList.add('show');
   const customTo = document.getElementById('dateTo')?.value || '';
   try {
-    const [pd, cd, sn, rd, epsd] = await Promise.all([
+    const [pd, cd, sn, rd, epsd, hd] = await Promise.all([
       fetchPrice(stockId, token, '', customTo).catch(async e => {
         console.warn('[FinMind股價失敗，改用Yahoo]', e.message);
         const y = await fetchYahooPrice(stockId);
@@ -2137,14 +2315,15 @@ async function analyzeTW(stockId) {
         setStatus('FinMind 股價暫時無法取得，已改用 Yahoo 資料（籌碼／營收可能缺漏）', 'loading');
         return r;
       }),
-      fetchChip(stockId, token),
+      cachedFetch(`chip:${stockId}`, 60*60*1000,   () => fetchChip(stockId, token)),
       fetchStockName(stockId),
-      fetchRevenue(stockId, token),
-      fetchEPS(stockId, token),
+      cachedFetch(`rev:${stockId}`,  12*3600*1000, () => fetchRevenue(stockId, token)),
+      cachedFetch(`eps:${stockId}`,  12*3600*1000, () => fetchEPS(stockId, token)),
+      cachedFetch(`hold:${stockId}`, 12*3600*1000, () => fetchHolders(stockId, token)),
     ]);
     liveMeta = null;
     intradayVolInfo = null;
-    priceData = cleanBars(pd); chipData = cd; revenueData = rd; epsData = epsd;
+    priceData = cleanBars(pd); chipData = cd; revenueData = rd; epsData = epsd; holderData = hd;
     usInstitutional = []; usFinancials = [];
     currentStockId = stockId;
     addToRecent(stockId);
@@ -2173,6 +2352,8 @@ async function analyzeUS(ticker) {
     const { price, fin, name } = await fetchUSData(ticker);
     priceData = cleanBars(price);
     chipData  = [];
+    holderData = [];
+    renderHolders([]);
     revenueData = [];
     epsData = [];
     twiiData = [];
@@ -2363,19 +2544,15 @@ const lwChartOpts = (h) => ({
 });
 
 function calcMA(data, p) {
-  return data.map((d,i) => {
-    if(i < p-1) return null;
-    const s = data.slice(i-p+1,i+1).reduce((a,b)=>a+b.close,0)/p;
-    return { time: d.date, value: s };
-  }).filter(Boolean);
+  const m = ma(data, p), out = [];
+  for (let i = p-1; i < data.length; i++) out.push({ time: data[i].date, value: m[i] });
+  return out;
 }
 
 function calcAvgVol(data, p=20) {
-  return data.map((d,i) => {
-    if(i<p-1) return null;
-    const avg = data.slice(i-p+1,i+1).reduce((a,b)=>a+b.Trading_Volume,0)/p;
-    return { time:d.date, value:avg };
-  }).filter(Boolean);
+  const m = avgVol(data, p), out = [];
+  for (let i = p-1; i < data.length; i++) out.push({ time: data[i].date, value: m[i] });
+  return out;
 }
 
 // ═══════════════════════════════════════
@@ -2703,7 +2880,18 @@ function drawTrendChannel(data) {
 // ═══════════════════════════════════════
 //  INDICATORS
 // ═══════════════════════════════════════
-function ma(data, p){ return data.map((_,i)=>i<p-1?null:data.slice(i-p+1,i+1).reduce((s,d)=>s+d.close,0)/p); }
+// 滾動加總 O(n)；與舊版 slice+reduce 結果一致（浮點誤差 < 1e-9）
+function ma(data, p){
+  const n = data.length, out = new Array(n).fill(null);
+  if (p < 1 || n < p) return out;
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    sum += data[i].close;
+    if (i >= p) sum -= data[i-p].close;
+    if (i >= p-1) out[i] = sum / p;
+  }
+  return out;
+}
 
 function rsi(data, p=14){
   const g=[], l=[];
@@ -2724,8 +2912,8 @@ function kdjCalc(data, p=9){
   let pk=50,pd=50;
   return data.map((bar,i)=>{
     if(i<p-1) return null;
-    const sl=data.slice(i-p+1,i+1);
-    const hi=Math.max(...sl.map(b=>b.max)), lo=Math.min(...sl.map(b=>b.min));
+    let hi=-Infinity, lo=Infinity;
+    for(let j=i-p+1;j<=i;j++){ const b=data[j]; if(b.max>hi) hi=b.max; if(b.min<lo) lo=b.min; }
     const rsv=hi===lo?50:(bar.close-lo)/(hi-lo)*100;
     const kv=pk*2/3+rsv/3; const dv=pd*2/3+kv/3;
     pk=kv; pd=dv;
@@ -2737,17 +2925,24 @@ function bbCalc(data, p=20, m=2){
   const maArr=ma(data,p);
   return data.map((_,i)=>{
     if(i<p-1) return null;
-    const sl=data.slice(i-p+1,i+1), mean=maArr[i];
-    const std=Math.sqrt(sl.reduce((s,d)=>s+Math.pow(d.close-mean,2),0)/p);
+    const mean=maArr[i];
+    let ss=0;
+    for(let j=i-p+1;j<=i;j++){ const dv=data[j].close-mean; ss+=dv*dv; }
+    const std=Math.sqrt(ss/p);
     return {upper:mean+m*std, lower:mean-m*std, mid:mean};
   });
 }
 
 function avgVol(data, p=20){
-  return data.map((_,i)=>{
-    if(i<p-1) return null;
-    return data.slice(i-p+1,i+1).reduce((s,d)=>s+d.Trading_Volume,0)/p;
-  });
+  const n = data.length, out = new Array(n).fill(null);
+  if (p < 1 || n < p) return out;
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    sum += data[i].Trading_Volume;
+    if (i >= p) sum -= data[i-p].Trading_Volume;
+    if (i >= p-1) out[i] = sum / p;
+  }
+  return out;
 }
 
 function macdCalcArr(data, fast=12, slow=26, sig=9){
@@ -2766,16 +2961,21 @@ function macdCalcArr(data, fast=12, slow=26, sig=9){
 }
 
 function calcATR(data, p=14) {
-  return data.map((d, i) => {
-    if (i === 0) return d.max - d.min;
-    const tr = Math.max(d.max - d.min, Math.abs(d.max - data[i-1].close), Math.abs(d.min - data[i-1].close));
-    if (i < p) return tr;
-    const prev = data.slice(i-p+1, i+1);
-    return prev.reduce((s, b, j) => {
-      if (j === 0) return s;
-      return s + Math.max(b.max-b.min, Math.abs(b.max-prev[j-1].close), Math.abs(b.min-prev[j-1].close));
-    }, 0) / p;
-  });
+  const n = data.length, tr = new Array(n), out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const d = data[i];
+    tr[i] = i === 0 ? d.max - d.min
+      : Math.max(d.max - d.min, Math.abs(d.max - data[i-1].close), Math.abs(d.min - data[i-1].close));
+  }
+  // 舊版行為：i>=p 時 = (TR[i-p+2..i] 共 p-1 筆總和) / p（保持數值不變，改為滾動加總）
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    if (i < p) { out[i] = tr[i]; continue; }
+    if (i === p) { sum = 0; for (let j = 2; j <= p; j++) sum += tr[j]; }
+    else sum += tr[i] - tr[i-p+1];
+    out[i] = sum / p;
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════
@@ -2858,8 +3058,19 @@ function runAnalysis(slicedData, twiiRaw) {
       }
     }
   }
-  if(lma20 && last.close > lma20) { bullPts+=5*w.ma; }
-  if(lma60 && last.close > lma60) { bullPts+=5*w.ma; }
+  // 位置（股價 vs MA20 月線 / MA60 季線）：只在這裡計一次，且多空對稱
+  {
+    const up20 = lma20 ? last.close > lma20 : null;
+    const up60 = lma60 ? last.close > lma60 : null;
+    if (up20 !== null) { if (up20) bullPts += 5*w.ma; else bearPts += 5*w.ma; }
+    if (up60 !== null) { if (up60) bullPts += 5*w.ma; else bearPts += 5*w.ma; }
+    if (up20 !== null && up60 !== null) {
+      if (up20 && up60)        signals.push({type:'bull',cat:'均線',text:`股價站上 MA20（${lma20.toFixed(1)}）與 MA60（${lma60.toFixed(1)}），中期偏多`});
+      else if (!up20 && !up60) signals.push({type:'bear',cat:'均線',text:`股價在 MA20（${lma20.toFixed(1)}）與 MA60（${lma60.toFixed(1)}）之下，中期偏弱`});
+      else if (up20)           signals.push({type:'neutral',cat:'均線',text:`站上 MA20 但仍在 MA60（${lma60.toFixed(1)}）之下，屬中線反彈，待突破季線`});
+      else                     signals.push({type:'neutral',cat:'均線',text:`跌破 MA20 但守住 MA60（${lma60.toFixed(1)}），屬多頭修正，觀察季線支撐`});
+    }
+  }
   if(pma5&&lma5&&pma10&&lma10){
     if(pma5<pma10&&lma5>lma10){
       signals.push({type:'bull',cat:'均線',text:`MA5黃金交叉MA10，短線轉多`}); bullPts+=10*w.ma;
@@ -3130,6 +3341,17 @@ function runAnalysis(slicedData, twiiRaw) {
     } else {
       renderChip([]);
     }
+    // 大戶持股「變化」：近4週占比增減 ≥ 閾值，且最近一週方向一致才計分
+    const holderSeries = processHolders(holderData);
+    renderHolders(holderSeries);
+    const hs = holderSummary(holderSeries);
+    if (hs && hs.weeks >= 5) {
+      if (hs.d4big >= HOLDER_SIGNAL_PP && hs.d1big >= 0) {
+        signals.push({type:'bull',cat:'大戶持股',text:`400張以上大戶持股 ${hs.L.big.toFixed(1)}%，近4週 +${hs.d4big.toFixed(2)}pp，籌碼集中`}); bullPts += 5*w.chip;
+      } else if (hs.d4big <= -HOLDER_SIGNAL_PP && hs.d1big <= 0) {
+        signals.push({type:'bear',cat:'大戶持股',text:`400張以上大戶持股 ${hs.L.big.toFixed(1)}%，近4週 ${hs.d4big.toFixed(2)}pp，籌碼鬆動`}); bearPts += 5*w.chip;
+      }
+    }
   }
 
   // ── 策略額外加分 ──
@@ -3316,26 +3538,8 @@ function runAnalysis(slicedData, twiiRaw) {
   signals.push({ type: closePosition>=0.5?'bull':'bear', cat:'收盤強度', text: `${closePosLabel}（${(closePosition*100).toFixed(0)}%位置）` });
   if (shadowIntention) signals.push({ type: upperRatio>0.35?'bear':lowerRatio>0.35?'bull':'neutral', cat:'影線意圖', text: shadowIntention });
 
-  const week5   = n >= 5  ? data.slice(-5).reduce((s,d)=>s+d.close,0)/5   : last.close;
-  const week20  = n >= 20 ? data.slice(-20).reduce((s,d)=>s+d.close,0)/20 : last.close;
-  const month60 = n >= 60 ? data.slice(-60).reduce((s,d)=>s+d.close,0)/60 : null;
-  let weekType = 'neutral';
-  if (week5 > week20) {
-    signals.push({ type:'bull', cat:'週線強弱', text:`週線偏多（5日均${week5.toFixed(1)} > 20日均${week20.toFixed(1)}）` });
-    weekType = 'bull'; bullPts += 6;
-  } else {
-    signals.push({ type:'bear', cat:'週線強弱', text:`週線偏空（5日均${week5.toFixed(1)} < 20日均${week20.toFixed(1)}）` });
-    weekType = 'bear'; bearPts += 6;
-  }
-  if (month60) {
-    if (last.close > month60) {
-      signals.push({ type:'bull', cat:'月線強弱', text:`股價在月線之上（60日均${month60.toFixed(1)}），中線多頭` });
-      bullPts += 5;
-    } else {
-      signals.push({ type:'bear', cat:'月線強弱', text:`股價在月線之下（60日均${month60.toFixed(1)}），中線偏弱` });
-      bearPts += 5;
-    }
-  }
+  // （原「週線強弱」= MA5 vs MA20、「月線強弱」= 收盤 vs MA60，與上方均線排列／位置完全重複，已移除計分與訊號）
+  const weekType = (lma5 && lma20 && lma5 > lma20) ? 'bull' : 'bear';
 
   if (lma5 && lma10 && lma20) {
     const maHigh  = Math.max(lma5, lma10, lma20);
@@ -3418,7 +3622,7 @@ function runAnalysis(slicedData, twiiRaw) {
       return { key:'pullback', reason:`貼近MA20（${((last.close-lma20)/lma20*100).toFixed(1)}%）+ 量縮，回踩承接機會` };
 
     // pullback MA60：貼近MA60 + 量縮
-    const lma60_as = n>=60 ? data.slice(-60).reduce((s,d)=>s+d.close,0)/60 : null;
+    const lma60_as = lma60 || null;
     if (lma60_as && Math.abs(last.close - lma60_as)/lma60_as < 0.06 && volShrink_as && lrsi && lrsi > 35)
       return { key:'pullback', reason:`貼近MA60季線（${((last.close-lma60_as)/lma60_as*100).toFixed(1)}%）+ 量縮，大波段回踩機會` };
 
@@ -3508,9 +3712,9 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
 // ═══════════════════════════════════════
 const SIG_DIM = {'均線':'trend','週線強弱':'trend','月線強弱':'trend','均線糾結':'trend','支撐壓力':'trend','壓力強度':'trend','支撐強度':'trend',
   'MACD':'mom','RSI':'mom','RSI背離':'mom','KD':'mom','布林':'mom','K線型態':'mom','K線收斂':'mom','收盤強度':'mom','影線意圖':'mom','相對強弱':'mom','突破品質':'mom','缺口回補':'mom','漲跌停':'mom',
-  '量價':'vol','量能啟動':'vol','回測量縮':'vol','籌碼':'chip'};
+  '量價':'vol','量能啟動':'vol','回測量縮':'vol','籌碼':'chip','大戶持股':'chip'};
 const SIG_CORE = new Set(['盤中','均線','週線強弱','月線強弱','量價','量能啟動','回測量縮','K線型態','突破品質','缺口回補']);
-const SIG_BASE = {'均線':2,'週線強弱':2,'月線強弱':2,'均線糾結':2,'量價':2,'量能啟動':3,'K線型態':2,'突破品質':3,'回測量縮':2,'缺口回補':2,'漲跌停':3,'MACD':2,'RSI':1,'KD':1,'布林':1,'籌碼':2,'相對強弱':2,'收盤強度':1,'影線意圖':1,'K線收斂':1,'支撐壓力':1,'壓力強度':1,'支撐強度':1,'RSI背離':2,'盤中':3};
+const SIG_BASE = {'均線':2,'週線強弱':2,'月線強弱':2,'均線糾結':2,'量價':2,'量能啟動':3,'K線型態':2,'突破品質':3,'回測量縮':2,'缺口回補':2,'漲跌停':3,'MACD':2,'RSI':1,'KD':1,'布林':1,'籌碼':2,'大戶持股':2,'相對強弱':2,'收盤強度':1,'影線意圖':1,'K線收斂':1,'支撐壓力':1,'壓力強度':1,'支撐強度':1,'RSI背離':2,'盤中':3};
 function sigStrength(x){
   if (x.str) return x.str;
   let b = SIG_BASE[x.cat] || 1;
@@ -3808,19 +4012,13 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
 
   const last3 = data.slice(-3);
   const sl_hard = Math.min(...last3.map(d => d.min));
-  const ma5arr = data.map((_,i) => i < 4 ? null : data.slice(i-4, i+1).reduce((s,d)=>s+d.close,0)/5);
+  const ma5arr = ma(data, 5);
   const sl_ma5 = ma5arr[n-1];
   const riskBase = Math.max(p - sl_hard, p * 0.005);
 
   const ref60 = data.slice(-60, -3);
   const resistance = ref60.length ? Math.max(...ref60.map(d => d.max)) : null;
-  const bbArr = data.map((_,i) => {
-    if(i < 19) return null;
-    const sl2 = data.slice(i-19, i+1);
-    const mean = sl2.reduce((s,d)=>s+d.close,0)/20;
-    const std = Math.sqrt(sl2.reduce((s,d)=>s+Math.pow(d.close-mean,2),0)/20);
-    return mean + 2*std;
-  });
+  const bbArr = bbCalc(data, 20).map(x => x ? x.upper : null);
   const bbUpper = bbArr[n-1];
 
   let tp1_price = null;
