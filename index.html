@@ -2254,8 +2254,8 @@ function processHolders(raw) {
 }
 // 持股「變化」比「水位」重要：水位主要反映股本結構（例如權值股千張大戶占比天生就高）
 function holderSummary(h) {
-  if (!h || h.length < 2) return null;
-  const L = h[h.length-1], p1 = h[h.length-2], p4 = h[Math.max(0, h.length-5)], p12 = h[Math.max(0, h.length-13)];
+  if (!h || h.length < 1) return null;
+  const L = h[h.length-1], p1 = h[Math.max(0, h.length-2)], p4 = h[Math.max(0, h.length-5)], p12 = h[Math.max(0, h.length-13)];
   const d = (k, p) => L[k] - p[k];
   return { L, weeks: h.length,
     d1big: d('big', p1), d4big: d('big', p4), d12big: d('big', p12),
@@ -2267,7 +2267,7 @@ function renderHolders(series, quiet) {
   if (!el) return;
   const hs = holderSummary(series);
   if (!hs) {
-    el.innerHTML = quiet ? '' : `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);line-height:1.6;">🏦 大戶持股：尚未取得資料${holderErr ? `（${escHtml(holderErr)}）` : ''}<br>資料由 GitHub Actions 每週更新（週五盤後），排程第一次跑完後才會出現；持股「變化」需累積 2 週以上、4 週變化需 5 週以上。</div>`;
+    el.innerHTML = quiet ? '' : `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);line-height:1.6;">🏦 大戶持股：尚未取得資料${holderErr ? `（${escHtml(holderErr)}）` : ''}<br>資料由 GitHub Actions 每週更新（週五盤後），排程第一次跑完後才會出現；第 1 週即顯示當週持股；週變需 2 週、4 週變化與訊號計分需 5 週。</div>`;
     return;
   }
   const col = v => v > 0.004 ? 'var(--up)' : v < -0.004 ? 'var(--dn)' : 'var(--muted2)';
@@ -2280,9 +2280,10 @@ function renderHolders(series, quiet) {
       <div style="font-size:.63rem;color:var(--muted2);font-family:var(--mono);margin-bottom:6px;letter-spacing:1px;">🏦 大戶持股（集保週資料）</div>
       <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:.74rem;margin-bottom:8px;">
         <span>400張以上 <b style="font-family:var(--mono)">${hs.L.big.toFixed(2)}%</b></span>
-        <span style="color:${col(hs.d1big)}">1週 ${fp(hs.d1big)}pp</span>
-        <span style="color:${col(hs.d4big)}">4週 ${fp(hs.d4big)}pp</span>
-        <span style="color:${col(hs.d12big)}">12週 ${fp(hs.d12big)}pp</span>
+        ${hs.weeks >= 2 ? `<span style="color:${col(hs.d1big)}">1週 ${fp(hs.d1big)}pp</span>` : ''}
+        ${hs.weeks >= 5 ? `<span style="color:${col(hs.d4big)}">4週 ${fp(hs.d4big)}pp</span>` : ''}
+        ${hs.weeks >= 13 ? `<span style="color:${col(hs.d12big)}">12週 ${fp(hs.d12big)}pp</span>` : ''}
+        ${hs.weeks < 5 ? `<span style="color:var(--muted2)">趨勢累積中（${hs.weeks}/5 週）</span>` : ''}
       </div>
       <table style="border-collapse:collapse;font-size:.74rem;width:100%;">
         <tr>${th('資料日','left')}${th('≥400張%')}${th('週變')}${th('≥1000張%')}${th('大戶人數')}${th('<50張%')}</tr>
