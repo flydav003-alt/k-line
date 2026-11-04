@@ -1,0 +1,28 @@
+name: TDCC weekly holders
+
+on:
+  schedule:
+    - cron: '30 11 * * 5'   # 週五 19:30（台北）；集保於當週最後營業日盤後更新
+    - cron: '30 2 * * 6'    # 週六 10:30（台北）補跑一次（同一週重跑只會覆蓋，不會重複）
+  workflow_dispatch:         # 也可在 Actions 頁面手動執行
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fetch TDCC shareholding distribution
+        run: python scripts/fetch_tdcc.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/holders
+          git diff --cached --quiet || git commit -m "chore: weekly TDCC holders $(date -u +%F)"
+          git push
