@@ -1864,14 +1864,16 @@ function withTimeout(p, ms) {
 
 // ── 來源 1：證交所 MIS（上市 tse / 上櫃 otc 一次問，只會回傳存在的那個）──
 async function fetchTWSERealtime(stockId) {
-  const ex  = `tse_${stockId}.tw|otc_${stockId}.tw`;
+  const isIdx = stockId === 'TWII';                    // 加權指數：MIS 代號是 tse_t00.tw
+  const misId = isIdx ? 't00' : stockId;
+  const ex  = isIdx ? 'tse_t00.tw' : `tse_${stockId}.tw|otc_${stockId}.tw`;
   const url = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=${encodeURIComponent(ex)}&json=1&delay=0&_=${Date.now()}`;
   const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
   const firstOf = s => num(String(s || '').split('_')[0]);   // 五檔字串 "592_593_..." 取第一檔
 
   const parse = raw => {
     const j = unwrapProxy(raw);
-    const items = (j?.msgArray || []).filter(x => x && x.c === stockId);
+    const items = (j?.msgArray || []).filter(x => x && x.c === misId);
     if (!items.length) throw new Error(`MIS 無資料（rtcode ${j?.rtcode ?? '?'}／${j?.rtmessage ?? '空回應'}）`);
     // z=最新成交價；'-' 代表尚無成交
     const it = items.find(x => num(x.z) !== null) || items.find(x => num(x.o) !== null);
@@ -1894,10 +1896,10 @@ async function fetchTWSERealtime(stockId) {
       max:  Math.max(h ?? c, o, c),
       min:  Math.min(l ?? c, o, c),
       close: c,
-      Trading_Volume: (v ?? 0) * 1000,      // 張 → 股（和 FinMind 的單位一致）
+      Trading_Volume: isIdx ? 0 : (v ?? 0) * 1000,   // 張 → 股（和 FinMind 的單位一致）；指數不使用成交量
       prevClose: y,
       time: it.t || '',
-      name: it.n || '',
+      name: isIdx ? '' : (it.n || ''),
       ex:   it.ex || '',
       source: approx ? 'TWSE即時(買賣中價)' : 'TWSE即時',
     };
@@ -1934,14 +1936,15 @@ async function fetchYahooTodayBar(stockId) {
     };
   };
   const attempt = async (suffix, node) => {
-    const url  = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockId + suffix)}?interval=1m&range=1d&includePrePost=false&_=${Date.now()}`;
+    const sym  = stockId === 'TWII' ? '^TWII' : stockId + suffix;
+    const url  = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=false&_=${Date.now()}`;
     const bars = await tryYahooUrl(url);
     if (!bars || !bars.length) throw new Error('empty');
     return { suffix, bar: aggregate(bars) };
   };
   for (const node of ['query1', 'query2']) {
     try {
-      const r = await Promise.any(['.TW', '.TWO'].map(s => attempt(s, node)));
+      const r = await Promise.any((stockId === 'TWII' ? [''] : ['.TW', '.TWO']).map(s => attempt(s, node)));
       currentSuffix = r.suffix;
       return r.bar;
     } catch {}
@@ -1964,8 +1967,8 @@ async function fetchLiveBar(stockId) {
   };
   const bar = await withTimeout(run(), RT_FETCH_TIMEOUT_MS).catch(() => null);
   if (bar && bar.source.startsWith('TWSE')) {
-    currentSuffix = bar.ex === 'otc' ? '.TWO' : '.TW';
-    if (bar.name) rememberName(stockId, bar.name);
+    currentSuffix = stockId === 'TWII' ? '' : (bar.ex === 'otc' ? '.TWO' : '.TW');
+    if (bar.name && stockId !== 'TWII') rememberName(stockId, bar.name);
   }
   return bar;
 }
@@ -1975,6 +1978,7 @@ function mergeLiveBar(pd, bar) {
   if (!bar || !(bar.close > 0)) return false;
   const last = pd[pd.length - 1];
   const live = { date: bar.date, open: bar.open, max: bar.max, min: bar.min, close: bar.close, Trading_Volume: bar.Trading_Volume };
+  if (currentStockId === 'TWII') delete live.Trading_Volume;   // 指數無成交量，保留日線原值
   if (last && last.date === bar.date) { pd[pd.length - 1] = { ...last, ...live }; return true; }
   if (!last || bar.date > last.date) { pd.push(live); return true; }
   return false;
@@ -1991,7 +1995,7 @@ async function applyLiveBar(pd, stockId) {
   const prevDay = sameDay ? pd[pd.length - 2] : last;
   if (!mergeLiveBar(pd, bar)) return { status: 'stale', bar };
   liveMeta = { source: bar.source, time: bar.time || taipeiTimeStr() };
-  if (open && prevDay) {
+  if (open && prevDay && stockId !== 'TWII') {
     const todayVol   = bar.Trading_Volume;
     const prevDayVol = prevDay.Trading_Volume || 0;
     intradayVolInfo = {
@@ -2508,10 +2512,10 @@ function renderMeta(stockId, stockName, market) {
       ${priceFormat}
     </span>
     <span class="price-chg ${up?'up':'dn'}">${up?'▲':'▼'} ${Math.abs(chg).toFixed(2)} (${up?'+':''}${pct}%)</span>
-    <span class="meta-pill">開 <b>${isUS ? '$'+last.open.toFixed(2) : last.open}</b></span>
-    <span class="meta-pill">高 <b>${isUS ? '$'+last.max.toFixed(2) : last.max}</b></span>
-    <span class="meta-pill">低 <b>${isUS ? '$'+last.min.toFixed(2) : last.min}</b></span>
-    <span class="meta-pill">量 <b>${volText}</b></span>
+    <span class="meta-pill">開 <b>${isUS ? '$'+last.open.toFixed(2) : (stockId === 'TWII' ? last.open.toFixed(2) : last.open)}</b></span>
+    <span class="meta-pill">高 <b>${isUS ? '$'+last.max.toFixed(2) : (stockId === 'TWII' ? last.max.toFixed(2) : last.max)}</b></span>
+    <span class="meta-pill">低 <b>${isUS ? '$'+last.min.toFixed(2) : (stockId === 'TWII' ? last.min.toFixed(2) : last.min)}</b></span>
+    ${stockId === 'TWII' ? '' : `<span class="meta-pill">量 <b>${volText}</b></span>`}
     ${!isUS && liveMeta ? `<span class="meta-pill">📡 <b>${liveMeta.source}</b> ${liveMeta.time}</span>` : ''}
     ${!isUS && intradayVolInfo ? (() => {
       const { todayVol, prevDayVol, ratio, volShare, time } = intradayVolInfo;
