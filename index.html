@@ -697,6 +697,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <span class="kbd-hint" title="切換240日">3</span>
     <span class="kbd-hint" title="切換480日">4</span>
     <span class="kbd-hint" title="T: 趨勢通道">T</span>
+    <span class="kbd-hint" title="P: K線型態標記">P</span>
     <span class="kbd-hint" title="Esc: 清除回測">Esc</span>
   </div>
 </header>
@@ -759,6 +760,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" style="cursor:pointer;user-select:none;">
             趨勢通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
           </div>
+          <div class="chart-tab" id="patternToggleBtn" onclick="togglePatterns()" style="cursor:pointer;user-select:none;" title="在K線圖上標示偵測到的K線型態（P）">
+            K線型態&nbsp;<span id="patternStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
+          </div>
         </div>
       </div>
 
@@ -771,8 +775,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         <div class="ma-chip-btn" data-ma="60" style="background:rgba(167,139,250,.15);border-color:#a78bfa;color:#a78bfa;" onclick="toggleMA(60)">MA60</div>
         <div class="ma-chip-btn" data-ma="120" data-off="1" style="background:rgba(52,211,153,.15);border-color:#34d399;color:#34d399;" onclick="toggleMA(120)">MA120</div>
         <div class="ma-chip-btn" data-ma="240" data-off="1" style="background:rgba(251,146,60,.15);border-color:#fb923c;color:#fb923c;" onclick="toggleMA(240)">MA240</div>
-        <span style="font-family:var(--mono);font-size:.62rem;padding:3px 8px;border-radius:10px;background:rgba(255,200,50,.1);border:1px solid rgba(255,200,50,.3);color:rgba(255,200,50,.85);margin-left:4px;" title="成交量加權均價，代表市場平均持倉成本">VWAP</span>
-        <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="0" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
+        <div class="ma-chip-btn" id="vwapChip" data-off="0" style="background:rgba(255,200,50,.12);border-color:rgba(255,200,50,.6);color:rgba(255,200,50,.9);margin-left:4px;" onclick="toggleVWAP()" title="VWAP：由目前顯示區間第一根K棒起算的成交量加權均價（點擊開關）">VWAP</div>
+        <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
       </div>
       <div class="chart-block">
@@ -1159,6 +1163,7 @@ function setTF(tf){
 }
 let chipData    = [];
 let holderData  = [];
+let holderErr   = '';
 let kChart      = null;
 let volChart    = null;
 let macdChartObj= null;
@@ -1175,12 +1180,17 @@ let rsiOBSeries = null;
 let rsiOSSeries = null;
 let bbUpperSeries = null, bbLowerSeries = null, bbMidSeries = null;
 let kdKSeries = null, kdDSeries = null;
-let bbVisible = true;
+let bbVisible = false;      // 預設關閉
+let vwapVisible = true;
+let vwapSeries = null;
+let showPatterns = false;   // K線型態標記，預設關閉
+let _markerArgs = null;
 let kdVisible = true;
 let maVisibility = { 5:false, 10:false, 20:true, 60:true, 120:false, 240:false };
 let wlQuotes = {};      // 追蹤清單報價：id -> { price, chg }
 let wlDate   = '';      // MIS 回傳的交易日，用來判斷休市日就不必輪詢
 let wlBusy   = false;
+let wlTried  = false;   // 已嘗試抓過報價：抓不到時顯示「—」而不是整個消失（需在 renderWatchlist() 首次執行前宣告）
 let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c));
 let recentHistory = JSON.parse(localStorage.getItem('kline_recent')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c));
 let currentStockId = '';
@@ -1348,6 +1358,26 @@ function toggleBB() {
   });
 }
 
+// ── VWAP TOGGLE ──
+function toggleVWAP() {
+  vwapVisible = !vwapVisible;
+  const chip = document.getElementById('vwapChip');
+  if (chip) chip.dataset.off = vwapVisible ? '0' : '1';
+  if (vwapSeries) { try { vwapSeries.applyOptions({ visible: vwapVisible }); } catch {} }
+}
+
+// ── K線型態標記 TOGGLE ──
+function togglePatterns() {
+  showPatterns = !showPatterns;
+  const st = document.getElementById('patternStatus');
+  if (st) {
+    st.textContent = showPatterns ? 'ON' : 'OFF';
+    st.style.background = showPatterns ? 'var(--cyan)' : 'var(--border)';
+    st.style.color = showPatterns ? '#000' : 'var(--muted)';
+  }
+  if (_markerArgs) addVolumeMarkers(..._markerArgs);   // 只重設標記，不重畫整張圖
+}
+
 // ── KD TOGGLE ──
 function toggleKDline() {
   kdVisible = !kdVisible;
@@ -1489,7 +1519,7 @@ renderWatchlist();
 let wlLastPx = {};   // code -> 上次渲染的價格，用來判斷是否需要閃爍提示
 function quoteBadge(code) {
   const q = wlQuotes[code];
-  if (!q || q.price == null) return '';
+  if (!q || q.price == null) return (wlTried && /^\d/.test(code)) ? '<span class="wl-px" style="color:var(--muted)" title="尚無報價（可能尚未成交或來源失敗，詳見 Console）">—</span>' : '';
   const up = q.chg > 0, dn = q.chg < 0;
   const color = up ? 'var(--up)' : dn ? 'var(--green)' : 'var(--muted2)';
   const pct = q.chg == null ? '' : ` ${up ? '▲' : dn ? '▼' : ''}${Math.abs(q.chg).toFixed(2)}%`;
@@ -1497,16 +1527,23 @@ function quoteBadge(code) {
   let flashCls = '';
   if (prevPx != null && prevPx !== q.price) flashCls = q.price > prevPx ? ' flash-up' : ' flash-dn';
   wlLastPx[code] = q.price;
-  return `<span class="wl-px${flashCls}" style="color:${color}">${q.price.toFixed(2)}${pct}</span>`;
+  return `<span class="wl-px${flashCls}" style="color:${color}"${q.approx ? ' title="尚無成交，顯示買賣中價"' : ''}>${q.price.toFixed(2)}${pct}</span>`;
 }
 function parseWatchQuotes(j) {
   const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : null; };
+  const firstOf = s => num(String(s || '').split('_')[0]);   // 五檔字串 "592_593_..." 取第一檔
   (j && j.msgArray || []).forEach(it => {
     if (!it || !it.c) return;
-    const z = num(it.z), y = num(it.y);
+    let z = num(it.z), approx = false;
+    const y = num(it.y);
     if (it.n) rememberName(it.c, it.n);
     if (/^\d{8}$/.test(it.d || '')) wlDate = `${it.d.slice(0,4)}-${it.d.slice(4,6)}-${it.d.slice(6,8)}`;
-    wlQuotes[it.c] = { price: z, chg: (z != null && y) ? (z - y) / y * 100 : null };
+    if (z === null) {   // 該筆更新沒有成交（z 為 '-'）→ 改用最佳買賣價中間值，與主畫面「買賣中價」一致
+      const a = firstOf(it.a), b = firstOf(it.b);
+      if (a && b) { z = (a + b) / 2; approx = true; }
+      else if (wlQuotes[it.c]?.price != null) return;       // 都沒有 → 保留上一筆，不要把報價清掉
+    }
+    wlQuotes[it.c] = { price: z, chg: (z != null && y) ? (z - y) / y * 100 : null, approx };
   });
 }
 async function refreshWatchlistQuotes() {
@@ -1521,7 +1558,7 @@ async function refreshWatchlistQuotes() {
     parseWatchQuotes(await r.json());
     renderWatchlist();
   } catch (e) { console.warn('[追蹤清單報價]', e.message); }
-  finally { wlBusy = false; }
+  finally { wlBusy = false; wlTried = true; renderWatchlist(); }
 }
 function wlTick(force) {
   if (document.hidden) return;
@@ -2172,13 +2209,16 @@ async function fetchPrice(stockId, token, customFrom = '', customTo = '') {
 
 // ── 大戶持股分級（集保戶股權分散表，週資料）──
 async function fetchHolders(stockId, token) {
+  holderErr = '';
   try {
     const params = { dataset: 'TaiwanStockHoldingSharesPer', data_id: stockId, start_date: _addDays(taipeiDateStr(), -400), end_date: taipeiDateStr() };
     if (token) params.token = token;
     const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
     const j = await r.json();
     if (j?.data?.length) return j.data;
-  } catch {}
+    holderErr = j?.msg ? String(j.msg) : `HTTP ${r.status}，回傳空資料`;
+    console.warn('[大戶持股]', j?.status, j?.msg || '(empty)');
+  } catch (e) { holderErr = e.message; console.warn('[大戶持股]', e.message); }
   return [];
 }
 // 集保 15 級下限（股），用於欄位為 1~15 級別編號的情況
@@ -2216,11 +2256,14 @@ function holderSummary(h) {
     d4huge: d('huge', p4), d4bigN: d('bigN', p4), d4retail: d('retail', p4) };
 }
 const HOLDER_SIGNAL_PP = 0.5;   // 近 4 週大戶占比變動 ≥ 0.5 個百分點才計分（可依標的特性調整）
-function renderHolders(series) {
+function renderHolders(series, quiet) {
   const el = document.getElementById('holderContent');
   if (!el) return;
   const hs = holderSummary(series);
-  if (!hs) { el.innerHTML = ''; return; }
+  if (!hs) {
+    el.innerHTML = quiet ? '' : `<div style="margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);line-height:1.6;">🏦 大戶持股：尚未取得資料${holderErr ? `（${escHtml(holderErr)}）` : ''}<br>可能是 FinMind 的額度／權限限制；詳細訊息請看瀏覽器 Console 的「[大戶持股]」。</div>`;
+    return;
+  }
   const col = v => v > 0.004 ? 'var(--up)' : v < -0.004 ? 'var(--dn)' : 'var(--muted2)';
   const fp = (v, dp = 2) => `${v > 0 ? '+' : ''}${v.toFixed(dp)}`;
   const rows = series.slice(-6).reverse();
@@ -2353,7 +2396,7 @@ async function analyzeUS(ticker) {
     priceData = cleanBars(price);
     chipData  = [];
     holderData = [];
-    renderHolders([]);
+    renderHolders([], true);
     revenueData = [];
     epsData = [];
     twiiData = [];
@@ -2631,13 +2674,14 @@ function buildCharts(data, keepRange = false) {
       cumV  += d.Trading_Volume;
       return { time: d.date, value: cumV > 0 ? cumPV / cumV : d.close };
     });
-    const vwapSeries = kChart.addLineSeries({
+    vwapSeries = kChart.addLineSeries({
       color: 'rgba(255,200,50,0.85)', lineWidth: 2,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       priceLineVisible: false, lastValueVisible: true,
-      crosshairMarkerVisible: false, title: 'VWAP',
+      crosshairMarkerVisible: false, title: 'VWAP', visible: vwapVisible,
     });
     vwapSeries.setData(vwapData);
+    document.getElementById('vwapChip')?.setAttribute('data-off', vwapVisible ? '0' : '1');
   }
 
   // 布林通道
@@ -4443,6 +4487,7 @@ function detectRSIDivergence(data, rsiArr) {
 // ═══════════════════════════════════════
 function addVolumeMarkers(data, avgVolArr) {
   if(!candleSeries) return;
+  _markerArgs = [data, avgVolArr];
   const markers = [];
   data.forEach((d, i) => {
     const avg = avgVolArr[i];
@@ -4460,8 +4505,8 @@ function addVolumeMarkers(data, avgVolArr) {
       markers.push({ time: d.date, position: 'aboveBar', color: 'rgba(100,116,139,0.7)', shape: 'circle', text: '縮', size: 0 });
     }
   });
-  // 型態標記（用完整歷史偵測，只標顯示區間）
-  try {
+  // 型態標記（用完整歷史偵測，只標顯示區間）— 由「K線型態」開關控制，預設關閉
+  if (showPatterns) try {
     const A=vd(), off=A.length-data.length;
     if(off>=0){
       const atr=calcATR(A,14), m20=ma(A,20);
@@ -4492,6 +4537,7 @@ document.addEventListener('keydown', e => {
       if(priceData.length) analyze();
       break;
     case 't': case 'T': toggleTrendChannel(); break;
+    case 'p': case 'P': togglePatterns(); break;
   }
 });
 
