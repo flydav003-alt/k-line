@@ -4084,14 +4084,17 @@ function renderSignals(signals, score, bullPts, bearPts) {
   // 四維分數與共振
   const dm = dimScores(signals), dl = Object.values(dm).filter(d=>d.score!==null);
   const dc = v => v>=60?'var(--up)':v<=40?'var(--dn)':'var(--gold)';
-  const nBull = dl.filter(d=>d.score>=60).length, nBear = dl.filter(d=>d.score<=40).length;
+  // 共振判斷不含動能：研究顯示動能偏低反而偏好（總分已反向計入），不能再當「偏空」
+  const dlR = dl.filter(d=>d.name!=='動能');
+  const nBull = dlR.filter(d=>d.score>=60).length, nBear = dlR.filter(d=>d.score<=40).length;
   let reso, resoC;
-  if (dl.length>=3 && nBull===dl.length)      { reso=`✅ ${dl.length}維全數偏多，訊號高度共振`; resoC='var(--up)'; }
-  else if (dl.length>=3 && nBear===dl.length) { reso=`⚠ ${dl.length}維全數偏空，訊號高度共振`; resoC='var(--dn)'; }
-  else if (nBull>=3)                          { reso=`${nBull}/${dl.length}維偏多，共振偏多；${dl.filter(d=>d.score<60).map(d=>d.name).join('、')}尚未跟上`; resoC='var(--up)'; }
-  else if (nBear>=3)                          { reso=`${nBear}/${dl.length}維偏空，共振偏空`; resoC='var(--dn)'; }
-  else if (nBull>=1 && nBear>=1)              { reso=`多空分歧：${dl.filter(d=>d.score>=60).map(d=>d.name).join('、')}偏多，但${dl.filter(d=>d.score<=40).map(d=>d.name).join('、')}偏空，訊號不一致，降低信心`; resoC='var(--gold)'; }
+  if (dlR.length>=2 && nBull===dlR.length)      { reso=`✅ ${dlR.length}維全數偏多，訊號高度共振`; resoC='var(--up)'; }
+  else if (dlR.length>=2 && nBear===dlR.length) { reso=`⚠ ${dlR.length}維全數偏空，訊號高度共振`; resoC='var(--dn)'; }
+  else if (nBull>=2)                          { reso=`${nBull}/${dlR.length}維偏多，共振偏多；${dlR.filter(d=>d.score<60).map(d=>d.name).join('、')}尚未跟上`; resoC='var(--up)'; }
+  else if (nBear>=2)                          { reso=`${nBear}/${dlR.length}維偏空，共振偏空`; resoC='var(--dn)'; }
+  else if (nBull>=1 && nBear>=1)              { reso=`多空分歧：${dlR.filter(d=>d.score>=60).map(d=>d.name).join('、')}偏多，但${dlR.filter(d=>d.score<=40).map(d=>d.name).join('、')}偏空，訊號不一致，降低信心`; resoC='var(--gold)'; }
   else                                        { reso='各維度未形成明確方向，以觀望為主'; resoC='var(--muted2)'; }
+  reso += '（共振不含動能）';
   const dimHtml = `<div style="background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
     <div style="font-size:.66rem;color:var(--muted2);font-family:var(--mono);letter-spacing:1px;margin-bottom:6px;">◆ 四維分數（總分 ${score ?? '-'}）</div>
     ${Object.values(dm).map(d=> d.score===null ? `<div style="display:flex;align-items:center;gap:8px;font-size:.72rem;margin:3px 0;color:var(--muted);"><span style="width:34px;">${d.name}</span><span>無訊號</span></div>` :
