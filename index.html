@@ -177,6 +177,29 @@ body.us-mode #stockInput{ width:110px; }
   cursor:pointer;white-space:nowrap;transition:all .15s;
 }
 .btn-clear-date:hover{border-color:var(--red);color:var(--red);}
+.btn-step{
+  background:var(--s2);color:var(--muted2);border:1px solid var(--border2);
+  padding:5px 8px;border-radius:6px;font-size:.72rem;font-family:var(--font);
+  cursor:pointer;white-space:nowrap;transition:all .15s;line-height:1;
+}
+.btn-step:hover{border-color:var(--gold);color:var(--gold);}
+.btn-step:disabled{opacity:.4;cursor:default;}
+#btBanner{
+  display:none;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:6px 16px;background:rgba(255,159,64,.12);border-bottom:1px solid rgba(255,159,64,.45);
+  color:#ff9f40;font-size:.74rem;
+}
+#btBanner b{font-family:var(--mono);}
+#btBanner .bt-act{
+  background:transparent;border:1px solid rgba(255,159,64,.55);color:#ff9f40;
+  padding:2px 9px;border-radius:5px;font-size:.68rem;cursor:pointer;font-family:var(--font);
+}
+#btBanner .bt-act:hover{background:rgba(255,159,64,.18);}
+.bt-card{margin:10px 12px;padding:10px 12px;border:1px solid rgba(255,159,64,.4);border-radius:8px;background:rgba(255,159,64,.05);}
+.bt-card table{border-collapse:collapse;width:100%;font-size:.74rem;}
+.bt-card td,.bt-card th{padding:3px 6px;text-align:right;font-weight:400;}
+.bt-card td:first-child,.bt-card th:first-child{text-align:left;color:var(--muted2);}
+.bt-card th{color:var(--muted2);font-size:.63rem;}
 
 /* ── STATUS ── */
 #statusBar{
@@ -686,7 +709,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
     <div class="date-range-bar">
       <span style="font-size:.7rem;color:var(--muted2);white-space:nowrap;">回測至</span>
+      <button class="btn-step" id="btnPrevDay" onclick="stepBt(-1)" title="前一交易日（鍵盤 ←）">◀</button>
       <input type="date" id="dateTo" class="date-input" title="指定結束日期，往前推所選天數" />
+      <button class="btn-step" id="btnNextDay" onclick="stepBt(1)" title="後一交易日（鍵盤 →）">▶</button>
       <button class="btn-clear-date" onclick="clearDateRange()" title="清除，回到今天">✕ 清除</button>
     </div>
   </div>
@@ -698,12 +723,14 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <span class="kbd-hint" title="切換480日">4</span>
     <span class="kbd-hint" title="T: 趨勢通道">T</span>
     <span class="kbd-hint" title="P: K線型態標記">P</span>
+    <span class="kbd-hint" title="←／→：回測前後翻一個交易日">←→</span>
     <span class="kbd-hint" title="Esc: 清除回測">Esc</span>
   </div>
 </header>
 
 <!-- STATUS -->
 <div id="statusBar"></div>
+<div id="btBanner"></div>
 
 <!-- META BAR -->
 <div id="metaBar"></div>
@@ -817,6 +844,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 
     <!-- RIGHT: ANALYSIS -->
     <div class="analysis-col" id="analysisCol">
+
+      <!-- 回測：回測日之後發生什麼事 -->
+      <div class="bt-card" id="btResultCard" style="display:none"></div>
 
       <!-- SCORE -->
       <div class="score-header">
@@ -1198,6 +1228,15 @@ let currentStockId = '';
 let revenueData = [];
 let epsData     = [];
 let twiiData    = [];
+// ── 回測模式狀態 ──
+let futureBars = [];      // 回測日「之後」的實際K棒：只用來顯示與驗證，絕不參與任何指標／分數計算
+let btReveal   = true;    // 是否顯示之後走勢（可隱藏，先猜再看答案）
+let btBusy     = false;   // 翻日中，避免連按重複觸發
+let btPlan     = null;    // runAnalysis 當日算出的分數與止損／止盈價，供「之後走勢」比對
+let futureSeries = null, btPriceLines = [];
+const btMem    = {};      // 回測用資料的記憶體快取（連續翻日不必重抓）
+const BT_FUT_SHOW = 30;   // 圖上最多畫回測日後幾根K棒
+const btDate   = () => document.getElementById('dateTo')?.value || '';
 let intradayVolInfo = null;
 let currentSuffix   = '.TW';
 let usInstitutional = [];
@@ -1339,6 +1378,11 @@ function clearDateRange() {
   document.getElementById('dateTo').value = '';
   if(priceData.length) analyze();
 }
+// 選好日期立刻重新分析（不必再按「▶ 分析」）；選完即失焦，方向鍵才能拿來翻日
+document.getElementById('dateTo').addEventListener('change', e => {
+  e.target.blur();
+  if (document.getElementById('stockInput').value.trim() && !btBusy) analyze();
+});
 
 // ── MA TOGGLE ──
 function toggleMA(p) {
@@ -1797,8 +1841,8 @@ async function fetchUSData(ticker) {
 // ═══════════════════════════════════════
 //  即時抓取（台股）
 // ═══════════════════════════════════════
-async function fetchTWII() {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=60d&includePrePost=false`;
+async function fetchTWII(range = '60d') {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=${range}&includePrePost=false`;
   for (const node of ['query1', 'query2']) {
     const nodeUrl = url.replace('query1', node);
     try {
@@ -2207,6 +2251,17 @@ async function fetchPrice(stockId, token, customFrom = '', customTo = '') {
     }
   }
   // (c) 完整抓取（首次／快取過期／被還原／回測截止日早於快取）
+  // 回測模式：回測日仍在視窗內時，照常抓到「今天」並寫入快取，再切片到回測日；
+  // 之後連續翻日就是零請求，且回測日之後的K棒（驗證用）也已在快取裡。
+  const todayStr = taipeiDateStr();
+  if (customTo && customTo >= _addDays(todayStr, -PX_KEEP_DAYS + 400)) {
+    const all = await finmindPriceRaw(stockId, token, _addDays(todayStr, -PX_KEEP_DAYS), todayStr);
+    if (!all.length) throw new Error('查無此代號');
+    idbSet(key, { bars: all, fullAt: Date.now() });
+    const sl = all.filter(d => d.date <= customTo);
+    if (!sl.length) throw new Error('此日期之前沒有資料');
+    return sl;
+  }
   const bars = await finmindPriceRaw(stockId, token, _addDays(endDate, -PX_KEEP_DAYS), endDate);
   if (!bars.length) throw new Error('查無此代號');
   if (!customTo) idbSet(key, { bars, fullAt: Date.now() });
@@ -2307,11 +2362,7 @@ function renderHolders(series, quiet) {
     </div>`;
 }
 
-async function fetchChip(stockId, token) {
-  const today = new Date();
-  const start = new Date(); start.setDate(start.getDate()-60);
-  const fmt = d => d.toISOString().slice(0,10);
-  const startDate = fmt(start), endDate = fmt(today);
+async function fetchChipRange(stockId, token, startDate, endDate) {
   try {
     const params = { dataset:'TaiwanStockInstitutionalInvestorsBuySell', data_id:stockId, start_date:startDate, end_date:endDate };
     if (token) params.token = token;
@@ -2324,9 +2375,83 @@ async function fetchChip(stockId, token) {
     if (token) params.token = token;
     const r = await fetch('https://api.finmindtrade.com/api/v3/data?' + new URLSearchParams(params));
     const j = await r.json();
-    if (j?.data?.length) return j.data;
+    if (j?.data?.length) return j.data.filter(d => d.date <= endDate);
   } catch {}
   return [];
+}
+async function fetchChip(stockId, token) {
+  const today = taipeiDateStr();
+  return fetchChipRange(stockId, token, _addDays(today, -60), today);
+}
+
+// ═══════════════════════════════════════
+//  回測用「截至當日」資料（Point-in-Time）
+//  原則：回測日 T 當天收盤後能看到什麼，就只給什麼，不可混入 T 之後才公布的資料。
+//  一次多抓到 T+90～120 天，連續往後翻日時直接重用記憶體，不再發請求。
+// ═══════════════════════════════════════
+function btWindowEnd(asOf, extraDays) {
+  const today = taipeiDateStr(), e = _addDays(asOf, extraDays);
+  return e < today ? e : today;
+}
+// 籌碼：回測日前 60 天
+async function fetchChipPIT(stockId, token, asOf) {
+  const key = 'chip:' + stockId, need0 = _addDays(asOf, -60);
+  let m = btMem[key];
+  if (!(m && m.from <= need0 && m.to >= asOf)) {
+    const to = btWindowEnd(asOf, 90), from = _addDays(need0, -90);   // 前後各多抓 90 天：往前、往後翻日都不必重抓
+    const rows = await fetchChipRange(stockId, token, from, to);
+    if (!rows.length) return [];
+    m = btMem[key] = { from, to, rows };
+  }
+  return m.rows.filter(r => r.date <= asOf && r.date >= need0);
+}
+// 月營收：每月 10 日前公布上月營收；欄位齊全時以「次月10日」為可見日，否則 date 後 10 天
+function revVisibleDate(r) {
+  const y = Number(r.revenue_year), mo = Number(r.revenue_month);
+  if (y > 0 && mo >= 1 && mo <= 12) return new Date(Date.UTC(y, mo, 10)).toISOString().slice(0, 10);
+  return _addDays(r.date, 10);
+}
+// 季報：Q1~Q3 於季底後 45 天內公布，Q4（年報）90 天內；用法定最晚期限，寧可晚看到、不可提早看到
+function epsVisibleDate(r) { return _addDays(r.date, String(r.date).slice(5, 7) === '12' ? 90 : 45); }
+async function fetchFinPIT(kind, stockId, token, asOf) {
+  const key = kind + ':' + stockId, need0 = _addDays(asOf, -365 * (kind === 'rev' ? 2 : 3));
+  let m = btMem[key];
+  if (!(m && m.from <= need0 && m.to >= asOf)) {
+    const to = btWindowEnd(asOf, 120), from = _addDays(need0, -180);
+    const rows = await (kind === 'rev' ? fetchRevenue(stockId, token, from, to) : fetchEPS(stockId, token, from, to));
+    if (!rows.length) return [];
+    m = btMem[key] = { from, to, rows };
+  }
+  const vis = kind === 'rev' ? revVisibleDate : epsVisibleDate;
+  return m.rows.filter(r => vis(r) <= asOf);
+}
+// 大戶持股（集保週資料，隔週才公布）：只留 7 天前的
+function holdersPIT(rows, asOf) {
+  const cut = _addDays(asOf, -7);
+  return (rows || []).filter(r => r.date <= cut);
+}
+// 大盤：抓一次 10 年，之後依回測日切片
+async function fetchTWIIPIT(asOf) {
+  if (!btMem.twii) {
+    const d = await fetchTWII('10y');
+    if (d.length > 5) btMem.twii = d;
+  }
+  return (btMem.twii || []).filter(d => d.date <= asOf).slice(-60);
+}
+// 回測日之後的實際K棒（只供顯示驗證）
+async function fetchFutureTW(stockId, token, asOf) {
+  if (asOf >= taipeiDateStr()) return [];
+  const c = await idbGet('px:' + stockId);
+  if (c && Array.isArray(c.bars)) {
+    const f = c.bars.filter(b => b.date > asOf);
+    if (f.length >= 25) return cleanBars(f.slice(0, 60));
+  }
+  const k = 'fut:' + stockId, m = btMem[k];
+  if (m && m.asOf <= asOf && m.to >= btWindowEnd(asOf, 60)) return cleanBars(m.rows.filter(b => b.date > asOf).slice(0, 60));
+  const to = btWindowEnd(asOf, 60);
+  const rows = await finmindPriceRaw(stockId, token, _addDays(asOf, 1), to);
+  btMem[k] = { asOf, to, rows };
+  return cleanBars(rows.slice(0, 60));
 }
 
 // ═══════════════════════════════════════
@@ -2363,7 +2488,10 @@ async function analyzeIndex() {
   document.getElementById('mainContent').classList.add('show');
   try {
     const price = await fetchUSPrice('^TWII');
-    priceData = cleanBars(price);
+    const asOf = btDate();
+    priceData = cleanBars(asOf ? price.filter(d => d.date <= asOf) : price);
+    futureBars = asOf ? cleanBars(price.filter(d => d.date > asOf)) : [];
+    if (!priceData.length) throw new Error('此日期之前沒有資料');
     chipData = []; revenueData = []; epsData = []; holderData = [];
     renderHolders([], true);
     usInstitutional = []; usFinancials = [];
@@ -2389,24 +2517,33 @@ async function analyzeTW(stockId) {
   document.getElementById('mainContent').classList.add('show');
   const customTo = document.getElementById('dateTo')?.value || '';
   try {
-    const [pd, cd, sn, rd, epsd, hd] = await Promise.all([
+    let yahooFuture = null;
+    // 回測模式：每個資料源都只取「回測日當天以前已公布」的部分（見 fetch*PIT）
+    const [pd, cd, sn, rd, epsd, hd, fut] = await Promise.all([
       fetchPrice(stockId, token, '', customTo).catch(async e => {
         console.warn('[FinMind股價失敗，改用Yahoo]', e.message);
         const y = await fetchYahooPrice(stockId);
         const r = customTo ? y.filter(d => d.date <= customTo) : y;
+        if (customTo) yahooFuture = y.filter(d => d.date > customTo);
         if (!r.length) throw e;
         setStatus('FinMind 股價暫時無法取得，已改用 Yahoo 資料（籌碼／營收可能缺漏）', 'loading');
         return r;
       }),
-      cachedFetch(`chip:${stockId}`, 60*60*1000,   () => fetchChip(stockId, token)),
+      customTo ? fetchChipPIT(stockId, token, customTo)
+               : cachedFetch(`chip:${stockId}`, 60*60*1000,   () => fetchChip(stockId, token)),
       fetchStockName(stockId),
-      cachedFetch(`rev:${stockId}`,  12*3600*1000, () => fetchRevenue(stockId, token)),
-      cachedFetch(`eps:${stockId}`,  12*3600*1000, () => fetchEPS(stockId, token)),
+      customTo ? fetchFinPIT('rev', stockId, token, customTo)
+               : cachedFetch(`rev:${stockId}`,  12*3600*1000, () => fetchRevenue(stockId, token)),
+      customTo ? fetchFinPIT('eps', stockId, token, customTo)
+               : cachedFetch(`eps:${stockId}`,  12*3600*1000, () => fetchEPS(stockId, token)),
       cachedFetch(`hold:${stockId}`, 12*3600*1000, () => fetchHolders(stockId)),
+      customTo ? fetchFutureTW(stockId, token, customTo).catch(() => []) : [],
     ]);
     liveMeta = null;
     intradayVolInfo = null;
-    priceData = cleanBars(pd); chipData = cd; revenueData = rd; epsData = epsd; holderData = hd;
+    priceData = cleanBars(pd); chipData = cd; revenueData = rd; epsData = epsd;
+    holderData = customTo ? holdersPIT(hd, customTo) : hd;
+    futureBars = customTo ? cleanBars(yahooFuture || fut).filter(d => d.date > priceData[priceData.length-1].date) : [];
     usInstitutional = []; usFinancials = [];
     currentStockId = stockId;
     addToRecent(stockId);
@@ -2414,7 +2551,8 @@ async function analyzeTW(stockId) {
     renderMeta(stockId, sn || nameOf(stockId), 'TW');
     twiiData = [];
     redraw();
-    fetchTWII().then(twiid => {
+    (customTo ? fetchTWIIPIT(customTo) : fetchTWII()).then(twiid => {
+      if (btDate() !== customTo || currentStockId !== stockId) return;   // 已翻到別天／別檔，丟棄過期結果
       if (twiid && twiid.length > 0) {
         twiiData = twiid;
         const sliced = vd().slice(-currentPeriod);
@@ -2432,8 +2570,12 @@ async function analyzeUS(ticker) {
   document.getElementById('splash').style.display = 'none';
   document.getElementById('mainContent').classList.add('show');
   try {
-    const { price, fin, name } = await fetchUSData(ticker);
-    priceData = cleanBars(price);
+    const { price, fin: finNow, name } = await fetchUSData(ticker);
+    const asOf = btDate();
+    priceData = cleanBars(asOf ? price.filter(d => d.date <= asOf) : price);
+    futureBars = asOf ? cleanBars(price.filter(d => d.date > asOf)) : [];
+    if (!priceData.length) throw new Error('此日期之前沒有資料');
+    const fin = asOf ? null : finNow;   // 美股財務指標只有「現在」的快照，回測時不使用，避免資料穿越
     chipData  = [];
     holderData = [];
     renderHolders([], true);
@@ -2685,6 +2827,19 @@ function buildCharts(data, keepRange = false) {
   candleSeries.setData(data.map(d=>({
     time:d.date, open:d.open, high:d.max, low:d.min, close:d.close
   })));
+  // 回測：回測日之後的K棒用淡色畫在右側（只顯示，不參與任何指標計算）
+  futureSeries = null; btPriceLines = [];
+  const fut = (btDate() && btReveal && currentTF === 'D')
+    ? futureBars.filter(d => d.date > data[data.length-1].date).slice(0, BT_FUT_SHOW) : [];
+  if (fut.length) {
+    futureSeries = kChart.addCandlestickSeries({
+      upColor:'rgba(255,77,109,0.30)', downColor:'rgba(0,200,150,0.30)',
+      borderUpColor:'rgba(255,77,109,0.75)', borderDownColor:'rgba(0,200,150,0.75)',
+      wickUpColor:'rgba(255,77,109,0.75)', wickDownColor:'rgba(0,200,150,0.75)',
+      lastValueVisible:false, priceLineVisible:false,
+    });
+    futureSeries.setData(fut.map(d => ({ time:d.date, open:d.open, high:d.max, low:d.min, close:d.close })));
+  }
 
   {
     const avgV = data.map((_,i) => {
@@ -2754,10 +2909,13 @@ function buildCharts(data, keepRange = false) {
   });
   volSeries = volChart.addHistogramSeries({ priceFormat:{ type:'volume' }, priceScaleId:'' });
   volSeries.priceScale().applyOptions({ scaleMargins:{top:.1,bottom:0} });
-  volSeries.setData(data.map(d=>({
+  volSeries.setData([...data.map(d=>({
     time:d.date, value:d.Trading_Volume,
     color: d.close>=d.open ? 'rgba(255,77,109,0.65)' : 'rgba(0,200,150,0.65)'
-  })));
+  })), ...fut.map(d=>({
+    time:d.date, value:d.Trading_Volume,
+    color: d.close>=d.open ? 'rgba(255,77,109,0.25)' : 'rgba(0,200,150,0.25)'
+  }))]);
   volMaSeries = volChart.addLineSeries({ color:'#e8b84b', lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   volMaSeries.setData(calcAvgVol(data, 20));
 
@@ -2794,7 +2952,7 @@ function buildCharts(data, keepRange = false) {
     crosshairMarkerVisible:false, visible: false,
     priceScaleId: 'right',
   });
-  macdAlignSeries.setData(data.map(d => ({ time: d.date, value: 0 })));
+  macdAlignSeries.setData([...data, ...fut].map(d => ({ time: d.date, value: 0 })));   // 含未來日期，維持與K線同樣的時間軸長度
 
   histSeries = macdChartObj.addHistogramSeries({ priceLineVisible:false, lastValueVisible:false, priceScaleId:'right' });
   histSeries.setData(
@@ -2839,7 +2997,7 @@ function buildCharts(data, keepRange = false) {
     rsiOSSeries = rsiChart.addLineSeries({ color:'rgba(0,200,150,0.35)', lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
     rsiOSSeries.setData(data.map(d=>({ time:d.date, value:30 })));
     const rsiAnchor = rsiChart.addLineSeries({ color:'transparent', lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, visible:false });
-    rsiAnchor.setData(data.map(d=>({ time:d.date, value:50 })));
+    rsiAnchor.setData([...data, ...fut].map(d=>({ time:d.date, value:50 })));
 
     // KD 疊加在 RSI 圖
     {
@@ -3734,6 +3892,7 @@ function runAnalysis(slicedData, twiiRaw) {
   renderTrade(data, score, lma20, rhi, rlo, lATR);
   renderBias(data);
   renderShortTerm(shortTermData);
+  renderBtResult(data);
 }
 
 // ═══════════════════════════════════════
@@ -4088,6 +4247,139 @@ function renderChip(chip) {
 }
 
 // ═══════════════════════════════════════
+//  回測：之後走勢驗證 ＆ 逐日翻頁
+// ═══════════════════════════════════════
+const BT_WD = ['日','一','二','三','四','五','六'];
+function btWeekday(d) { return BT_WD[new Date(d + 'T00:00:00Z').getUTCDay()]; }
+
+// 以回測日收盤為基準，統計之後 T+5/10/20 報酬、區間最大有利／不利、先碰到止損或止盈
+function btOutcome(entry, plan, fut) {
+  const out = { n: fut.length, t: {}, mfe: null, mae: null, hit: null };
+  [5, 10, 20].forEach(k => { out.t[k] = fut.length >= k ? (fut[k-1].close / entry - 1) * 100 : null; });
+  const win = fut.slice(0, 20);
+  if (win.length) {
+    out.mfe = (Math.max(...win.map(b => b.max)) / entry - 1) * 100;
+    out.mae = (Math.min(...win.map(b => b.min)) / entry - 1) * 100;
+  }
+  if (plan) {
+    for (let i = 0; i < win.length; i++) {
+      const b = win[i];
+      const sl = plan.slHard != null && b.min <= plan.slHard;
+      const tp = plan.tp1 != null && b.max >= plan.tp1;
+      if (sl && tp) { out.hit = { day: i+1, kind: 'both' }; break; }
+      if (sl)       { out.hit = { day: i+1, kind: 'sl' };   break; }
+      if (tp)       { out.hit = { day: i+1, kind: 'tp' };   break; }
+    }
+  }
+  return out;
+}
+
+function renderBtBanner() {
+  const el = document.getElementById('btBanner'), d = btDate();
+  if (!el) return;
+  if (!d) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const last = priceData.length ? priceData[priceData.length-1].date : d;
+  const nFut = futureBars.length;
+  el.style.display = 'flex';
+  el.innerHTML = `
+    <span>⏪ <b>回測模式</b>　資料截至 <b>${last}（週${btWeekday(last)}）</b>　籌碼／營收／大盤皆已截至此日</span>
+    <span style="color:var(--muted2)">${nFut ? `之後有 ${nFut >= 60 ? '60+' : nFut} 個交易日可驗證` : '此日之後尚無資料'}</span>
+    <span style="flex:1"></span>
+    <button class="bt-act" onclick="toggleBtReveal()">${btReveal ? '🙈 隱藏之後走勢' : '👁 顯示之後走勢'}</button>
+    <button class="bt-act" onclick="clearDateRange()">✕ 退出回測</button>`;
+}
+
+function toggleBtReveal() { btReveal = !btReveal; redraw(false); }
+
+function renderBtResult(data) {
+  renderBtBanner();
+  const el = document.getElementById('btResultCard');
+  if (!el) return;
+  if (!btDate() || !data?.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'block';
+  const last = data[data.length-1], entry = last.close;
+  const pfx = currentMarket === 'US' ? '$' : '';
+  const hdr = `<div style="font-size:.68rem;color:#ff9f40;font-weight:700;letter-spacing:1px;margin-bottom:6px;">◆ 回測驗證｜${last.date} 之後發生什麼事</div>`;
+  if (!btReveal) {
+    el.innerHTML = hdr + `<div style="font-size:.74rem;color:var(--muted2);line-height:1.7;">答案已隱藏。先看分數與操作建議、自己下判斷，再按上方「顯示之後走勢」或 → 翻到下一天。</div>`;
+    return;
+  }
+  const fut = futureBars.filter(b => b.date > last.date);
+  if (!fut.length) {
+    el.innerHTML = hdr + `<div style="font-size:.74rem;color:var(--muted2);">此日期之後還沒有交易資料可驗證。</div>`;
+    return;
+  }
+  const o = btOutcome(entry, btPlan, fut);
+  const col = v => v == null ? 'var(--muted2)' : v > 0 ? 'var(--up)' : v < 0 ? 'var(--dn)' : 'var(--muted2)';
+  const fp = v => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  const score = btPlan?.score;
+  let verdict = '';
+  if (score != null && o.t[5] != null) {
+    const bull = score >= 62, bear = score < 45;
+    const ok = bull ? o.t[5] > 0 : bear ? o.t[5] < 0 : null;
+    verdict = `<div style="margin:2px 0 8px;font-size:.78rem;">分數 <b style="font-family:var(--mono)">${Math.round(score)}</b>（${bull ? '偏多' : bear ? '偏空' : '中性'}）→ T+5 <b style="font-family:var(--mono);color:${col(o.t[5])}">${fp(o.t[5])}</b> ${ok === null ? '<span style="color:var(--muted2)">（中性區不判對錯）</span>' : ok ? '<span style="color:var(--up)">✓ 方向正確</span>' : '<span style="color:var(--dn)">✗ 方向相反</span>'}</div>`;
+  }
+  let hit = '<span style="color:var(--muted2)">20 日內未觸及硬止損／短線止盈</span>';
+  if (o.hit) {
+    const h = o.hit;
+    hit = h.kind === 'sl' ? `<span style="color:var(--dn)">第 ${h.day} 日先碰到硬止損 ${pfx}${btPlan.slHard.toFixed(2)}</span>`
+        : h.kind === 'tp' ? `<span style="color:var(--up)">第 ${h.day} 日先碰到短線止盈 ${pfx}${btPlan.tp1.toFixed(2)}</span>`
+        : `<span style="color:#ff9f40">第 ${h.day} 日同日觸及止損與止盈（順序無法判斷）</span>`;
+  }
+  const lenNote = o.n < 20 ? `<div style="font-size:.63rem;color:var(--muted);margin-top:4px;">目前僅有 ${o.n} 個交易日，尚不足的天數顯示「—」</div>` : '';
+  el.innerHTML = hdr + verdict + `
+    <table>
+      <tr><th></th><th>T+5</th><th>T+10</th><th>T+20</th></tr>
+      <tr><td>報酬（對回測日收盤 ${pfx}${entry.toFixed(2)}）</td>
+        <td style="color:${col(o.t[5])};font-family:var(--mono)">${fp(o.t[5])}</td>
+        <td style="color:${col(o.t[10])};font-family:var(--mono)">${fp(o.t[10])}</td>
+        <td style="color:${col(o.t[20])};font-family:var(--mono)">${fp(o.t[20])}</td></tr>
+    </table>
+    <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-top:6px;">
+      <span style="color:var(--muted2)">20日內最大有利</span><span style="font-family:var(--mono);color:${col(o.mfe)}">${fp(o.mfe)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-top:3px;">
+      <span style="color:var(--muted2)">20日內最大不利（回撤）</span><span style="font-family:var(--mono);color:${col(o.mae)}">${fp(o.mae)}</span></div>
+    <div style="font-size:.74rem;margin-top:6px;">${hit}</div>
+    ${lenNote}
+    <div style="font-size:.62rem;color:var(--muted);margin-top:6px;line-height:1.6;">以回測日收盤為基準、未含手續費與稅；股價為未還原權息，除息日會有缺口。</div>`;
+
+  // 圖上畫出當日計算的進場／止損／止盈價位
+  if (futureSeries && btPlan) {
+    btPriceLines.forEach(l => { try { futureSeries.removePriceLine(l); } catch {} });
+    btPriceLines = [];
+    const add = (price, color, title) => { if (price != null && isFinite(price)) { try { btPriceLines.push(futureSeries.createPriceLine({ price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible:true, title })); } catch {} } };
+    add(entry, 'rgba(255,255,255,0.45)', '回測日收盤');
+    add(btPlan.slHard, '#00c896', '硬止損');
+    add(btPlan.tp1, '#ff4d6d', '短線止盈');
+  }
+}
+
+// 前／後翻一個交易日（dir: -1 / +1）
+async function stepBt(dir) {
+  if (btBusy || !priceData.length) return;
+  const input = document.getElementById('dateTo');
+  if (!document.getElementById('stockInput').value.trim()) return;
+  let target = null;
+  if (dir < 0) {
+    if (priceData.length < 2) return;
+    target = priceData[priceData.length-2].date;                       // 目前最後一根的前一根
+  } else {
+    if (!btDate()) { setStatus('目前就是最新資料，沒有「後一日」；按 ◀ 可進入回測模式', 'error'); return; }
+    const lastShown = priceData[priceData.length-1].date;
+    const nxt = futureBars.find(b => b.date > lastShown);
+    if (!nxt) { setStatus('已經是最新的交易日，沒有更後面的資料', 'error'); return; }
+    target = nxt.date;
+  }
+  btBusy = true;
+  ['btnPrevDay', 'btnNextDay'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
+  try { input.value = target; await analyze(); }
+  finally {
+    btBusy = false;
+    ['btnPrevDay', 'btnNextDay'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
+  }
+}
+
+// ═══════════════════════════════════════
 //  RENDER TRADE
 // ═══════════════════════════════════════
 function renderTrade(data, score, ma20val, hi20, lo20, atr) {
@@ -4129,6 +4421,9 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
     buyZone = '-';
   }
 
+  btPlan = { score, entry: p, slHard: sl_hard, slMa5: sl_ma5 || null,
+             tp1: tp1_price > p ? tp1_price : null, tp1Src: (tp1_price === resistance) ? '前高壓力' : (tp1_price === bbUpper) ? '布林上軌' : '風報比2R',
+             tp2: (score >= 62 && tp2_price > p) ? tp2_price : null };
   const pfx = isUS ? '$' : '';
   const tp1_str = tp1_price > p ? pfx + tp1_price.toFixed(2) : '-';
   const tp2_str = score >= 62 && tp2_price > p ? pfx + tp2_price.toFixed(2) : '-';
@@ -4359,12 +4654,12 @@ window.addEventListener('resize', () => {
 // ═══════════════════════════════════════
 //  FETCH REVENUE（台股）
 // ═══════════════════════════════════════
-async function fetchRevenue(stockId, token) {
+async function fetchRevenue(stockId, token, startDate, endDate) {
   try {
     const today = new Date();
     const start = new Date(); start.setFullYear(start.getFullYear()-2);
     const fmt = d => d.toISOString().slice(0,10);
-    const params = { dataset:'TaiwanStockMonthRevenue', data_id:stockId, start_date:fmt(start), end_date:fmt(today) };
+    const params = { dataset:'TaiwanStockMonthRevenue', data_id:stockId, start_date:startDate || fmt(start), end_date:endDate || fmt(today) };
     if(token) params.token = token;
     const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
     const j = await r.json();
@@ -4373,12 +4668,12 @@ async function fetchRevenue(stockId, token) {
   return [];
 }
 
-async function fetchEPS(stockId, token) {
+async function fetchEPS(stockId, token, startDate, endDate) {
   try {
     const today = new Date();
     const start = new Date(); start.setFullYear(start.getFullYear() - 3);
     const fmt = d => d.toISOString().slice(0, 10);
-    const params = { dataset:'TaiwanStockFinancialStatements', data_id:stockId, start_date:fmt(start), end_date:fmt(today) };
+    const params = { dataset:'TaiwanStockFinancialStatements', data_id:stockId, start_date:startDate || fmt(start), end_date:endDate || fmt(today) };
     if (token) params.token = token;
     const r = await fetch('https://api.finmindtrade.com/api/v4/data?' + new URLSearchParams(params));
     const j = await r.json();
@@ -4578,6 +4873,8 @@ document.addEventListener('keydown', e => {
       document.getElementById('dateTo').value = '';
       if(priceData.length) analyze();
       break;
+    case 'ArrowLeft':  if (!e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); stepBt(-1); } break;
+    case 'ArrowRight': if (!e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); stepBt(1); } break;
     case 't': case 'T': toggleTrendChannel(); break;
     case 'p': case 'P': togglePatterns(); break;
   }
