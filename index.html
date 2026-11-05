@@ -713,6 +713,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
       <input type="date" id="dateTo" class="date-input" title="指定結束日期，往前推所選天數" />
       <button class="btn-step" id="btnNextDay" onclick="stepBt(1)" title="後一交易日（鍵盤 →）">▶</button>
       <button class="btn-clear-date" onclick="clearDateRange()" title="清除，回到今天">✕ 清除</button>
+      <button class="btn-clear-date" onclick="openBtBatch()" title="對一批股票逐日回放，匯出四維分數＋之後報酬的 CSV">📊 批次匯出</button>
     </div>
   </div>
 
@@ -731,6 +732,27 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 <!-- STATUS -->
 <div id="statusBar"></div>
 <div id="btBanner"></div>
+<div id="btBatchDlg" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);align-items:center;justify-content:center;">
+  <div style="background:var(--s1);border:1px solid var(--border2);border-radius:10px;padding:18px 20px;width:min(560px,92vw);max-height:90vh;overflow:auto;">
+    <div style="font-weight:700;margin-bottom:4px;">📊 批次回放匯出（四維分數 ＋ 之後報酬）</div>
+    <div style="font-size:.7rem;color:var(--muted2);line-height:1.7;margin-bottom:10px;">對每檔股票逐日回放：每個日期只用「當天以前」的資料算出總分與四維分數，並記下之後 1／5／10／20 日報酬，存成 CSV 後交給我統計。僅台股；分數＝畫面上顯示的分數（用該日建議策略的權重），另附純平衡模式分數；週期用目前選的。</div>
+    <div style="font-size:.7rem;color:var(--muted2);margin-bottom:4px;">股票代號（逗號、空白或換行分隔）</div>
+    <div style="display:flex;gap:6px;margin-bottom:5px;">
+      <button class="btn-clear-date" onclick="btFillPool('wide')" title="約 100 檔中型／中小型／傳產／金融／航運／櫃買（不含預設那 30 檔）">擴大池（約100檔，不含原30檔）</button>
+      <button class="btn-clear-date" onclick="btFillPool('large')">原 30 檔大型股</button>
+    </div>
+    <textarea id="btBatchCodes" rows="4" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:.74rem;"></textarea>
+    <div style="display:flex;gap:14px;align-items:center;margin:8px 0;font-size:.72rem;color:var(--muted2);flex-wrap:wrap;">
+      <label>取樣間隔（交易日）<input id="btBatchStep" type="number" min="1" max="20" value="3" style="width:54px;margin-left:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px;"></label>
+      <span>每檔從第 300 根K棒起算（需 MA240 暖機）</span>
+    </div>
+    <div id="btBatchMsg" style="font-size:.74rem;color:var(--text);min-height:2.4em;line-height:1.6;white-space:pre-wrap;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px;">
+      <button class="btn-clear-date" id="btBatchCancel" onclick="closeBtBatch()">關閉</button>
+      <button class="btn-analyze" id="btBatchGo" onclick="runBtBatch()" style="padding:6px 16px;">開始回放</button>
+    </div>
+  </div>
+</div>
 
 <!-- META BAR -->
 <div id="metaBar"></div>
@@ -1234,6 +1256,7 @@ let btReveal   = true;    // 是否顯示之後走勢（可隱藏，先猜再看
 let btBusy     = false;   // 翻日中，避免連按重複觸發
 let btPlan     = null;    // runAnalysis 當日算出的分數與止損／止盈價，供「之後走勢」比對
 let futureSeries = null, btPriceLines = [];
+let btCapture = null;     // 批次匯出時非 null：runAnalysis 只算分數、回傳結果，不畫任何畫面
 const btMem    = {};      // 回測用資料的記憶體快取（連續翻日不必重抓）
 const BT_FUT_SHOW = 30;   // 圖上最多畫回測日後幾根K棒
 const btDate   = () => document.getElementById('dateTo')?.value || '';
@@ -3247,6 +3270,16 @@ function processChip(chipRaw) {
 // ═══════════════════════════════════════
 //  ANALYSIS ENGINE（共用）
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+//  計分設定（可在 Console 直接改，例如 DIM_MULT.mom = -0.5）
+//  USE_NEW_SCORE=false → 畫面與匯出的 score 欄回到舊公式（score_old/score_new 兩欄仍都會匯出）
+//  DIM_MULT：各維度乘數；mom 由 +1 改為 -0.3＝降權且反向
+//  VOLC_W：連續量能分數滿分（|z|=2、方向一致）時加到量能維度的點數；設 0 = 關閉量能連續化
+// ═══════════════════════════════════════
+const USE_NEW_SCORE = true;
+const DIM_MULT = { trend: 1.0, mom: -0.3, vol: 1.0, chip: 1.0 };
+const VOLC_W = 6;
+
 function runAnalysis(slicedData, twiiRaw) {
   if (currentTF !== 'D') twiiRaw = [];
   const data = slicedData || vd().slice(-currentPeriod);
@@ -3255,6 +3288,10 @@ function runAnalysis(slicedData, twiiRaw) {
 
   const signals = [];
   let bullPts = 0, bearPts = 0;
+  // ── 分維度累積（不改動原 bullPts/bearPts；以分段標記把各段新增的點數歸入對應維度）──
+  const dimPts = { trend:{b:0,r:0}, mom:{b:0,r:0}, vol:{b:0,r:0}, chip:{b:0,r:0} };
+  let _dim = 'trend', _dB = 0, _dR = 0;
+  const _sec = nd => { dimPts[_dim].b += bullPts - _dB; dimPts[_dim].r += bearPts - _dR; _dB = bullPts; _dR = bearPts; _dim = nd; };
   const strat = getCurrentStrategy();
 
   const last=data[n-1], prev=data[n-2];
@@ -3341,6 +3378,7 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  _sec('mom');
   // ── RSI ──
   const rsiOB = strat.rsiOBWarn || 70;
   const rsiOS = strat.rsiOSBuy  || 35;
@@ -3414,10 +3452,12 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  _sec('trend');
   { const l120=ma120a[n-1], l240=ma240a[n-1];
     if (l240) { const up=last.close>l240; signals.push({type:up?'bull':'bear',cat:'均線',text:`股價在年線（MA240 ${l240.toFixed(1)}）${up?'之上，長線多頭':'之下，長線偏弱'}`}); if(up) bullPts+=3*w.ma; else bearPts+=3*w.ma; }
     else if (l120) { const up=last.close>l120; signals.push({type:up?'bull':'bear',cat:'均線',text:`股價在半年線（MA120 ${l120.toFixed(1)}）${up?'之上，中長線偏多':'之下，中長線偏弱'}`}); if(up) bullPts+=2*w.ma; else bearPts+=2*w.ma; } }
 
+  _sec('vol');
   // ── 量價 ──
   if(isBull&&volRatio>1.5){
     signals.push({type:'bull',cat:'量價',text:`大量紅K（量比均${volRatio.toFixed(1)}倍），多方積極攻擊`}); bullPts+=10*w.vol;
@@ -3442,6 +3482,7 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  _sec('mom');
   // ── 布林 ──
   if(lbb){
     if(last.close<lbb.lower){
@@ -3562,6 +3603,7 @@ function runAnalysis(slicedData, twiiRaw) {
     if (bearPts-_s0 > 25) bearPts = _s0+25;
   }
 
+  _sec('trend');
   // ── 支撐壓力 ──
   const r20=data.slice(-20);
   const rhi=Math.max(...r20.map(d=>d.max)), rlo=Math.min(...r20.map(d=>d.min));
@@ -3570,6 +3612,7 @@ function runAnalysis(slicedData, twiiRaw) {
   signals.push({ type:parseFloat(dhi)<3?'bear':'neutral', cat:'支撐壓力', text:`近20日壓力：${rhi.toFixed(2)}（+${dhi}%）／支撐：${rlo.toFixed(2)}（-${dlo}%）` });
   if(parseFloat(dhi)<3) bearPts+=5;
 
+  _sec('chip');
   // ── 籌碼面（台股才有）──
   if (currentMarket === 'TW') {
     const chipProcessed = processChip(chipData);
@@ -3581,13 +3624,13 @@ function runAnalysis(slicedData, twiiRaw) {
       else if(foreignSum<0){ signals.push({type:'bear',cat:'籌碼',text:`外資近5日賣超 ${Math.abs(foreignSum/1000).toFixed(0)}張`}); bearPts+=8*w.chip; }
       if(trustSum>0){ signals.push({type:'bull',cat:'籌碼',text:`投信近5日買超 ${(trustSum/1000).toFixed(0)}張`}); bullPts+=7*w.chip; }
       else if(trustSum<0){ signals.push({type:'bear',cat:'籌碼',text:`投信近5日賣超 ${Math.abs(trustSum/1000).toFixed(0)}張`}); bearPts+=7*w.chip; }
-      renderChip(chipProcessed);
+      if (!btCapture) renderChip(chipProcessed);
     } else {
-      renderChip([]);
+      if (!btCapture) renderChip([]);
     }
     // 大戶持股「變化」：近4週占比增減 ≥ 閾值，且最近一週方向一致才計分
     const holderSeries = processHolders(holderData);
-    renderHolders(holderSeries);
+    if (!btCapture) renderHolders(holderSeries);
     const hs = holderSummary(holderSeries);
     if (hs && hs.weeks >= 5) {
       if (hs.d4big >= HOLDER_SIGNAL_PP && hs.d1big >= 0) {
@@ -3602,6 +3645,7 @@ function runAnalysis(slicedData, twiiRaw) {
   let bonusPts = 0;
   if(strat.bonusCond) bonusPts = strat.bonusCond(signals, data);
 
+  _sec('mom');
   // ── 短線強度 ──
   const dayRange = last.max - last.min || 0.01;
   const closePosition = (last.close - last.min) / dayRange;
@@ -3625,6 +3669,7 @@ function runAnalysis(slicedData, twiiRaw) {
   else if (upperRatio < 0.1 && isBull) { shadowIntention='幾乎無上影，主力不急於出貨，多方控盤'; bullPts+=4; }
   else                               { shadowIntention='影線正常，無特殊意圖'; }
 
+  _sec('vol');
   let volumeLaunch = null;
   if (n >= 6) {
     const prev5vols = data.slice(-6, -1).map(d => d.Trading_Volume);
@@ -3639,6 +3684,7 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  _sec('mom');
   let bodyShrink = null;
   if (n >= 4) {
     const bodies = data.slice(-4).map(d => Math.abs(d.close - d.open));
@@ -3703,6 +3749,7 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  _sec('vol');
   // ── 回測量縮（強勢整理）──
   let pullbackVol = null;
   if (n >= 16) {
@@ -3722,6 +3769,7 @@ function runAnalysis(slicedData, twiiRaw) {
     }
   }
 
+  _sec('mom');
   // ── 跳空缺口是否回補（3日內）──
   let gapInfo = null;
   if (n >= 10) {
@@ -3785,6 +3833,7 @@ function runAnalysis(slicedData, twiiRaw) {
   // （原「週線強弱」= MA5 vs MA20、「月線強弱」= 收盤 vs MA60，與上方均線排列／位置完全重複，已移除計分與訊號）
   const weekType = (lma5 && lma20 && lma5 > lma20) ? 'bull' : 'bear';
 
+  _sec('trend');
   if (lma5 && lma10 && lma20) {
     const maHigh  = Math.max(lma5, lma10, lma20);
     const maLow   = Math.min(lma5, lma10, lma20);
@@ -3821,6 +3870,7 @@ function runAnalysis(slicedData, twiiRaw) {
   if (isBear && vol1 > vol20avg*1.5) _add(-1,'黑K爆量');
   volStructScore = Math.max(0, Math.min(10, volStructScore));
   window._volReasons = _vr.length ? _vr : ['量能無明顯異常（基準5分）'];
+  _sec('vol');
   if (n >= 12) {
     let uS=0,uN=0,dS=0,dN=0;
     for (let i=n-10;i<n;i++){ const v=_vAt(i), pc=data[i-1].close; if (data[i].close>pc){uS+=v;uN++;} else if (data[i].close<pc){dS+=v;dN++;} }
@@ -3875,10 +3925,41 @@ function runAnalysis(slicedData, twiiRaw) {
     return { key:'balanced', reason:`訊號混雜，建議平衡評估` };
   })();
 
-  const net = bullPts - bearPts + bonusPts;
-  const maxPossible = 200;
-  let score = Math.round(50 + (net / maxPossible) * 50);
-  score = Math.max(0, Math.min(100, score));
+  _sec('trend');   // 收尾：把最後一段點數歸入維度
+
+  // ── 量能連續化：每天都有量能分數（今日量對近60日量的 z-score × 當日漲跌方向）──
+  //    只加進 dimPts.vol（新公式），不動 bullPts/bearPts，所以舊分數維持原樣可對照
+  let volZ = null, volDirZ = null;
+  {
+    const hist = ctx.slice(-61, -1).map(d => d.Trading_Volume).filter(v => v > 0).map(v => Math.log(v));
+    const tv = _evol != null ? _evol : last.Trading_Volume;
+    if (hist.length >= 20 && tv > 0) {
+      const mu = hist.reduce((s,v)=>s+v,0) / hist.length;
+      const sd = Math.sqrt(hist.reduce((s,v)=>s+(v-mu)*(v-mu),0) / hist.length);
+      volZ = (Math.log(tv) - mu) / Math.max(sd, 0.15);
+      const chgp = prev ? last.close - prev.close : 0;
+      const dir = chgp > 0 ? 1 : chgp < 0 ? -1 : 0;
+      volDirZ = Math.max(-2, Math.min(2, volZ)) * dir;
+      const vp = VOLC_W * volDirZ / 2;
+      if (vp > 0) dimPts.vol.b += vp; else dimPts.vol.r += -vp;
+      const av = Math.abs(volDirZ);
+      signals.push({ type: volDirZ >= 0.5 ? 'bull' : volDirZ <= -0.5 ? 'bear' : 'neutral', cat:'量能連續', str: av >= 1.5 ? 3 : av >= 1 ? 2 : 1,
+        text: `量能連續分數 ${volDirZ.toFixed(2)}（今日量 z=${volZ.toFixed(2)}，相對近60日；${dir>0?'收漲':dir<0?'收跌':'平盤'}）` });
+    }
+  }
+
+  // ── 總分：舊公式（單一累加器）與新公式（依維度乘數合成）──
+  const _toScore = x => Math.max(0, Math.min(100, Math.round(50 + (x / 200) * 50)));
+  const netOld = bullPts - bearPts + bonusPts;
+  const netNew = Object.keys(dimPts).reduce((s,k) => s + (dimPts[k].b - dimPts[k].r) * DIM_MULT[k], 0) + bonusPts;
+  const scoreOld = _toScore(netOld), scoreNew = _toScore(netNew);
+  const net = USE_NEW_SCORE ? netNew : netOld;
+  let score = USE_NEW_SCORE ? scoreNew : scoreOld;
+  const ptsNet = {}; Object.keys(dimPts).forEach(k => ptsNet[k] = dimPts[k].b - dimPts[k].r);
+  if (btCapture) {   // 批次匯出：只回傳分數，不更新畫面
+    btCapture.out = { score, scoreOld, scoreNew, volZ, volDirZ, ptsNet, bullPts, bearPts, bonusPts, dims: dimScores(signals), auto: autoStrategy ? autoStrategy.key : '', rsi: lrsi, volRatio };
+    return;
+  }
 
   const shortTermData = {
     closePosition, closePosLabel, closePosColor, closePosScore,
@@ -3957,7 +4038,7 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
 // ═══════════════════════════════════════
 const SIG_DIM = {'均線':'trend','週線強弱':'trend','月線強弱':'trend','均線糾結':'trend','支撐壓力':'trend','壓力強度':'trend','支撐強度':'trend',
   'MACD':'mom','RSI':'mom','RSI背離':'mom','KD':'mom','布林':'mom','K線型態':'mom','K線收斂':'mom','收盤強度':'mom','影線意圖':'mom','相對強弱':'mom','突破品質':'mom','缺口回補':'mom','漲跌停':'mom',
-  '量價':'vol','量能啟動':'vol','回測量縮':'vol','籌碼':'chip','大戶持股':'chip'};
+  '量價':'vol','量能啟動':'vol','回測量縮':'vol','量能連續':'vol','籌碼':'chip','大戶持股':'chip'};
 const SIG_CORE = new Set(['盤中','均線','週線強弱','月線強弱','量價','量能啟動','回測量縮','K線型態','突破品質','缺口回補']);
 const SIG_BASE = {'均線':2,'週線強弱':2,'月線強弱':2,'均線糾結':2,'量價':2,'量能啟動':3,'K線型態':2,'突破品質':3,'回測量縮':2,'缺口回補':2,'漲跌停':3,'MACD':2,'RSI':1,'KD':1,'布林':1,'籌碼':2,'大戶持股':2,'相對強弱':2,'收盤強度':1,'影線意圖':1,'K線收斂':1,'支撐壓力':1,'壓力強度':1,'支撐強度':1,'RSI背離':2,'盤中':3};
 function sigStrength(x){
@@ -4019,10 +4100,14 @@ function renderSignals(signals, score, bullPts, bearPts) {
         <span style="width:26px;text-align:right;font-family:var(--mono);color:${dc(d.score)};">${d.score}</span>
         <span style="width:62px;font-size:.62rem;color:var(--muted);">${d.n}訊號</span></div>`).join('')}
     <div style="font-size:.72rem;margin-top:6px;color:${resoC};">${reso}</div></div>`;
+  // 觀察清單條件（歷史統計發現的組合：趨勢≥65、動能<50、籌碼≥65）——只是觀察條件，不是買進訊號
+  const _wl = dm.trend.score!==null && dm.mom.score!==null && dm.chip.score!==null && dm.trend.score>=65 && dm.mom.score<50 && dm.chip.score>=65;
+  const watchHtml = _wl ? `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
+    <div style="font-size:.74rem;font-weight:700;color:var(--gold);">👀 強勢股拉回觀察（趨勢≥65、動能＜50、籌碼≥65）</div></div>` : '';
   const rowHtml = m=>`<div class="sig ${m.x.type}"><span class="sig-tag">${m.x.cat}</span>${sigDots(m.st,m.x.type)}${m.x.text}</div>`;
   const legend = `<div style="font-size:.62rem;color:var(--muted);margin:2px 0 6px;">強度：●●● 強　●●○ 中　●○○ 弱（強的排前面）</div>`;
   const auxHtml = auxL.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;font-size:.74rem;color:var(--muted2);padding:4px 0;">輔助訊號（${auxL.length}）　RSI／KD／MACD／布林／籌碼／影線等，點擊展開</summary>${auxL.map(rowHtml).join('')}</details>` : '';
-  el.innerHTML = renderCurrentPatterns(cp) + head + dimHtml
+  el.innerHTML = renderCurrentPatterns(cp) + head + dimHtml + watchHtml
     + `<div style="font-size:.66rem;color:var(--gold2);font-family:var(--mono);letter-spacing:1px;margin:4px 0 2px;">◆ 核心訊號（${coreL.length}）</div>` + legend
     + coreL.map(rowHtml).join('') + auxHtml + renderPatternStats(cp);
 }
@@ -4352,6 +4437,103 @@ function renderBtResult(data) {
     add(btPlan.slHard, '#00c896', '硬止損');
     add(btPlan.tp1, '#ff4d6d', '短線止盈');
   }
+}
+
+// ═══════════════════════════════════════
+//  批次回放匯出：逐檔、逐日算出「當天以前」的總分與四維分數，連同之後報酬輸出成 CSV
+//  每個日期的資料（股價、籌碼、大盤）都只切到該日為止；大戶持股資料太新，批次不納入。
+// ═══════════════════════════════════════
+const BT_DEFAULT_POOL = '2330 2317 2454 2308 2382 2412 2881 2882 2891 2603 3711 2303 2357 2379 3034 3037 2345 2301 2327 3231 2376 2409 2615 1301 1303 2002 1216 2912 3045 6669';
+// 擴大池：第一輪 30 檔大型股以外的中型／中小型、傳產、金融、航運、櫃買（與預設池不重複）。代號若已下市或查無資料會自動略過並列出
+const BT_WIDE_POOL = '2352 2353 2356 2360 2368 2374 2383 2385 2392 2395 2404 2449 2451 2458 2474 3017 3023 3044 3035 3036 3406 3443 3533 3653 3661 4958 5269 6176 6239 6271 6414 8046 8210 2312 2313 2324 2337 2344 2408 1101 1102 1402 1476 1590 1605 1717 1722 1802 2006 2014 2027 2049 2105 2201 2207 2371 2501 2542 2605 2606 2609 2610 2618 2637 2801 2809 2812 2834 2845 2880 2883 2884 2885 2886 2887 2890 2892 5880 9904 9910 9945 1519 1513 1504 1503 1560 1536 3293 3529 3105 3081 6488 6510 8069 8299 6446 3131 3583 6196 5483 5274 3374 3324 3491';
+function btFillPool(which) { document.getElementById('btBatchCodes').value = which === 'wide' ? BT_WIDE_POOL : BT_DEFAULT_POOL; }
+let btBatchStop = false, btBatchRunning = false;
+function openBtBatch() {
+  const ta = document.getElementById('btBatchCodes');
+  if (!ta.value.trim()) { let v = ''; try { v = localStorage.getItem('btBatchCodes') || ''; } catch {} ta.value = v || BT_DEFAULT_POOL; }
+  document.getElementById('btBatchDlg').style.display = 'flex';
+}
+function closeBtBatch() {
+  if (btBatchRunning) { btBatchStop = true; document.getElementById('btBatchMsg').textContent = '正在停止…'; return; }
+  document.getElementById('btBatchDlg').style.display = 'none';
+}
+// 二分搜尋：回傳「最後一個 date <= d」的索引（陣列需依 date 遞增）
+function btLastIdx(arr, d) { let lo = 0, hi = arr.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m].date <= d) { r = m; lo = m + 1; } else hi = m - 1; } return r; }
+function btFirstIdx(arr, d) { let lo = 0, hi = arr.length - 1, r = arr.length; while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m].date >= d) { r = m; hi = m - 1; } else lo = m + 1; } return r; }
+
+async function runBtBatch() {
+  if (btBatchRunning) return;
+  if (currentMarket !== 'TW') { document.getElementById('btBatchMsg').textContent = '批次匯出僅支援台股，請先切換到台股。'; return; }
+  const codes = [...new Set(document.getElementById('btBatchCodes').value.split(/[\s,，、;]+/).map(x => x.trim()).filter(x => /^\d{4,6}[A-Za-z]?$/.test(x)))];
+  const step = Math.max(1, Math.min(20, parseInt(document.getElementById('btBatchStep').value) || 3));
+  const msg = document.getElementById('btBatchMsg');
+  if (!codes.length) { msg.textContent = '請輸入至少一個股票代號'; return; }
+  try { localStorage.setItem('btBatchCodes', codes.join(' ')); } catch {}
+  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+  const sel = document.getElementById('strategySelect');
+  const saved = { priceData, chipData, holderData, twiiData, intradayVolInfo, strat: sel?.value };
+  btBatchRunning = true; btBatchStop = false;
+  document.getElementById('btBatchGo').disabled = true;
+  document.getElementById('btBatchCancel').textContent = '停止';
+  const T0 = Date.now(), rows = [], failed = [];
+  const fmt = v => (v == null || !Number.isFinite(v)) ? '' : (Math.round(v * 1e4) / 1e4);
+  try {
+    intradayVolInfo = null; holderData = [];
+    msg.textContent = '抓取加權指數…';
+    const twiiAll = (await fetchTWII('10y')).filter(d => d.close > 0);
+    for (let si = 0; si < codes.length && !btBatchStop; si++) {
+      const code = codes[si];
+      msg.textContent = `(${si + 1}/${codes.length}) ${code}　抓取資料…　已產生 ${rows.length.toLocaleString()} 筆`;
+      let bars, chipAll;
+      try {
+        bars = cleanBars(await fetchPrice(code, token));
+        if (bars.length < 330) throw new Error('K棒不足 330 根');
+        chipAll = (await fetchChipRange(code, token, _addDays(bars[0].date, 0), taipeiDateStr())).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+      } catch (e) { failed.push(`${code}（${e.message}）`); continue; }
+      let nOk = 0;
+      for (let i = 300; i < bars.length && !btBatchStop; i += step) {
+        const d = bars[i].date;
+        priceData = bars.slice(0, i + 1);
+        const c1 = btLastIdx(chipAll, d), c0 = btFirstIdx(chipAll, _addDays(d, -60));
+        chipData = c1 >= c0 ? chipAll.slice(c0, c1 + 1) : [];
+        const t1 = btLastIdx(twiiAll, d);
+        twiiData = t1 >= 0 ? twiiAll.slice(Math.max(0, t1 - 59), t1 + 1) : [];
+        // 畫面上看到的分數＝「該日建議策略」的權重算出來的（畫面會先用平衡算一次，再切到建議策略重算）。
+        // 這裡照樣兩段：先平衡 → 取得建議策略 → 非平衡就用該策略重算；score＝畫面分數，score_bal＝純平衡分數
+        const once = key => { if (sel) sel.value = key; btCapture = {}; try { runAnalysis(priceData.slice(-currentPeriod), twiiData); } catch (e) {} const r = btCapture && btCapture.out; btCapture = null; return r; };
+        const o1 = once('balanced');
+        if (!o1) continue;
+        const o = (o1.auto && o1.auto !== 'balanced') ? (once(o1.auto) || o1) : o1;
+        const c = bars[i].close, ret = k => i + k < bars.length ? (bars[i + k].close / c - 1) * 100 : null;
+        let mfe = null, mae = null;
+        if (i + 20 < bars.length) { const w = bars.slice(i + 1, i + 21); mfe = (Math.max(...w.map(b => b.max)) / c - 1) * 100; mae = (Math.min(...w.map(b => b.min)) / c - 1) * 100; }
+        const r5o = i + 5 < bars.length ? (bars[i + 5].close / bars[i + 1].open - 1) * 100 : null;   // 隔日開盤進場、第5日收盤出場
+        const ti = btLastIdx(twiiAll, d), b5 = (ti >= 0 && ti + 5 < twiiAll.length) ? (twiiAll[ti + 5].close / twiiAll[ti].close - 1) * 100 : null;
+        const dm = o.dims;
+        rows.push([code, d, c, o.score, o1.score, fmt(dm.trend.score), fmt(dm.mom.score), fmt(dm.vol.score), fmt(dm.chip.score),
+          dm.trend.n, dm.mom.n, dm.vol.n, dm.chip.n, o1.auto, fmt(o.rsi), fmt(o.volRatio),
+          fmt(ret(1)), fmt(ret(5)), fmt(ret(10)), fmt(ret(20)), fmt(r5o), fmt(mfe), fmt(mae), fmt(b5),
+          o.scoreOld, o.scoreNew, o1.scoreNew, fmt(o.volZ), fmt(o.volDirZ), fmt(o.ptsNet.trend), fmt(o.ptsNet.mom), fmt(o.ptsNet.vol), fmt(o.ptsNet.chip)].join(','));
+        nOk++;
+        if (nOk % 40 === 0) { msg.textContent = `(${si + 1}/${codes.length}) ${code}　${d}　已產生 ${rows.length.toLocaleString()} 筆`; await new Promise(r => setTimeout(r, 0)); }
+      }
+    }
+  } finally {
+    btCapture = null;
+    priceData = saved.priceData; chipData = saved.chipData; holderData = saved.holderData; twiiData = saved.twiiData; intradayVolInfo = saved.intradayVolInfo;
+    if (sel && saved.strat) sel.value = saved.strat;
+    btBatchRunning = false;
+    document.getElementById('btBatchGo').disabled = false;
+    document.getElementById('btBatchCancel').textContent = '關閉';
+  }
+  if (!rows.length) { msg.textContent = '沒有產生任何資料。' + (failed.length ? '\n失敗：' + failed.join('、') : ''); return; }
+  const header = 'code,date,close,score,score_bal,trend,mom,vol,chip,n_trend,n_mom,n_vol,n_chip,auto_strategy,rsi,vol_ratio,r1,r5,r10,r20,r5_nextopen,mfe20,mae20,twii_r5,score_old,score_new,score_bal_new,vol_z,vol_dirz,pts_trend,pts_mom,pts_vol,pts_chip';
+  const csv = header + '\n' + rows.join('\n') + '\n';
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+  const name = `bt_fourdim_${taipeiDateStr().replace(/-/g, '')}_p${currentPeriod}_s${step}.csv`;
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  if (failed.length) document.getElementById('btBatchCodes').value = failed.map(x => x.split('（')[0]).join(' ');   // 失敗的代號放回輸入框，可直接再按一次重跑
+  msg.innerHTML = `${btBatchStop ? '已中途停止，' : ''}完成：${codes.length - failed.length} 檔、<b>${rows.length.toLocaleString()}</b> 筆，用時 ${((Date.now() - T0) / 1000).toFixed(0)} 秒。已下載 <b>${name}</b>（沒跳出下載的話 <a href="${url}" download="${name}" style="color:var(--gold)">點這裡</a>）。` + (failed.length ? `<br><span style="color:var(--muted2)">略過 ${failed.length} 檔：${failed.join('、')}（已放回輸入框，額度恢復或確認代號後可再按一次「開始回放」重跑，另存成新的 CSV）</span>` : '');
 }
 
 // 前／後翻一個交易日（dir: -1 / +1）
