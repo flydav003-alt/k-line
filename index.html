@@ -319,6 +319,7 @@ body.us-mode #stockInput{ width:110px; }
   background:var(--bg);z-index:20;flex-direction:column;
 }
 #intradayWrap.show{display:flex;}
+#tfRow.id-on .pt:not(.tf), #tfRow.id-on #trendToggleBtn, #tfRow.id-on #patternToggleBtn{display:none;}
 #idHead{
   padding:8px 14px 4px;font-family:var(--mono);font-size:.78rem;
   color:var(--muted2);display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;
@@ -877,6 +878,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
       </div>
       <div id="intradayWrap">
         <div id="idHead"></div>
+        <div id="idChips" class="ma-toggle-bar"></div>
         <div id="idChart"><div id="idMsg"></div></div>
       </div>
       </div><!-- /charts-inner -->
@@ -5254,31 +5256,91 @@ function idShowInfo(bar, cumVol) {
     `<span style="color:${color}">價 <b style="color:${color}">${idFmt(bar.close)}</b>${chg == null ? '' : ` ${chg > 0 ? '▲' : chg < 0 ? '▼' : ''}${idFmt(Math.abs(chg))} (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`}</span>${volTxt}`;
 }
 function idMessage(t) { const m = document.getElementById('idMsg'); if (m) m.textContent = t || ''; }
+const idRef = (() => { try { return { avg: true, ma5: false, ma10: false, open: false, ...JSON.parse(localStorage.getItem('kline_id_ref') || '{}') }; } catch { return { avg: true, ma5: false, ma10: false, open: false }; } })();
+const ID_REF_DEF = [
+  ['avg',  '日均價', '#e8eef8'],
+  ['ma5',  '5MA',    '#d9485f'],
+  ['ma10', '10MA',   '#2fb37a'],
+  ['open', '開盤價', '#e8b84b'],
+];
+function renderIdChips() {
+  const box = document.getElementById('idChips');
+  if (!box) return;
+  box.innerHTML = '<span style="font-size:.65rem;color:var(--muted);font-family:var(--mono);margin-right:2px;">參考線</span>' +
+    ID_REF_DEF.map(([k, name, col]) =>
+      `<div class="ma-chip-btn" data-off="${idRef[k] ? 0 : 1}" style="border-color:${col};color:${col};background:${col}22;" onclick="toggleIdRef('${k}')">${name}</div>`).join('');
+}
+function toggleIdRef(k) {
+  idRef[k] = !idRef[k];
+  try { localStorage.setItem('kline_id_ref', JSON.stringify(idRef)); } catch {}
+  renderIdChips();
+  if (idData) renderIntraday();
+}
 function renderIntraday() {
   const box = document.getElementById('idChart');
   if (!box || !idData) return;
+  renderIdChips();
   if (idChartObj) { idChartObj.remove(); idChartObj = null; }
   const w = box.clientWidth || 600, h = box.clientHeight || 340;
   idChartObj = LightweightCharts.createChart(box, {
     ...lwChartOpts(h), width: w,
     rightPriceScale: { borderColor: '#1e2d4a', textColor: '#c8d8f0', scaleMargins: { top: .08, bottom: .28 } },
-    timeScale: { borderColor: '#1e2d4a', timeVisible: true, secondsVisible: false, textColor: '#c8d8f0', rightOffset: 2 },
+    timeScale: { borderColor: '#1e2d4a', timeVisible: true, secondsVisible: false, textColor: '#c8d8f0', rightOffset: 0 },
   });
-  const bars = idData.bars, prev = idData.prev;
+  const bars = idData.bars;
+  const base = Math.floor(bars[0].time / 86400) * 86400;       // 當地日期 00:00（已含 gmtoffset）
+  const dateStr = new Date(base * 1000).toISOString().slice(0, 10);
+  const prev = idData.prev || bars[0].open;
   const last = bars[bars.length - 1];
-  const up = prev ? last.close >= prev : true;
+  const UP = '#ff4d6d', DN = '#00c896', EQ = '#c8d8f0';
+  const colOf = v => v > prev ? UP : v < prev ? DN : EQ;
+  const noScale = { autoscaleInfoProvider: () => null };
+
+  // 主線：高於昨收紅、低於昨收綠；價格軸以昨收為中心對稱
   idLine = idChartObj.addLineSeries({
-    color: '#4a9eff', lineWidth: 2, priceLineVisible: true, lastValueVisible: true,
+    color: EQ, lineWidth: 2, priceLineVisible: false, lastValueVisible: true,
     crosshairMarkerVisible: true, priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+    autoscaleInfoProvider: orig => {
+      const r = orig();
+      if (!r || !r.priceRange) return r;
+      const m = Math.max(Math.abs(r.priceRange.maxValue - prev), Math.abs(r.priceRange.minValue - prev), prev * 0.005);
+      return { priceRange: { minValue: prev - m, maxValue: prev + m }, margins: r.margins };
+    },
   });
-  idLine.setData(bars.map(b => ({ time: b.time, value: b.close })));
-  if (prev) idPrevLine = idLine.createPriceLine({ price: prev, color: '#8a9bb8', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '昨收' });
+  const pts = bars.map(b => ({ time: b.time, value: b.close, color: colOf(b.close) }));
+  // 台股：補空白時間點，讓橫軸固定 09:00–13:30
+  if (currentMarket === 'TW') {
+    const t0 = base + 9 * 3600, t1 = base + 13 * 3600 + 30 * 60;
+    const have = new Set(bars.map(b => b.time)), extra = [];
+    for (let t = t0; t <= t1; t += 60) if (!have.has(t)) extra.push({ time: t });
+    idLine.setData(pts.concat(extra).sort((a, b) => a.time - b.time));
+  } else idLine.setData(pts);
+  idPrevLine = idLine.createPriceLine({ price: prev, color: '#8a9bb8', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '昨收' });
+
+  // 參考線
+  const addRef = (color, data, extra = {}) => {
+    const sr = idChartObj.addLineSeries({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, ...noScale, ...extra });
+    sr.setData(data); return sr;
+  };
+  if (idRef.avg) {
+    let pv = 0, vv = 0, cs = 0, n = 0;
+    addRef('#e8eef8', bars.map(b => { n++; cs += b.close; pv += b.close * b.vol; vv += b.vol; return { time: b.time, value: vv > 0 ? pv / vv : cs / n }; }));
+  }
+  const closes = (typeof priceData !== 'undefined' ? priceData : []).filter(d => d.date < dateStr).map(d => d.close);
+  [['ma5', 5, '#d9485f'], ['ma10', 10, '#2fb37a']].forEach(([k, n, col]) => {
+    if (!idRef[k] || closes.length < n - 1) return;
+    const sum = closes.slice(-(n - 1)).reduce((x, y) => x + y, 0);
+    addRef(col, bars.map(b => ({ time: b.time, value: (sum + b.close) / n })));
+  });
+  if (idRef.open) addRef('#e8b84b', bars.map(b => ({ time: b.time, value: bars[0].open })), { lineStyle: LightweightCharts.LineStyle.Dashed });
+
+  // 成交量
   const hasVol = currentStockId !== 'TWII' && bars.some(b => b.vol > 0);
   if (hasVol) {
     idVol = idChartObj.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'idvol', lastValueVisible: false, priceLineVisible: false });
     idChartObj.priceScale('idvol').applyOptions({ scaleMargins: { top: .78, bottom: 0 } });
-    let pc = prev || bars[0].open;
-    idVol.setData(bars.map(b => { const col = b.close >= pc ? 'rgba(255,77,109,0.75)' : 'rgba(0,200,150,0.75)'; pc = b.close; return { time: b.time, value: b.vol, color: col }; }));
+    let pc = prev;
+    idVol.setData(bars.map(b => { const col = b.close >= pc ? 'rgba(255,77,109,0.8)' : 'rgba(0,200,150,0.8)'; pc = b.close; return { time: b.time, value: b.vol, color: col }; }));
   }
   const cum = []; let acc = 0; bars.forEach(b => { acc += b.vol; cum.push(acc); });
   const byTime = new Map(bars.map((b, i) => [b.time, i]));
@@ -5312,10 +5374,12 @@ function showIntraday(on) {
   if (on) {
     wrap.style.top = (row ? row.offsetHeight : 42) + 'px';
     wrap.classList.add('show');
+    document.getElementById('tfRow').classList.add('id-on');
     document.querySelectorAll('.pt.tf').forEach(t => t.classList.toggle('active', t.dataset.tf === 'I'));
     loadIntraday(true);
   } else {
     wrap.classList.remove('show');
+    document.getElementById('tfRow').classList.remove('id-on');
     if (idChartObj) { idChartObj.remove(); idChartObj = null; }
     idLoadedFor = '';
   }
