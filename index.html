@@ -5230,15 +5230,15 @@ function parseYahooIntraday(raw) {
   const prev = r.meta?.chartPreviousClose ?? r.meta?.previousClose ?? null;
   return { bars, prev, tz: r.meta?.exchangeTimezoneName || '' };
 }
+const idCache = new Map();   // key -> { data, ts }
 async function fetchIntraday() {
   const cands = idSymbolCandidates();
-  for (const sym of cands) {
-    for (const node of ['query1', 'query2']) {
-      const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=false`;
-      const d = await fetchViaProxies(url, parseYahooIntraday, 'YahooIntraday');
-      if (d && d.bars.length) { idSymbol = sym; return d; }
-    }
-  }
+  const tryOne = async sym => {
+    const urls = ['query1', 'query2'].map(n => `https://${n}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=false`);
+    const d = await Promise.any(urls.map(u => fetchViaProxies(u, parseYahooIntraday, 'YahooIntraday').then(x => { if (!x) throw new Error('empty'); return x; })));
+    idSymbol = sym; return d;
+  };
+  for (const sym of cands) { try { return await tryOne(sym); } catch {} }
   return null;
 }
 function idFmt(n) { return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
@@ -5307,7 +5307,8 @@ function renderIntraday() {
       return { priceRange: { minValue: prev - m, maxValue: prev + m }, margins: r.margins };
     },
   });
-  const pts = bars.map(b => ({ time: b.time, value: b.close, color: colOf(b.close) }));
+  let lastCol = EQ;
+  const pts = bars.map(b => { const c = b.close > prev ? UP : b.close < prev ? DN : lastCol; lastCol = c; return { time: b.time, value: b.close, color: c }; });
   // 台股：補空白時間點，讓橫軸固定 09:00–13:30
   if (currentMarket === 'TW') {
     const t0 = base + 9 * 3600, t1 = base + 13 * 3600 + 30 * 60;
@@ -5356,16 +5357,36 @@ async function loadIntraday(force) {
   const key = currentMarket + ':' + currentStockId;
   if (!force && idLoadedFor === key && Date.now() - idLastFetch < 55000) return;
   const req = ++idReq; idBusy = true;
-  if (idLoadedFor !== key) { idData = null; idMessage('載入當日走勢…'); if (idChartObj) { idChartObj.remove(); idChartObj = null; } document.getElementById('idHead').innerHTML = ''; }
+  if (idLoadedFor !== key) {
+    if (idChartObj) { idChartObj.remove(); idChartObj = null; }
+    document.getElementById('idHead').innerHTML = '';
+    const c = idCache.get(key);
+    if (c) { idData = c.data; idLoadedFor = key; idLastFetch = c.ts; idMessage(''); renderIntraday(); }   // 先秀暫存，背景再更新
+    else { idData = null; idMessage('載入當日走勢…'); }
+  }
   try {
+    if (idLoadedFor === key && Date.now() - idLastFetch < 20000 && !force) return;
+    if (idLoadedFor === key && idCache.get(key) && Date.now() - idCache.get(key).ts < 15000) return;   // 剛預抓完，不重複打
     const d = await fetchIntraday();
     if (req !== idReq || !intradayMode || key !== currentMarket + ':' + currentStockId) return;
     if (!d) { if (idLoadedFor !== key) idMessage('當日走勢載入失敗（Yahoo 1 分線來源皆無回應）'); return; }
-    idData = d; idLoadedFor = key; idLastFetch = Date.now();
+    idData = d; idLoadedFor = key; idLastFetch = Date.now(); idCache.set(key, { data: d, ts: idLastFetch });
     idMessage('');
     renderIntraday();
-  } catch (e) { console.warn('[當日走勢]', e.message); idMessage('當日走勢載入失敗'); }
+  } catch (e) { console.warn('[當日走勢]', e.message); if (!idData) idMessage('當日走勢載入失敗'); }
   finally { idBusy = false; }
+}
+// 背景預抓：個股日K分析完成後，先把當日資料抓好，點「當日」才秒開
+let idPrefetchKey = '', idPrefetching = false;
+async function prefetchIntraday() {
+  if (idPrefetching || intradayMode || !currentStockId || typeof priceData === 'undefined' || !priceData.length) return;
+  const key = currentMarket + ':' + currentStockId;
+  if (key === idPrefetchKey) return;
+  idPrefetchKey = key; idPrefetching = true;
+  try {
+    const d = await fetchIntraday();
+    if (d) idCache.set(key, { data: d, ts: Date.now() });
+  } catch {} finally { idPrefetching = false; }
 }
 function showIntraday(on) {
   intradayMode = on;
@@ -5386,6 +5407,7 @@ function showIntraday(on) {
 }
 // 換股 → 重載；盤中每分鐘更新；視窗縮放 → 重畫尺寸
 setInterval(() => {
+  if (!document.hidden && !intradayMode) { prefetchIntraday(); return; }
   if (!intradayMode || document.hidden) return;
   const key = currentMarket + ':' + currentStockId;
   if (key !== idLoadedFor) loadIntraday(true);
