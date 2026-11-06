@@ -319,6 +319,7 @@ body.us-mode #stockInput{ width:110px; }
   background:var(--bg);z-index:20;flex-direction:column;
 }
 #intradayWrap.show{display:flex;}
+#chartsCol.id-on .sub-charts .sub-chart-wrap:nth-child(n+2){visibility:hidden;}
 #tfRow.id-on .pt:not(.tf), #tfRow.id-on #trendToggleBtn, #tfRow.id-on #patternToggleBtn{display:none;}
 #idHead{
   padding:8px 14px 4px;font-family:var(--mono);font-size:.78rem;
@@ -5388,18 +5389,29 @@ async function prefetchIntraday() {
     if (d) idCache.set(key, { data: d, ts: Date.now() });
   } catch {} finally { idPrefetching = false; }
 }
+function idLayout() {
+  const wrap = document.getElementById('intradayWrap'), row = document.getElementById('tfRow');
+  if (!wrap || !row) return;
+  const inner = wrap.parentElement.getBoundingClientRect(), rb = row.getBoundingClientRect();
+  wrap.style.top = Math.max(0, rb.bottom - inner.top) + 'px';
+  const subs = document.querySelectorAll('.sub-charts .sub-chart-wrap');
+  wrap.style.bottom = subs[0] ? Math.max(0, inner.bottom - subs[0].getBoundingClientRect().bottom) + 'px' : '0px';   // 對齊日K的成交量圖底部
+  if (idChartObj) { const box = document.getElementById('idChart'); idChartObj.applyOptions({ width: box.clientWidth, height: box.clientHeight }); }
+}
 function showIntraday(on) {
   intradayMode = on;
   const wrap = document.getElementById('idWrapEl') || document.getElementById('intradayWrap');
   const row = document.getElementById('tfRow');
   if (on) {
-    wrap.style.top = (row ? row.offsetHeight : 42) + 'px';
+    document.getElementById('chartsCol').classList.add('id-on');
+    idLayout();
     wrap.classList.add('show');
     document.getElementById('tfRow').classList.add('id-on');
     document.querySelectorAll('.pt.tf').forEach(t => t.classList.toggle('active', t.dataset.tf === 'I'));
     loadIntraday(true);
   } else {
     wrap.classList.remove('show');
+    document.getElementById('chartsCol').classList.remove('id-on');
     document.getElementById('tfRow').classList.remove('id-on');
     if (idChartObj) { idChartObj.remove(); idChartObj = null; }
     idLoadedFor = '';
@@ -5413,12 +5425,7 @@ setInterval(() => {
   if (key !== idLoadedFor) loadIntraday(true);
   else if (currentMarket === 'US' || isTWMarketOpen()) loadIntraday(false);
 }, 2000);
-window.addEventListener('resize', () => {
-  if (intradayMode && idChartObj) {
-    const box = document.getElementById('idChart');
-    idChartObj.applyOptions({ width: box.clientWidth, height: box.clientHeight });
-  }
-});
+window.addEventListener('resize', () => { if (intradayMode) idLayout(); });
 </script>
 </body>
 </html>
