@@ -942,7 +942,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
       <!-- TRADE SECTION -->
       <div class="section" id="secTrade">
         <div class="section-hd" onclick="toggleSection('secTrade')">
-          <span class="section-title">操作建議</span>
+          <span class="section-title">技術面判讀</span>
           <span class="sec-sum" id="sum-secTrade"></span>
           <span class="section-arrow open" id="arr-secTrade">▼</span>
         </div>
@@ -4026,7 +4026,7 @@ function runAnalysis(slicedData, twiiRaw) {
 
   renderScore(score, volStructScore, volStructLabel, autoStrategy);
   renderSignals(signals, score, bullPts, bearPts);
-  renderTrade(data, score, lma20, rhi, rlo, lATR);
+  renderTrade(data, score, lma20, rhi, rlo, lATR, signals);
   renderBias(data);
   renderShortTerm(shortTermData);
   renderBtResult(data);
@@ -4035,18 +4035,41 @@ function runAnalysis(slicedData, twiiRaw) {
 // ═══════════════════════════════════════
 //  RENDER SCORE
 // ═══════════════════════════════════════
+// 單一來源：評分圈、技術訊號「綜合判斷」、技術面判讀共用同一組門檻與用語（描述技術面狀態，不構成買賣建議）
+const SCORE_BANDS = [
+  { min:78, key:'sbull', label:'強烈偏多', icon:'📈', color:'#ff4d6d', tcolor:'var(--up)',   sub:'多數指標同向偏多' },
+  { min:62, key:'bull',  label:'偏多',     icon:'📊', color:'#ff9f40', tcolor:'var(--up)',   sub:'指標偏多，尚未全面共振' },
+  { min:45, key:'neu',   label:'中性',     icon:'⚖️', color:'#e8b84b', tcolor:'var(--gold)', sub:'多空混雜，沒有明確方向' },
+  { min:30, key:'bear',  label:'偏空',     icon:'⚠️', color:'#4a9eff', tcolor:'var(--dn)',   sub:'指標偏空' },
+  { min:-1, key:'sbear', label:'強烈偏空', icon:'🔻', color:'#00c896', tcolor:'var(--dn)',   sub:'多數指標同向偏空' },
+];
+function bandOf(score) {
+  if (score == null || !isFinite(score)) return SCORE_BANDS[2];
+  return SCORE_BANDS.find(b => score >= b.min) || SCORE_BANDS[SCORE_BANDS.length - 1];
+}
+// 歷史統計：bt_fourdim 批次匯出（台股樣本；score=各日自動建議策略計分，bal=平衡模式計分）
+const BT_STATS = {"score":{"sbull":{"n":2659,"w5":49.8,"w20":50.7,"r5":0.69,"r20":2.17},"bull":{"n":17136,"w5":50.0,"w20":52.3,"r5":0.56,"r20":2.54},"neu":{"n":27479,"w5":51.6,"w20":54.0,"r5":0.53,"r20":2.39},"bear":{"n":8853,"w5":52.6,"w20":54.4,"r5":0.38,"r20":1.96},"sbear":{"n":226,"w5":48.2,"w20":51.3,"r5":-0.23,"r20":1.22}},"bal":{"sbull":{"n":131,"w5":51.9,"w20":51.1,"r5":2.3,"r20":3.98},"bull":{"n":9527,"w5":48.3,"w20":50.9,"r5":0.57,"r20":2.6},"neu":{"n":31054,"w5":51.5,"w20":53.5,"r5":0.6,"r20":2.42},"bear":{"n":15241,"w5":52.3,"w20":54.8,"r5":0.32,"r20":2.06},"sbear":{"n":400,"w5":50.7,"w20":53.8,"r5":-0.01,"r20":2.6}},"base":{"n":56353,"w5":51.1,"w20":53.4},"meta":{"stocks":104,"from":"2020-02","to":"2026-11"}};
+function dimResonance(signals) {
+  const dm = dimScores(signals);
+  const dlR = Object.values(dm).filter(d => d.name !== '動能' && d.score !== null);   // 共振不含動能
+  const nBull = dlR.filter(d => d.score >= 60).length, nBear = dlR.filter(d => d.score <= 40).length;
+  let short, color;
+  if (dlR.length >= 2 && nBull === dlR.length)      { short = `${dlR.length}維全數偏多`; color = 'var(--up)'; }
+  else if (dlR.length >= 2 && nBear === dlR.length) { short = `${dlR.length}維全數偏空`; color = 'var(--dn)'; }
+  else if (nBull >= 2)                              { short = `${nBull}/${dlR.length}維偏多`; color = 'var(--up)'; }
+  else if (nBear >= 2)                              { short = `${nBear}/${dlR.length}維偏空`; color = 'var(--dn)'; }
+  else if (nBull >= 1 && nBear >= 1)                { short = '多空分歧'; color = 'var(--gold)'; }
+  else                                              { short = '未形成共振'; color = 'var(--muted2)'; }
+  return { nBull, nBear, n: dlR.length, short, color };
+}
 function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   const arc = document.getElementById('scoreArc');
   const circumference = 2 * Math.PI * 44;
   const dash = (score / 100) * circumference;
   arc.setAttribute('stroke-dasharray', `${dash} ${circumference - dash}`);
 
-  let color, verdict, sub;
-  if(score>=78){ color='#ff4d6d'; verdict='📈 強烈偏多'; sub='多項指標共振看多，可考慮介入'; }
-  else if(score>=62){ color='#ff9f40'; verdict='📊 偏多觀察'; sub='中短線偏多，可小量試單'; }
-  else if(score>=45){ color='#e8b84b'; verdict='⚖️ 中性觀望'; sub='多空混雜，暫時觀望等訊號'; }
-  else if(score>=30){ color='#4a9eff'; verdict='⚠️ 偏空謹慎'; sub='偏空訊號出現，持股注意停損'; }
-  else { color='#00c896'; verdict='🔻 強烈偏空'; sub='多項指標轉空，不宜持多'; }
+  const _band = bandOf(score);
+  const color = _band.color, verdict = `${_band.icon} ${_band.label}`, sub = _band.sub;
 
   arc.setAttribute('stroke', color);
   document.getElementById('scoreNum').style.color = color;
@@ -4127,17 +4150,15 @@ function renderSignals(signals, score, bullPts, bearPts) {
   const cmp = (p,q)=> (q.st-p.st) || (order[p.x.type]-order[q.x.type]) || (p.i-q.i);
   const coreL = meta.filter(m=>m.core).sort(cmp), auxL = meta.filter(m=>!m.core).sort(cmp);
   const nb = signals.filter(x=>x.type==='bull').length, nn = signals.filter(x=>x.type==='neutral').length, nr = signals.filter(x=>x.type==='bear').length;
-  setSecSummary('secSignals', `多 ${nb} · 空 ${nr}`, nb>nr?'var(--up)':nr>nb?'var(--dn)':'');
+  { const _r = dimResonance(signals); setSecSummary('secSignals', _r.short, _r.color); }
   const tot = (bullPts||0) + (bearPts||0);
   const bullShare = tot > 0 ? Math.round(bullPts/tot*100) : 50;
-  const verdict = score>=70 ? ['強勢偏多','var(--up)'] : score>=58 ? ['偏多','var(--up)'] : score>=43 ? ['中性觀望','var(--text)'] : score>=30 ? ['偏空','var(--dn)'] : ['弱勢偏空','var(--dn)'];
+  const _bd = bandOf(score), verdict = [_bd.label, _bd.tcolor];
   const head = `<div style="background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;margin-bottom:8px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
       <span style="font-weight:700;color:${verdict[1]};font-size:1rem;">綜合判斷：${verdict[0]}</span>
       <span style="font-family:var(--mono);color:var(--muted2);font-size:.78rem;">總分 ${score ?? '-'}/100</span></div>
-    <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:8px 0 6px;background:var(--border);">
-      <div style="width:${bullShare}%;background:var(--up);"></div><div style="width:${100-bullShare}%;background:var(--dn);"></div></div>
-    <div style="font-size:.72rem;color:var(--muted2);">多方訊號 <b style="color:var(--up)">${nb}</b> ｜ 中性 ${nn} ｜ 空方訊號 <b style="color:var(--dn)">${nr}</b>　多空力道 ${bullShare}% : ${100-bullShare}%</div></div>`;
+    <div style="font-size:.72rem;color:var(--muted2);margin-top:8px;">多方訊號 <b style="color:var(--up)">${nb}</b> ｜ 中性 ${nn} ｜ 空方訊號 <b style="color:var(--dn)">${nr}</b></div></div>`;
   // 四維分數與共振
   const dm = dimScores(signals), dl = Object.values(dm).filter(d=>d.score!==null);
   const dc = v => v>=60?'var(--up)':v<=40?'var(--dn)':'var(--gold)';
@@ -4627,7 +4648,7 @@ async function stepBt(dir) {
 // ═══════════════════════════════════════
 //  RENDER TRADE
 // ═══════════════════════════════════════
-function renderTrade(data, score, ma20val, hi20, lo20, atr) {
+function renderTrade(data, score, ma20val, hi20, lo20, atr, signals) {
   const n = data.length;
   const last = data[n-1];
   const p = last.close;
@@ -4653,29 +4674,69 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr) {
   const boxHigh = hi20, boxLow = lo20;
   const tp2_price = boxHigh + (boxHigh - boxLow) * 0.5;
 
-  const strat = getCurrentStrategy();
-  let action, buyZone;
-  if(score >= 62){
-    action = `可考慮買入（${strat.name}）`;
-    buyZone = sl_ma5 ? `${(Math.min(p, sl_ma5 * 1.01)).toFixed(2)} ～ ${p.toFixed(2)}` : p.toFixed(2);
-  } else if(score >= 45){
-    action = '觀望等待訊號';
-    buyZone = strat.entry || '等待回測均線/支撐確認';
-  } else {
-    action = '不宜追多';
-    buyZone = '-';
-  }
-
   btPlan = { score, entry: p, slHard: sl_hard, slMa5: sl_ma5 || null,
              tp1: tp1_price > p ? tp1_price : null, tp1Src: (tp1_price === resistance) ? '前高壓力' : (tp1_price === bbUpper) ? '布林上軌' : '風報比2R',
              tp2: (score >= 62 && tp2_price > p) ? tp2_price : null };
+  // ── 技術面判讀（描述目前狀態，不給買賣指令）──
+  const band = bandOf(score), reso = dimResonance(signals || []);
+  const pfx = isUS ? '$' : '';
+  const f = v => pfx + v.toFixed(2);
+  const ma10v = ma(data, 10)[n-1], ma60v = ma(data, 60)[n-1];
+  const ok = v => Number.isFinite(v) && v > 0;
+  const levels = [['MA5', sl_ma5], ['MA10', ma10v], ['MA20', ma20val], ['MA60', ma60v], ['近20日低', lo20], ['近20日高', hi20]].filter(x => ok(x[1]));
+  const sup = levels.filter(x => x[1] < p * 0.9995).sort((x, y) => y[1] - x[1])[0];
+  const res = levels.filter(x => x[1] > p * 1.0005).sort((x, y) => x[1] - y[1])[0];
+  const lvTxt = x => x ? `${x[0]} ${f(x[1])}<span style="color:var(--muted);font-size:.68rem;"> (${((x[1]/p-1)*100).toFixed(1)}%)</span>` : '-';
+  // 觀察條件：用現有均線／20日高低點，轉強、轉弱各一條
+  const ma20ok = ok(ma20val);
+  let upCond, dnCond;
+  if (ma20ok && p < ma20val)                    upCond = `收盤站上 MA20（${f(ma20val)}）`;
+  else if (ok(hi20) && p < hi20 * 0.9995)       upCond = `收盤突破近20日高點 ${f(hi20)}`;
+  else                                          upCond = ok(sl_ma5) ? `已在近20日高點附近，觀察能否守住 MA5（${f(sl_ma5)}）` : '已在近20日高點附近';
+  if (ma20ok && p > ma20val)                    dnCond = `收盤跌破 MA20（${f(ma20val)}）`;
+  else if (ok(lo20) && p > lo20 * 1.0005)       dnCond = `收盤跌破近20日低點 ${f(lo20)}`;
+  else                                          dnCond = ok(sl_ma5) ? `已在近20日低點附近，觀察能否站回 MA5（${f(sl_ma5)}）` : '已在近20日低點附近';
+  // 主要依據：強度最高的 3 個訊號
+  const _ord = { bull:0, neutral:1, bear:2 };
+  const top = (signals || []).map((x, i) => ({ x, i, st: sigStrength(x) }))
+    .sort((a, b) => (b.st - a.st) || (_ord[a.x.type] - _ord[b.x.type]) || (a.i - b.i)).slice(0, 3);
+  const clip = t => { t = String(t).split('｜')[0]; return t.length > 36 ? t.slice(0, 35) + '…' : t; };
+  const dot = t => t === 'bull' ? 'var(--up)' : t === 'bear' ? 'var(--dn)' : 'var(--muted2)';
+  const reasonHtml = top.length ? top.map(m => `<div style="display:flex;gap:6px;font-size:.74rem;line-height:1.5;margin-bottom:3px;"><span style="color:${dot(m.x.type)};flex-shrink:0;">●</span><span style="color:var(--text);">${clip(m.x.text)}</span></div>`).join('')
+                                      : '<div style="font-size:.74rem;color:var(--muted);">無明顯訊號</div>';
+  // 歷史參考（台股樣本）
+  let histHtml = '';
+  if (!isUS) {
+    const tbl = (document.getElementById('strategySelect')?.value === 'balanced') ? BT_STATS.bal : BT_STATS.score;
+    const h = tbl[band.key], B = BT_STATS.base, M = BT_STATS.meta;
+    histHtml = `
+      <div style="padding:8px 0 2px;">
+        <div style="font-size:.68rem;color:var(--muted2);margin-bottom:6px;font-weight:700;letter-spacing:1px;">◆ 歷史參考</div>
+        <div style="font-size:.74rem;line-height:1.6;color:var(--text);">此分數區間：5日後上漲 <b>${h.w5}%</b>、20日後上漲 <b>${h.w20}%</b>
+          <span style="color:var(--muted2);">（全部樣本 ${B.w5}% / ${B.w20}%）</span>${h.n < 500 ? '<span style="color:#ff9f40;">　樣本偏少（' + h.n + '）</span>' : ''}</div>
+        <div style="font-size:.64rem;line-height:1.6;color:var(--muted);margin-top:3px;">${M.stocks} 檔台股、${M.from}～${M.to}。分數高低與之後漲跌幾乎無關，僅描述目前技術面，不代表勝率；未扣交易成本。</div>
+      </div>`;
+  }
+  const secT = 'font-size:.68rem;color:var(--muted2);margin-bottom:6px;font-weight:700;letter-spacing:1px;';
   document.getElementById('tradeContent').innerHTML = `
     <div class="trade-grid">
-      <div class="trow"><span class="tkey">操作方向</span><span class="tval act">${action}</span></div>
-      <div class="trow"><span class="tkey">參考買入區</span><span class="tval buy">${buyZone}</span></div>
+      <div class="trow"><span class="tkey">技術面狀態</span><span class="tval act" style="color:${band.tcolor}">${band.icon} ${band.label}</span></div>
+      <div class="trow"><span class="tkey">維度共振</span><span class="tval" style="color:${reso.color}">${reso.short}</span></div>
+      <div class="trow"><span class="tkey">下方最近支撐</span><span class="tval">${lvTxt(sup)}</span></div>
+      <div class="trow"><span class="tkey">上方最近壓力</span><span class="tval">${lvTxt(res)}</span></div>
+      <div style="padding:8px 0 4px;border-bottom:1px solid var(--border);">
+        <div style="${secT}">◆ 觀察條件</div>
+        <div style="font-size:.74rem;line-height:1.6;margin-bottom:3px;"><span style="color:var(--up);">轉強</span>　${upCond}</div>
+        <div style="font-size:.74rem;line-height:1.6;"><span style="color:var(--dn);">轉弱</span>　${dnCond}</div>
+      </div>
+      <div style="padding:8px 0 4px;border-bottom:1px solid var(--border);">
+        <div style="${secT}">◆ 主要依據（強度最高的訊號）</div>
+        ${reasonHtml}
+      </div>
+      ${histHtml}
     </div>
   `;
-  setSecSummary('secTrade', action, score >= 62 ? 'var(--up)' : score >= 45 ? 'var(--gold)' : 'var(--dn)');
+  setSecSummary('secTrade', `${band.label} · ${reso.short}`, band.tcolor);
 }
 
 // ═══════════════════════════════════════
