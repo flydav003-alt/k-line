@@ -311,7 +311,24 @@ body.us-mode #stockInput{ width:110px; }
 }
 .charts-inner{
   display:flex;flex-direction:column;
-  flex:1;min-width:0;overflow:hidden;
+  flex:1;min-width:0;overflow:hidden;position:relative;
+}
+/* ── 當日走勢圖 ── */
+#intradayWrap{
+  display:none;position:absolute;left:0;right:0;bottom:0;top:42px;
+  background:var(--bg);z-index:20;flex-direction:column;
+}
+#intradayWrap.show{display:flex;}
+#idHead{
+  padding:8px 14px 4px;font-family:var(--mono);font-size:.78rem;
+  color:var(--muted2);display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;
+}
+#idHead b{font-size:.95rem;font-weight:600;color:var(--text);}
+#idChart{flex:1;min-height:0;position:relative;}
+#idMsg{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:.78rem;color:var(--muted2);text-align:center;
+  padding:20px;pointer-events:none;z-index:5;
 }
 
 /* ── PERIOD + TREND 列 ── */
@@ -796,8 +813,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <!-- LEFT: CHARTS -->
     <div class="charts-col" id="chartsCol">
       <div class="charts-inner">
-      <div style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
+      <div id="tfRow" style="display:flex;align-items:center;border-bottom:1px solid var(--border);background:var(--s1);">
         <div class="chart-tabs" style="border-bottom:none;flex:1;">
+          <div class="pt tf" data-tf="I" onclick="setTF('I')" title="當日 1 分鐘走勢">當日</div>
           <div class="pt tf active" data-tf="D" onclick="setTF('D')">日K</div>
           <div class="pt tf" data-tf="W" onclick="setTF('W')">週K</div>
           <div class="pt tf" data-tf="M" onclick="setTF('M')">月K</div>
@@ -856,6 +874,10 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           </div>
           <div id="macdChart"></div>
         </div>
+      </div>
+      <div id="intradayWrap">
+        <div id="idHead"></div>
+        <div id="idChart"><div id="idMsg"></div></div>
       </div>
       </div><!-- /charts-inner -->
       <div class="scroll-strip" id="scrollStrip" title="從此處上下滑動頁面"></div>
@@ -1208,6 +1230,8 @@ function vd(){
 }
 const TF_WIN = { D:[[60,'60日'],[120,'120日'],[240,'240日'],[480,'480日']], W:[[26,'26週'],[52,'52週'],[104,'104週'],[208,'208週']], M:[[24,'24月'],[36,'36月'],[60,'60月'],[120,'120月']] };
 function setTF(tf){
+  if (tf === 'I') { showIntraday(true); return; }
+  if (intradayMode) showIntraday(false);
   currentTF = tf;
   document.querySelectorAll('.pt.tf').forEach(t => t.classList.toggle('active', t.dataset.tf === tf));
   const tabs = document.querySelectorAll('.pt:not(.tf)'), w = TF_WIN[tf];
@@ -5173,6 +5197,142 @@ function syncStratBtns() {
     b.classList.toggle('active', b.dataset.strat === sel.value);
   });
 }
+
+// ═══════════════════════════════════════
+//  當日走勢圖（Yahoo 1 分鐘線）
+// ═══════════════════════════════════════
+let intradayMode = false, idChartObj = null, idLine = null, idVol = null, idPrevLine = null;
+let idData = null, idSymbol = '', idLoadedFor = '', idLastFetch = 0, idBusy = false, idReq = 0;
+
+function idSymbolCandidates() {
+  const id = currentStockId;
+  if (!id) return [];
+  if (currentMarket === 'US') return [id.toUpperCase()];
+  if (id === 'TWII') return ['^TWII'];
+  const first = currentSuffix === '.TWO' ? '.TWO' : '.TW';
+  return [id + first, id + (first === '.TW' ? '.TWO' : '.TW')];
+}
+function parseYahooIntraday(raw) {
+  const j = unwrapProxy(raw);
+  const r = j?.chart?.result?.[0];
+  if (!r || !r.timestamp?.length) throw new Error('Yahoo 無當日資料');
+  const q = r.indicators.quote[0];
+  const off = Number.isFinite(r.meta?.gmtoffset) ? r.meta.gmtoffset : 0;
+  const bars = [];
+  r.timestamp.forEach((t, i) => {
+    const c = q.close[i];
+    if (c == null || !(c > 0)) return;
+    bars.push({ time: t + off, close: c, vol: q.volume[i] || 0, open: q.open[i] ?? c });
+  });
+  if (!bars.length) throw new Error('當日無有效價格');
+  const prev = r.meta?.chartPreviousClose ?? r.meta?.previousClose ?? null;
+  return { bars, prev, tz: r.meta?.exchangeTimezoneName || '' };
+}
+async function fetchIntraday() {
+  const cands = idSymbolCandidates();
+  for (const sym of cands) {
+    for (const node of ['query1', 'query2']) {
+      const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=false`;
+      const d = await fetchViaProxies(url, parseYahooIntraday, 'YahooIntraday');
+      if (d && d.bars.length) { idSymbol = sym; return d; }
+    }
+  }
+  return null;
+}
+function idFmt(n) { return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function idHm(t) { const d = new Date(t * 1000), p = n => String(n).padStart(2, '0'); return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; }
+function idShowInfo(bar, cumVol) {
+  const head = document.getElementById('idHead');
+  if (!head || !idData) return;
+  const prev = idData.prev;
+  const chg = prev ? bar.close - prev : null, pct = prev ? chg / prev * 100 : null;
+  const color = chg == null || chg === 0 ? 'var(--muted2)' : chg > 0 ? 'var(--up)' : 'var(--green)';
+  const isStock = currentMarket === 'TW' && currentStockId !== 'TWII';
+  const volTxt = currentStockId === 'TWII' ? '' : `<span>量${isStock ? '(張)' : ''} ${Math.round(isStock ? cumVol / 1000 : cumVol).toLocaleString()}</span>`;
+  const name = (typeof stockNameCache !== 'undefined' && stockNameCache[currentStockId]) || currentStockId;
+  head.innerHTML = `<b>${name} 當日走勢</b><span>${idHm(bar.time)}</span>` +
+    `<span style="color:${color}">價 <b style="color:${color}">${idFmt(bar.close)}</b>${chg == null ? '' : ` ${chg > 0 ? '▲' : chg < 0 ? '▼' : ''}${idFmt(Math.abs(chg))} (${pct > 0 ? '+' : ''}${pct.toFixed(2)}%)`}</span>${volTxt}`;
+}
+function idMessage(t) { const m = document.getElementById('idMsg'); if (m) m.textContent = t || ''; }
+function renderIntraday() {
+  const box = document.getElementById('idChart');
+  if (!box || !idData) return;
+  if (idChartObj) { idChartObj.remove(); idChartObj = null; }
+  const w = box.clientWidth || 600, h = box.clientHeight || 340;
+  idChartObj = LightweightCharts.createChart(box, {
+    ...lwChartOpts(h), width: w,
+    rightPriceScale: { borderColor: '#1e2d4a', textColor: '#c8d8f0', scaleMargins: { top: .08, bottom: .28 } },
+    timeScale: { borderColor: '#1e2d4a', timeVisible: true, secondsVisible: false, textColor: '#c8d8f0', rightOffset: 2 },
+  });
+  const bars = idData.bars, prev = idData.prev;
+  const last = bars[bars.length - 1];
+  const up = prev ? last.close >= prev : true;
+  idLine = idChartObj.addLineSeries({
+    color: '#4a9eff', lineWidth: 2, priceLineVisible: true, lastValueVisible: true,
+    crosshairMarkerVisible: true, priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+  });
+  idLine.setData(bars.map(b => ({ time: b.time, value: b.close })));
+  if (prev) idPrevLine = idLine.createPriceLine({ price: prev, color: '#8a9bb8', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: '昨收' });
+  const hasVol = currentStockId !== 'TWII' && bars.some(b => b.vol > 0);
+  if (hasVol) {
+    idVol = idChartObj.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'idvol', lastValueVisible: false, priceLineVisible: false });
+    idChartObj.priceScale('idvol').applyOptions({ scaleMargins: { top: .78, bottom: 0 } });
+    let pc = prev || bars[0].open;
+    idVol.setData(bars.map(b => { const col = b.close >= pc ? 'rgba(255,77,109,0.75)' : 'rgba(0,200,150,0.75)'; pc = b.close; return { time: b.time, value: b.vol, color: col }; }));
+  }
+  const cum = []; let acc = 0; bars.forEach(b => { acc += b.vol; cum.push(acc); });
+  const byTime = new Map(bars.map((b, i) => [b.time, i]));
+  idShowInfo(last, acc);
+  idChartObj.subscribeCrosshairMove(p => {
+    const i = p && p.time != null ? byTime.get(p.time) : undefined;
+    if (i == null) idShowInfo(last, acc); else idShowInfo(bars[i], cum[i]);
+  });
+  idChartObj.timeScale().fitContent();
+}
+async function loadIntraday(force) {
+  if (!intradayMode || idBusy || !currentStockId) return;
+  const key = currentMarket + ':' + currentStockId;
+  if (!force && idLoadedFor === key && Date.now() - idLastFetch < 55000) return;
+  const req = ++idReq; idBusy = true;
+  if (idLoadedFor !== key) { idData = null; idMessage('載入當日走勢…'); if (idChartObj) { idChartObj.remove(); idChartObj = null; } document.getElementById('idHead').innerHTML = ''; }
+  try {
+    const d = await fetchIntraday();
+    if (req !== idReq || !intradayMode || key !== currentMarket + ':' + currentStockId) return;
+    if (!d) { if (idLoadedFor !== key) idMessage('當日走勢載入失敗（Yahoo 1 分線來源皆無回應）'); return; }
+    idData = d; idLoadedFor = key; idLastFetch = Date.now();
+    idMessage('');
+    renderIntraday();
+  } catch (e) { console.warn('[當日走勢]', e.message); idMessage('當日走勢載入失敗'); }
+  finally { idBusy = false; }
+}
+function showIntraday(on) {
+  intradayMode = on;
+  const wrap = document.getElementById('idWrapEl') || document.getElementById('intradayWrap');
+  const row = document.getElementById('tfRow');
+  if (on) {
+    wrap.style.top = (row ? row.offsetHeight : 42) + 'px';
+    wrap.classList.add('show');
+    document.querySelectorAll('.pt.tf').forEach(t => t.classList.toggle('active', t.dataset.tf === 'I'));
+    loadIntraday(true);
+  } else {
+    wrap.classList.remove('show');
+    if (idChartObj) { idChartObj.remove(); idChartObj = null; }
+    idLoadedFor = '';
+  }
+}
+// 換股 → 重載；盤中每分鐘更新；視窗縮放 → 重畫尺寸
+setInterval(() => {
+  if (!intradayMode || document.hidden) return;
+  const key = currentMarket + ':' + currentStockId;
+  if (key !== idLoadedFor) loadIntraday(true);
+  else if (currentMarket === 'US' || isTWMarketOpen()) loadIntraday(false);
+}, 2000);
+window.addEventListener('resize', () => {
+  if (intradayMode && idChartObj) {
+    const box = document.getElementById('idChart');
+    idChartObj.applyOptions({ width: box.clientWidth, height: box.clientHeight });
+  }
+});
 </script>
 </body>
 </html>
