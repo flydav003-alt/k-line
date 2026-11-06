@@ -770,10 +770,11 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <div style="font-size:.7rem;color:var(--muted2);line-height:1.7;margin-bottom:10px;">對每檔股票逐日回放：每個日期只用「當天以前」的資料算出總分與四維分數，並記下之後 1／5／10／20 日報酬，存成 CSV 後交給我統計。僅台股；分數＝畫面上顯示的分數（用該日建議策略的權重），另附純平衡模式分數；週期用目前選的。</div>
     <div style="font-size:.7rem;color:var(--muted2);margin-bottom:4px;">股票代號（逗號、空白或換行分隔）</div>
     <div style="display:flex;gap:6px;margin-bottom:5px;">
+      <button class="btn-clear-date" onclick="btFillPool('mine')" title="股票.XLSX 共 453 檔：半導體為主，另含 PCB、伺服器、被動元件、網通、航運、重電、鋼鐵、金融等">我的清單（453檔）</button>
       <button class="btn-clear-date" onclick="btFillPool('wide')" title="約 100 檔中型／中小型／傳產／金融／航運／櫃買（不含預設那 30 檔）">擴大池（約100檔，不含原30檔）</button>
       <button class="btn-clear-date" onclick="btFillPool('large')">原 30 檔大型股</button>
     </div>
-    <textarea id="btBatchCodes" rows="4" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:.74rem;"></textarea>
+    <textarea id="btBatchCodes" rows="5" style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:.74rem;"></textarea>
     <div style="display:flex;gap:14px;align-items:center;margin:8px 0;font-size:.72rem;color:var(--muted2);flex-wrap:wrap;">
       <label>取樣間隔（交易日）<input id="btBatchStep" type="number" min="1" max="20" value="3" style="width:54px;margin-left:6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:3px 6px;"></label>
       <span>每檔從第 300 根K棒起算（需 MA240 暖機）</span>
@@ -3440,15 +3441,15 @@ function runAnalysis(slicedData, twiiRaw) {
   const rsiOS = strat.rsiOSBuy  || 35;
   if(lrsi!==null){
     if(prsi&&prsi<rsiOS&&lrsi>rsiOS){
-      signals.push({type:'bull',cat:'RSI',text:`RSI由超賣區回升至${lrsi.toFixed(1)}，短線反彈機率高`}); bullPts+=10*w.rsi;
+      signals.push({type:'bull',cat:'RSI',text:`RSI由超賣區回升至${lrsi.toFixed(1)}`}); bullPts+=10*w.rsi;
     } else if(lrsi<rsiOS){
-      signals.push({type:'bull',cat:'RSI',text:`RSI=${lrsi.toFixed(1)} 超賣區，有反彈空間`}); bullPts+=6*w.rsi;
+      signals.push({type:'bull',cat:'RSI',text:`RSI=${lrsi.toFixed(1)} 超賣區`}); bullPts+=6*w.rsi;
     } else if(prsi&&prsi>rsiOB&&lrsi<rsiOB){
-      signals.push({type:'bear',cat:'RSI',text:`RSI從超買區回落，注意短線壓力`}); bearPts+=8*w.rsi;
+      signals.push({type:'bear',cat:'RSI',text:`RSI從超買區回落`}); bearPts+=8*w.rsi;
     } else if(lrsi>80){
-      signals.push({type:'bear',cat:'RSI',text:`RSI=${lrsi.toFixed(1)} 極度超買，短線回調風險高`}); bearPts+=8*w.rsi;
+      signals.push({type:'bear',cat:'RSI',text:`RSI=${lrsi.toFixed(1)} 極度超買（80以上）`}); bearPts+=8*w.rsi;
     } else if(lrsi>rsiOB){
-      signals.push({type:'bear',cat:'RSI',text:`RSI=${lrsi.toFixed(1)} 超買區，追高謹慎`}); bearPts+=4*w.rsi;
+      signals.push({type:'bear',cat:'RSI',text:`RSI=${lrsi.toFixed(1)} 超買區`}); bearPts+=4*w.rsi;
     } else if(lrsi>=50){
       signals.push({type:'bull',cat:'RSI',text:`RSI=${lrsi.toFixed(1)}，處於偏多健康區間`}); bullPts+=4*w.rsi;
     } else {
@@ -3470,13 +3471,13 @@ function runAnalysis(slicedData, twiiRaw) {
   // ── KD ──
   if(lkdj&&pkdj){
     if(pkdj.k<pkdj.d&&lkdj.k>lkdj.d&&lkdj.k<50){
-      signals.push({type:'bull',cat:'KD',text:`低檔KD金叉（K=${lkdj.k.toFixed(1)}），短線強烈買入訊號`}); bullPts+=12*w.kd;
+      signals.push({type:'bull',cat:'KD',str:2,text:`低檔KD金叉（K=${lkdj.k.toFixed(1)}）`}); bullPts+=12*w.kd;
     } else if(pkdj.k<pkdj.d&&lkdj.k>lkdj.d){
-      signals.push({type:'bull',cat:'KD',text:`KD金叉（K=${lkdj.k.toFixed(1)}），短線偏多`}); bullPts+=7*w.kd;
+      signals.push({type:'bull',cat:'KD',text:`KD金叉（K=${lkdj.k.toFixed(1)}）`}); bullPts+=7*w.kd;
     } else if(pkdj.k>pkdj.d&&lkdj.k<lkdj.d&&lkdj.k>80){
-      signals.push({type:'bear',cat:'KD',text:`高檔KD死叉（K=${lkdj.k.toFixed(1)}），短線賣出訊號`}); bearPts+=12*w.kd;
+      signals.push({type:'bear',cat:'KD',text:`高檔KD死叉（K=${lkdj.k.toFixed(1)}）`}); bearPts+=12*w.kd;
     } else if(pkdj.k>pkdj.d&&lkdj.k<lkdj.d){
-      signals.push({type:'bear',cat:'KD',text:`KD死叉（K=${lkdj.k.toFixed(1)}），短線壓力`}); bearPts+=6*w.kd;
+      signals.push({type:'bear',cat:'KD',text:`KD死叉（K=${lkdj.k.toFixed(1)}）`}); bearPts+=6*w.kd;
     } else if(lkdj.k>lkdj.d&&lkdj.k<80){
       bullPts+=3*w.kd;
     }
@@ -3487,16 +3488,16 @@ function runAnalysis(slicedData, twiiRaw) {
     if(pmacd.macd!==null&&lmacd.macd!==null){
       if(lmacd.macd>0) bullPts+=5*w.macd; else bearPts+=5*w.macd;
       if(pmacd.macd<0&&lmacd.macd>=0){
-        signals.push({type:'bull',cat:'MACD',text:`MACD零軸上穿，中線轉多確認`}); bullPts+=12*w.macd;
+        signals.push({type:'bull',cat:'MACD',text:`MACD零軸上穿`}); bullPts+=12*w.macd;
       } else if(pmacd.macd>0&&lmacd.macd<=0){
-        signals.push({type:'bear',cat:'MACD',text:`MACD零軸下穿，中線轉空`}); bearPts+=12*w.macd;
+        signals.push({type:'bear',cat:'MACD',text:`MACD零軸下穿`}); bearPts+=12*w.macd;
       }
     }
     if(pmacd.signal!==null&&lmacd.signal!==null&&pmacd.macd!==null&&lmacd.macd!==null){
       if(pmacd.macd<pmacd.signal&&lmacd.macd>lmacd.signal){
-        signals.push({type:'bull',cat:'MACD',text:`MACD黃金交叉Signal，買入訊號`}); bullPts+=8*w.macd;
+        signals.push({type:'bull',cat:'MACD',text:`MACD黃金交叉Signal`}); bullPts+=8*w.macd;
       } else if(pmacd.macd>pmacd.signal&&lmacd.macd<lmacd.signal){
-        signals.push({type:'bear',cat:'MACD',text:`MACD死亡交叉Signal，賣出訊號`}); bearPts+=8*w.macd;
+        signals.push({type:'bear',cat:'MACD',text:`MACD死亡交叉Signal`}); bearPts+=8*w.macd;
       }
     }
     if(lmacd.hist!==null&&pmacd.hist!==null){
@@ -3542,9 +3543,9 @@ function runAnalysis(slicedData, twiiRaw) {
   // ── 布林 ──
   if(lbb){
     if(last.close<lbb.lower){
-      signals.push({type:'bull',cat:'布林',text:`跌破布林下軌（${lbb.lower.toFixed(2)}），超跌反彈機率高`}); bullPts+=7*w.pattern;
+      signals.push({type:'bull',cat:'布林',text:`跌破布林下軌（${lbb.lower.toFixed(2)}）`}); bullPts+=7*w.pattern;
     } else if(last.close>lbb.upper){
-      signals.push({type:'bear',cat:'布林',text:`突破布林上軌，短線超漲追高謹慎`}); bearPts+=4*w.pattern;
+      signals.push({type:'bear',cat:'布林',text:`突破布林上軌`}); bearPts+=4*w.pattern;
     }
     const bw=(lbb.upper-lbb.lower)/lbb.mid;
     if(bw<0.04) signals.push({type:'neutral',cat:'布林',text:`布林通道極度收窄（${(bw*100).toFixed(1)}%），即將出現方向性突破`});
@@ -3652,7 +3653,7 @@ function runAnalysis(slicedData, twiiRaw) {
       if (pos60 < 0.4) bullPts += 5*w.pattern;
     }
     if (isBull && volRatio > 2.0 && last.close > (n>5 ? Math.max(...data.slice(-5).map(d=>d.max)) : last.close)) {
-      signals.push({ type:'bull', cat:'K線型態', text: `「爆量突破」量比均量${volRatio.toFixed(1)}倍，同時創近期新高｜強烈追多訊號，${posTag}` });
+      signals.push({ type:'bull', cat:'K線型態', text: `「爆量突破」量比均量${volRatio.toFixed(1)}倍，同時創近期新高｜位階${posTag}` });
       bullPts += 13*w.pattern;
     }
     if (bullPts-_b0 > 25) bullPts = _b0+25;
@@ -3733,7 +3734,7 @@ function runAnalysis(slicedData, twiiRaw) {
     const prev3avg  = prev5vols.slice(-3).reduce((s,v)=>s+v,0) / 3;
     const isConsolidating = prev3avg < prev5avg * 0.85;
     if (isConsolidating && volRatio > 1.4) {
-      volumeLaunch = { type: isBull ? 'bull' : 'bear', text: `縮量整理後今日量增${volRatio.toFixed(1)}倍${isBull?'收紅，啟動訊號強烈！':'收黑，需觀察方向'}` };
+      volumeLaunch = { type: isBull ? 'bull' : 'bear', text: `縮量整理後今日量增${volRatio.toFixed(1)}倍${isBull?'收紅':'收黑，需觀察方向'}` };
       if (isBull) bullPts += 12; else bearPts += 8;
     } else if (isConsolidating) {
       volumeLaunch = { type: 'neutral', text: `持續縮量整理中（近3日均量僅前期${(prev3avg/prev5avg*100).toFixed(0)}%），蓄勢待發，等放量確認` };
@@ -3871,8 +3872,8 @@ function runAnalysis(slicedData, twiiRaw) {
     if (limUp)  { parts.push('今日漲停（收盤鎖在最高）'); ltype='bull'; lstr=3; bullPts+=8; }
     if (limDn)  { parts.push('今日跌停（收盤鎖在最低）'); ltype='bear'; lstr=3; bearPts+=8; }
     if (upCnt10>=2) parts.push(`近10日漲停${upCnt10}次，股性強勢`);
-    if (redStreak>=3)   { parts.push(`連紅${redStreak}${unit}${redStreak>=5?'，短線過熱，留意獲利了結':''}`); if(!limDn){ ltype=redStreak>=5?'neutral':'bull'; lstr=Math.max(lstr,2);} bullPts+= redStreak>=5?2:3; }
-    if (blackStreak>=3) { parts.push(`連黑${blackStreak}${unit}${blackStreak>=5?'，超跌可留意止跌':''}`); if(!limUp){ ltype=blackStreak>=5?'neutral':'bear'; lstr=Math.max(lstr,2);} bearPts+= blackStreak>=5?2:3; }
+    if (redStreak>=3)   { parts.push(`連紅${redStreak}${unit}`); if(!limDn){ ltype=redStreak>=5?'neutral':'bull'; lstr=Math.max(lstr,2);} bullPts+= redStreak>=5?2:3; }
+    if (blackStreak>=3) { parts.push(`連黑${blackStreak}${unit}`); if(!limUp){ ltype=blackStreak>=5?'neutral':'bear'; lstr=Math.max(lstr,2);} bearPts+= blackStreak>=5?2:3; }
     if (parts.length) limitInfo = { type:ltype, str:lstr, text: parts.join('｜'), redStreak, blackStreak, limUp, limDn, upCnt10 };
   }
   if (breakoutQ) signals.push({ type:breakoutQ.type, cat:'突破品質', text:breakoutQ.text, str:breakoutQ.str });
@@ -3903,7 +3904,7 @@ function runAnalysis(slicedData, twiiRaw) {
       const shrinking = maSpread < prevSpread;
       const maCenter = (lma5 + lma10 + lma20) / 3;
       const priceAbove = last.close > maCenter;
-      signals.push({ type: 'neutral', cat: '均線糾結', text: `⚡ MA5/10/20 極度糾結（三線價差僅 ${maSpread.toFixed(2)}%）${shrinking ? '，仍在收窄中' : ''}｜方向即將選擇，股價在均線中心${priceAbove ? '上方偏多' : '下方偏空'}，等突破確認再進場` });
+      signals.push({ type: 'neutral', cat: '均線糾結', text: `⚡ MA5/10/20 極度糾結（三線價差僅 ${maSpread.toFixed(2)}%）${shrinking ? '，仍在收窄中' : ''}｜股價在均線中心${priceAbove ? '上方' : '下方'}` });
       if (priceAbove && isBull) bullPts += 6;
       if (!priceAbove && isBear) bearPts += 6;
     }
@@ -3959,9 +3960,9 @@ function runAnalysis(slicedData, twiiRaw) {
     // reversal：超賣 + RSI 方向由下往上才推薦
     const rsiTurning = lrsi !== null && prsi !== null && lrsi > prsi && lrsi < 42;
     if (lrsi !== null && lrsi < 35 && lkdj && lkdj.k < 30 && rsiTurning)
-      return { key:'reversal', reason:`RSI=${lrsi.toFixed(0)} 超賣且回升 + KD低檔，止跌反彈機會` };
+      return { key:'reversal', reason:`RSI=${lrsi.toFixed(0)} 超賣且回升 + KD低檔` };
     if (lrsi !== null && lrsi < 35 && lkdj && lkdj.k < 30)
-      return { key:'reversal', reason:`RSI=${lrsi.toFixed(0)} + KD低檔，超賣區，等方向確認` };
+      return { key:'reversal', reason:`RSI=${lrsi.toFixed(0)} + KD低檔，超賣區` };
 
     // breakout：放量突破
     if (volRatio > 1.5 && isBull && lmacd && lmacd.macd > 0 && lmacd.hist !== null && lmacd.hist > 0)
@@ -3969,16 +3970,16 @@ function runAnalysis(slicedData, twiiRaw) {
 
     // pullback MA20：貼近MA20 + 量縮 + RSI 健康區間
     if (lma20 && Math.abs(last.close - lma20)/lma20 < 0.05 && volShrink_as && lrsi && lrsi > 38 && lrsi < 62)
-      return { key:'pullback', reason:`貼近MA20（${((last.close-lma20)/lma20*100).toFixed(1)}%）+ 量縮，回踩承接機會` };
+      return { key:'pullback', reason:`貼近MA20（${((last.close-lma20)/lma20*100).toFixed(1)}%）+ 量縮` };
 
     // pullback MA60：貼近MA60 + 量縮
     const lma60_as = lma60 || null;
     if (lma60_as && Math.abs(last.close - lma60_as)/lma60_as < 0.06 && volShrink_as && lrsi && lrsi > 35)
-      return { key:'pullback', reason:`貼近MA60季線（${((last.close-lma60_as)/lma60_as*100).toFixed(1)}%）+ 量縮，大波段回踩機會` };
+      return { key:'pullback', reason:`貼近MA60季線（${((last.close-lma60_as)/lma60_as*100).toFixed(1)}%）+ 量縮` };
 
     if (weekType === 'bull' && lma5 && lma10 && lma20 && lma5 > lma10 && lma10 > lma20)
-      return { key:'breakout', reason:`多頭排列 + 週線偏多，趨勢行情` };
-    return { key:'balanced', reason:`訊號混雜，建議平衡評估` };
+      return { key:'breakout', reason:`多頭排列 + 週線偏多` };
+    return { key:'balanced', reason:`訊號混雜，未達其他策略條件` };
   })();
 
   _sec('trend');   // 收尾：把最後一段點數歸入維度
@@ -4013,7 +4014,10 @@ function runAnalysis(slicedData, twiiRaw) {
   let score = USE_NEW_SCORE ? scoreNew : scoreOld;
   const ptsNet = {}; Object.keys(dimPts).forEach(k => ptsNet[k] = dimPts[k].b - dimPts[k].r);
   if (btCapture) {   // 批次匯出：只回傳分數，不更新畫面
-    btCapture.out = { score, scoreOld, scoreNew, volZ, volDirZ, ptsNet, bullPts, bearPts, bonusPts, dims: dimScores(signals), auto: autoStrategy ? autoStrategy.key : '', rsi: lrsi, volRatio };
+    btCapture.out = { score, scoreOld, scoreNew, volZ, volDirZ, ptsNet, bullPts, bearPts, bonusPts, dims: dimScores(signals), auto: autoStrategy ? autoStrategy.key : '', rsi: lrsi, volRatio,
+      bias: [lma5, lma10, lma20, lma60].map(m => (m && last.close) ? (last.close / m - 1) * 100 : null),   // bias5/10/20/60：收盤相對均線的乖離 %
+      kdK: lkdj ? lkdj.k : null, kdD: lkdj ? lkdj.d : null,
+      macd: lmacd ? lmacd.macd : null, macdSig: lmacd ? lmacd.signal : null, macdHist: lmacd ? lmacd.hist : null };
     return;
   }
 
@@ -4087,7 +4091,7 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
     aTag.id = 'autoStratTag';
     aTag.style.cssText = 'font-size:.68rem;color:#29c5c5;margin-top:8px;font-family:var(--mono);padding:5px 10px;background:rgba(41,197,197,.1);border:1px solid rgba(41,197,197,.3);border-radius:6px;display:block;cursor:pointer;text-align:left;width:100%;box-sizing:border-box;';
     aTag.title = '點擊重新套用此策略';
-    aTag.innerHTML = `💡 建議策略：<b style="color:#fff">${names[autoStrategy.key]}</b><br><span style="font-size:.6rem;color:var(--muted2);line-height:1.5">${autoStrategy.reason}</span>`;
+    aTag.innerHTML = `💡 自動套用策略：<b style="color:#fff">${names[autoStrategy.key]}</b><br><span style="font-size:.6rem;color:var(--muted2);line-height:1.5">${autoStrategy.reason}</span>`;
     aTag.onclick = () => { const s=document.getElementById('strategySelect'); if(s){s.value=autoStrategy.key; onStrategyChange(); syncStratBtns();} };
     hdr.appendChild(aTag);
 
@@ -4530,11 +4534,13 @@ function renderBtResult(data) {
 const BT_DEFAULT_POOL = '2330 2317 2454 2308 2382 2412 2881 2882 2891 2603 3711 2303 2357 2379 3034 3037 2345 2301 2327 3231 2376 2409 2615 1301 1303 2002 1216 2912 3045 6669';
 // 擴大池：第一輪 30 檔大型股以外的中型／中小型、傳產、金融、航運、櫃買（與預設池不重複）。代號若已下市或查無資料會自動略過並列出
 const BT_WIDE_POOL = '2352 2353 2356 2360 2368 2374 2383 2385 2392 2395 2404 2449 2451 2458 2474 3017 3023 3044 3035 3036 3406 3443 3533 3653 3661 4958 5269 6176 6239 6271 6414 8046 8210 2312 2313 2324 2337 2344 2408 1101 1102 1402 1476 1590 1605 1717 1722 1802 2006 2014 2027 2049 2105 2201 2207 2371 2501 2542 2605 2606 2609 2610 2618 2637 2801 2809 2812 2834 2845 2880 2883 2884 2885 2886 2887 2890 2892 5880 9904 9910 9945 1519 1513 1504 1503 1560 1536 3293 3529 3105 3081 6488 6510 8069 8299 6446 3131 3583 6196 5483 5274 3374 3324 3491';
-function btFillPool(which) { document.getElementById('btBatchCodes').value = which === 'wide' ? BT_WIDE_POOL : BT_DEFAULT_POOL; }
+// 我的清單：來自「股票.XLSX」453 檔（依原順序；以半導體為主，也含 PCB、伺服器、被動元件、網通、航運、重電、鋼鐵、金融等）。K 棒不足 330 根或查無資料的代號會自動略過並列出
+const BT_MY_POOL = '2454 3035 3443 3661 6526 5269 3529 5274 6643 6533 2379 4919 2401 3041 2363 8227 2388 3014 3094 3122 3135 3169 3228 3259 4952 4968 5272 5471 6103 6104 6129 6202 6229 6233 6237 6243 6462 6494 6679 6693 6716 6756 6909 7556 6568 2330 2303 5347 6770 2344 2481 8261 3707 5425 6435 3675 5299 6719 2302 2329 2340 2342 3105 3686 4923 6552 6937 7712 8086 8162 1560 3583 6187 6640 3131 3551 3413 8028 4770 3016 5536 5543 3663 6953 2338 3374 3467 6261 6548 6854 3711 2449 6239 6147 3264 6510 6223 6515 2360 6271 8150 6257 8110 8131 3265 6683 6788 7734 2351 2369 2434 2441 3178 3372 3581 5302 5344 6208 6411 6423 6525 7768 7822 8383 3030 5285 2337 2408 3006 2451 4967 8271 8299 3260 6531 8088 3268 6732 4973 5351 8040 6485 8054 8277 2436 3257 3317 3438 3588 6138 6291 6415 6651 6799 6996 8081 6488 3532 6182 5483 3680 4749 6532 8091 3029 3150 3555 3567 4951 5443 6573 6720 6823 6829 6895 6921 7704 7749 7751 7769 7810 8024 8102 2404 6139 6196 6215 6438 6691 6698 7730 7828 3037 8046 3189 2383 2368 6274 4958 6269 2313 6191 5469 2367 3044 3645 3715 6213 6672 8039 8213 6108 6153 2317 3231 2382 6669 2356 3706 4938 8210 3013 2395 6414 6166 3088 8050 3022 3416 2324 2353 2354 2357 2376 2377 2385 3515 6117 6933 7711 2059 3017 3324 2421 3653 4931 6230 6831 6805 2308 6409 6412 6282 6121 3211 2301 2420 2457 3015 3617 6781 4979 3163 6451 4908 6442 3450 3596 3363 3081 5222 5487 7770 7772 2345 5388 6285 4906 2455 3047 3380 3704 4977 6416 5468 2409 3008 3019 3362 3406 3454 3481 3504 3630 4976 6209 6789 2458 3034 3141 3227 3527 3530 3545 3556 3592 4961 5236 6684 6695 6962 8016 3023 3665 6279 6205 3217 3376 2392 2462 3533 6133 6197 6272 6715 8103 3491 7717 2485 3138 3062 2314 2312 2419 2355 4916 6443 2327 3624 6207 2478 8042 3117 3026 2472 8043 6173 6127 2492 3236 6155 6834 6204 6862 3090 2375 6449 6432 2428 6224 3191 4760 6175 6284 5328 3357 8121 5228 7912 3042 2603 2609 2615 2606 2637 5608 2605 2617 2612 2618 2610 1519 1503 1504 4551 6806 2371 1513 1514 1517 1512 1526 1541 6803 3576 2493 1533 2231 6605 2634 3679 8112 3702 3036 2347 5225 4991 2103 6116 2002 9958 2013 2031 2027 2006 2032 2023 5007 3293 5478 6180 3086 8477 2448 3714 2461 2707 2731 5706 2739 9921 9914 2885 6023 2855 6005 6024 6015 6016 6021 2883 1476 1477 4438 1590 4526 1583 1568 6214 2471 6743 6741 6111';
+function btFillPool(which) { document.getElementById('btBatchCodes').value = which === 'mine' ? BT_MY_POOL : which === 'wide' ? BT_WIDE_POOL : BT_DEFAULT_POOL; }
 let btBatchStop = false, btBatchRunning = false;
 function openBtBatch() {
   const ta = document.getElementById('btBatchCodes');
-  if (!ta.value.trim()) { let v = ''; try { v = localStorage.getItem('btBatchCodes') || ''; } catch {} ta.value = v || BT_DEFAULT_POOL; }
+  if (!ta.value.trim()) { let v = ''; try { v = localStorage.getItem('btBatchCodes') || ''; } catch {} ta.value = v || BT_MY_POOL; }
   document.getElementById('btBatchDlg').style.display = 'flex';
 }
 function closeBtBatch() {
@@ -4597,7 +4603,8 @@ async function runBtBatch() {
         rows.push([code, d, c, o.score, o1.score, fmt(dm.trend.score), fmt(dm.mom.score), fmt(dm.vol.score), fmt(dm.chip.score),
           dm.trend.n, dm.mom.n, dm.vol.n, dm.chip.n, o1.auto, fmt(o.rsi), fmt(o.volRatio),
           fmt(ret(1)), fmt(ret(5)), fmt(ret(10)), fmt(ret(20)), fmt(r5o), fmt(mfe), fmt(mae), fmt(b5),
-          o.scoreOld, o.scoreNew, o1.scoreNew, fmt(o.volZ), fmt(o.volDirZ), fmt(o.ptsNet.trend), fmt(o.ptsNet.mom), fmt(o.ptsNet.vol), fmt(o.ptsNet.chip)].join(','));
+          o.scoreOld, o.scoreNew, o1.scoreNew, fmt(o.volZ), fmt(o.volDirZ), fmt(o.ptsNet.trend), fmt(o.ptsNet.mom), fmt(o.ptsNet.vol), fmt(o.ptsNet.chip),
+          fmt(o.bias[0]), fmt(o.bias[1]), fmt(o.bias[2]), fmt(o.bias[3]), fmt(o.kdK), fmt(o.kdD), fmt(o.macd), fmt(o.macdSig), fmt(o.macdHist)].join(','));
         nOk++;
         if (nOk % 40 === 0) { msg.textContent = `(${si + 1}/${codes.length}) ${code}　${d}　已產生 ${rows.length.toLocaleString()} 筆`; await new Promise(r => setTimeout(r, 0)); }
       }
@@ -4611,7 +4618,7 @@ async function runBtBatch() {
     document.getElementById('btBatchCancel').textContent = '關閉';
   }
   if (!rows.length) { msg.textContent = '沒有產生任何資料。' + (failed.length ? '\n失敗：' + failed.join('、') : ''); return; }
-  const header = 'code,date,close,score,score_bal,trend,mom,vol,chip,n_trend,n_mom,n_vol,n_chip,auto_strategy,rsi,vol_ratio,r1,r5,r10,r20,r5_nextopen,mfe20,mae20,twii_r5,score_old,score_new,score_bal_new,vol_z,vol_dirz,pts_trend,pts_mom,pts_vol,pts_chip';
+  const header = 'code,date,close,score,score_bal,trend,mom,vol,chip,n_trend,n_mom,n_vol,n_chip,auto_strategy,rsi,vol_ratio,r1,r5,r10,r20,r5_nextopen,mfe20,mae20,twii_r5,score_old,score_new,score_bal_new,vol_z,vol_dirz,pts_trend,pts_mom,pts_vol,pts_chip,bias5,bias10,bias20,bias60,kd_k,kd_d,macd,macd_signal,macd_hist';
   const csv = header + '\n' + rows.join('\n') + '\n';
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
   const name = `bt_fourdim_${taipeiDateStr().replace(/-/g, '')}_p${currentPeriod}_s${step}.csv`;
@@ -4759,13 +4766,13 @@ function renderBias(data) {
   const bFmt = (v) => v===null ? '-' : `${v>0?'+':''}${v.toFixed(2)}%`;
   const bLabel = (v) => {
     if(v===null) return '';
-    if(v>12)  return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">🔥 嚴重過熱，回調風險極高</span>`;
-    if(v>7)   return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">⚠ 偏高，謹慎追多</span>`;
-    if(v>3)   return `<span style="font-size:.62rem;color:#ff9f40;margin-left:4px;">↑ 偏多，注意高點</span>`;
-    if(v>-3)  return `<span style="font-size:.62rem;color:var(--muted2);margin-left:4px;">✓ 健康區間</span>`;
-    if(v>-7)  return `<span style="font-size:.62rem;color:var(--blue);margin-left:4px;">↓ 偏低，有支撐回測機會</span>`;
-    if(v>-12) return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🎯 超跌，反彈機率高</span>`;
-    return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">🚀 極度超跌，強力彈升訊號</span>`;
+    if(v>12)  return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">🔥 偏離過大</span>`;
+    if(v>7)   return `<span style="font-size:.62rem;color:var(--up);margin-left:4px;">⚠ 偏高</span>`;
+    if(v>3)   return `<span style="font-size:.62rem;color:#ff9f40;margin-left:4px;">↑ 偏多</span>`;
+    if(v>-3)  return `<span style="font-size:.62rem;color:var(--muted2);margin-left:4px;">✓ 接近均線</span>`;
+    if(v>-7)  return `<span style="font-size:.62rem;color:var(--blue);margin-left:4px;">↓ 偏低</span>`;
+    if(v>-12) return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">↓ 明顯偏低</span>`;
+    return `<span style="font-size:.62rem;color:var(--dn);margin-left:4px;">↓ 極度偏低</span>`;
   };
   const avgV20 = data.slice(-20).reduce((s,d)=>s+d.Trading_Volume,0)/20;
   const _evolB = effectiveLastVol(last);
@@ -4777,9 +4784,9 @@ function renderBias(data) {
   const vol5Trend = vol5Ratio>1.2?'↑ 量能擴張':vol5Ratio<0.8?'↓ 量能收縮':'→ 量能平穩';
   const vol5Color = vol5Ratio>1.2?'var(--up)':vol5Ratio<0.8?'var(--dn)':'var(--muted2)';
   const warnings = [];
-  if(bias20!==null && Math.abs(bias20)>10) warnings.push(`MA20乖離過大（${bFmt(bias20)}），均值回歸風險`);
-  if(volRatio>3 && last.close<last.open) warnings.push('爆量長黑，賣壓警示');
-  if(volRatio>3 && last.close>last.open) warnings.push('爆量長紅，突破訊號確認');
+  if(bias20!==null && Math.abs(bias20)>10) warnings.push(`MA20乖離過大（${bFmt(bias20)}）`);
+  if(volRatio>3 && last.close<last.open) warnings.push('爆量長黑');
+  if(volRatio>3 && last.close>last.open) warnings.push('爆量長紅');
   // 量價配合
   const pc = n>=2 ? data[n-2].close : p, chgPct = pc ? (p-pc)/pc*100 : 0;
   let pvTxt, pvColor='var(--text)';
