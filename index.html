@@ -4567,6 +4567,11 @@ async function runBtBatch() {
   document.getElementById('btBatchCancel').textContent = '停止';
   const T0 = Date.now(), rows = [], failed = [];
   const fmt = v => (v == null || !Number.isFinite(v)) ? '' : (Math.round(v * 1e4) / 1e4);
+  // 網路／額度類錯誤：先重試一次；連續 3 次失敗就「冷卻」等待後自動重試同一檔（最多 6 次，約 1 小時），仍失敗才提前停止
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const NET_ERR = /Failed to fetch|NetworkError|Load failed|network|timeout|abort|\b402\b|\b429\b|Too Many|limit/i;
+  const COOLDOWN_SEC = 600, MAX_COOLDOWN = 6;
+  let netFail = 0, cooldowns = 0, lastDone = -1, stopReason = '';
   try {
     intradayVolInfo = null; holderData = [];
     msg.textContent = '抓取加權指數…';
@@ -4574,12 +4579,31 @@ async function runBtBatch() {
     for (let si = 0; si < codes.length && !btBatchStop; si++) {
       const code = codes[si];
       msg.textContent = `(${si + 1}/${codes.length}) ${code}　抓取資料…　已產生 ${rows.length.toLocaleString()} 筆`;
-      let bars, chipAll;
-      try {
-        bars = cleanBars(await fetchPrice(code, token));
-        if (bars.length < 330) throw new Error('K棒不足 330 根');
-        chipAll = (await fetchChipRange(code, token, _addDays(bars[0].date, 0), taipeiDateStr())).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-      } catch (e) { failed.push(`${code}（${e.message}）`); continue; }
+      let bars = null, chipAll, tries = 0, fatal = null;
+      while (!btBatchStop) {
+        try {
+          bars = cleanBars(await fetchPrice(code, token));
+          if (bars.length < 330) throw new Error('K棒不足 330 根');
+          chipAll = (await fetchChipRange(code, token, _addDays(bars[0].date, 0), taipeiDateStr())).sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+          netFail = 0; break;
+        } catch (e) {
+          bars = null;
+          if (!NET_ERR.test(e.message || '')) { fatal = e.message; break; }   // 資料本身的問題（例如 K 棒不足）不重試
+          netFail++;
+          if (netFail >= 3) {
+            if (cooldowns >= MAX_COOLDOWN) { btBatchStop = true; stopReason = '資料來源持續失敗，已提前停止'; break; }
+            cooldowns++;
+            for (let sec = COOLDOWN_SEC; sec > 0 && !btBatchStop; sec--) {
+              msg.textContent = `⏸ 資料來源連續失敗（疑似額度用完或網路中斷），${Math.floor(sec / 60)}分${String(sec % 60).padStart(2, '0')}秒後自動重試 ${code}（冷卻 ${cooldowns}/${MAX_COOLDOWN}）　已產生 ${rows.length.toLocaleString()} 筆　按「停止」可隨時結束並下載目前資料`;
+              await sleep(1000);
+            }
+            netFail = 2; tries = 1; continue;   // 冷卻後同一檔若仍失敗，直接再冷卻（不放棄這檔），直到次數用完
+          }
+          if (tries < 1) { tries++; await sleep(4000); continue; }
+          fatal = e.message; break;
+        }
+      }
+      if (!bars) { if (fatal) failed.push(`${code}（${fatal}）`); continue; }
       let nOk = 0;
       for (let i = 300; i < bars.length && !btBatchStop; i += step) {
         const d = bars[i].date;
@@ -4608,6 +4632,7 @@ async function runBtBatch() {
         nOk++;
         if (nOk % 40 === 0) { msg.textContent = `(${si + 1}/${codes.length}) ${code}　${d}　已產生 ${rows.length.toLocaleString()} 筆`; await new Promise(r => setTimeout(r, 0)); }
       }
+      if (!btBatchStop) lastDone = si;
     }
   } finally {
     btCapture = null;
@@ -4623,8 +4648,18 @@ async function runBtBatch() {
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
   const name = `bt_fourdim_${taipeiDateStr().replace(/-/g, '')}_p${currentPeriod}_s${step}.csv`;
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
-  if (failed.length) document.getElementById('btBatchCodes').value = failed.map(x => x.split('（')[0]).join(' ');   // 失敗的代號放回輸入框，可直接再按一次重跑
-  msg.innerHTML = `${btBatchStop ? '已中途停止，' : ''}完成：${codes.length - failed.length} 檔、<b>${rows.length.toLocaleString()}</b> 筆，用時 ${((Date.now() - T0) / 1000).toFixed(0)} 秒。已下載 <b>${name}</b>（沒跳出下載的話 <a href="${url}" download="${name}" style="color:var(--gold)">點這裡</a>）。` + (failed.length ? `<br><span style="color:var(--muted2)">略過 ${failed.length} 檔：${failed.join('、')}（已放回輸入框，額度恢復或確認代號後可再按一次「開始回放」重跑，另存成新的 CSV）</span>` : '');
+  const pending = btBatchStop ? codes.slice(lastDone + 1) : [];
+  const failedCodes = failed.map(x => x.split('（')[0]);
+  const retryCodes = failed.filter(x => !/K棒不足|資料不足|查無/.test(x)).map(x => x.split('（')[0]);
+  const left = [...new Set([...retryCodes, ...pending])];
+  if (left.length) document.getElementById('btBatchCodes').value = left.join(' ');   // 可重試的失敗＋尚未執行的，放回輸入框，直接再按一次重跑
+  const skipped = new Set([...failedCodes, ...pending]);
+  const pendingOnly = pending.filter(c => !failedCodes.includes(c));
+  msg.innerHTML = `${stopReason ? stopReason + '，' : btBatchStop ? '已中途停止，' : ''}完成：${codes.length - skipped.size} 檔、<b>${rows.length.toLocaleString()}</b> 筆，用時 ${((Date.now() - T0) / 1000).toFixed(0)} 秒。已下載 <b>${name}</b>（沒跳出下載的話 <a href="${url}" download="${name}" style="color:var(--gold)">點這裡</a>）。` +
+    (failed.length ? `<br><span style="color:var(--muted2)">略過 ${failed.length} 檔：${failed.join('、')}</span>` : '') +
+    (pendingOnly.length ? `<br><span style="color:var(--muted2)">另有 ${pendingOnly.length} 檔尚未執行</span>` : '') +
+    (left.length ? `<br><span style="color:var(--muted2)">${left.length} 檔已放回輸入框，額度恢復後再按一次「開始回放」重跑（另存成新的 CSV，兩份可合併）。K 棒不足這類永久性失敗不會放回。</span>` : '') +
+    ((cooldowns || stopReason) && !token ? `<br><span style="color:#ff9f40">提醒：FINMIND_TOKEN 目前是預設值（未設定），未登入時 FinMind 額度較低，設定 token 可大幅降低被擋的機率。</span>` : '');
 }
 
 // 前／後翻一個交易日（dir: -1 / +1）
