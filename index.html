@@ -429,11 +429,6 @@ body.us-mode #stockInput{ width:110px; }
 }
 .score-verdict{font-size:1.3rem;font-weight:700;margin-top:8px;}
 .score-sub{font-size:.72rem;color:var(--muted2);margin-top:4px;}
-.strat-adv{width:100%;margin-top:10px;text-align:left;}
-.strat-adv summary{cursor:pointer;font-size:.68rem;color:var(--muted2);font-family:var(--mono);list-style:none;padding:5px 0;}
-.strat-adv summary::-webkit-details-marker{display:none;}
-.strat-adv summary::before{content:'▸ ';}
-.strat-adv[open] summary::before{content:'▾ ';}
 
 /* SECTION */
 .section{border-bottom:1px solid var(--border);}
@@ -934,11 +929,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           <div class="score-verdict" id="scoreVerdict">等待分析</div>
           <div class="score-sub" id="scoreSub">輸入代號後點擊分析</div>
           <div id="scoreReso" style="font-size:.74rem;font-family:var(--mono);margin-top:6px;"></div>
-          <div id="scoreNote" style="font-size:.62rem;color:var(--muted);margin-top:6px;line-height:1.5;max-width:270px;">分數只描述目前技術面狀態；歷史上分數高低與之後漲跌幾乎無關</div>
         </div>
-        <details class="strat-adv">
-        <summary id="stratAdvSum">進階：策略模式</summary>
-        <div class="score-right" id="stratAdvBody">
+        <div class="score-right">
           <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px;text-align:left;">策略模式</div>
           <div class="strat-grid">
             <div class="strat-btn active" data-strat="balanced" onclick="selectStratBtn('balanced')">⚖ 平衡模式</div>
@@ -947,7 +939,6 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
             <div class="strat-btn" data-strat="reversal" onclick="selectStratBtn('reversal')">⚡ 反轉搶彈</div>
           </div>
         </div>
-        </details>
       </div>
 
       <!-- TRADE SECTION -->
@@ -4106,7 +4097,7 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   document.getElementById('scoreSub').textContent = sub;
 
   ['autoStratTag','volStructTag'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
-  const hdr = document.getElementById('stratAdvBody') || document.querySelector('.score-header');   // 自動策略說明收在「進階」裡
+  const hdr = document.querySelector('.score-header');
 
   if (autoStrategy) {
     const names = { balanced:'⚖ 平衡', breakout:'🚀 突破追強', pullback:'🔄 回檔承接', reversal:'⚡ 反轉搶彈' };
@@ -4753,7 +4744,7 @@ function renderRisk(data, ma20val, volRatio) {
     if (volRatio >= 3) notes.push(`量比 3 倍以上時，歷史上 5 日後上漲機率約 <b>${R.heavy.w5}%</b>（一般 ${R.heavy.w5Base}%），平均報酬沒有比較差`);
     hist = `<div style="padding:8px 0 2px;"><div style="${secT}">◆ 歷史對照（台股樣本）</div>` +
       notes.map(t => `<div style="font-size:.74rem;line-height:1.6;margin-bottom:5px;">${t}</div>`).join('') +
-      `<div style="font-size:.64rem;line-height:1.6;color:var(--muted);margin-top:3px;">${R.meta.stocks} 檔台股、${R.meta.from}～${R.meta.to}。回撤本來就隨個股波動而異；僅供風險參考，不構成買賣建議；未扣交易成本。</div></div>`;
+      `</div>`;
   }
   box.innerHTML = `
     <div class="trade-grid">
@@ -4798,12 +4789,7 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr, signals) {
   { const _re = document.getElementById('scoreReso'); if (_re) { _re.textContent = '維度共振：' + reso.short; _re.style.color = reso.color; } }
   const pfx = isUS ? '$' : '';
   const f = v => pfx + v.toFixed(2);
-  const ma10v = ma(data, 10)[n-1], ma60v = ma(data, 60)[n-1];
   const ok = v => Number.isFinite(v) && v > 0;
-  const levels = [['MA5', sl_ma5], ['MA10', ma10v], ['MA20', ma20val], ['MA60', ma60v], ['近20日低', lo20], ['近20日高', hi20]].filter(x => ok(x[1]));
-  const sup = levels.filter(x => x[1] < p * 0.9995).sort((x, y) => y[1] - x[1])[0];
-  const res = levels.filter(x => x[1] > p * 1.0005).sort((x, y) => x[1] - y[1])[0];
-  const lvTxt = x => x ? `${x[0]} ${f(x[1])}<span style="color:var(--muted);font-size:.68rem;"> (${((x[1]/p-1)*100).toFixed(1)}%)</span>` : '-';
   // 觀察條件：用現有均線／20日高低點，轉強、轉弱各一條
   const ma20ok = ok(ma20val);
   let upCond, dnCond;
@@ -4832,7 +4818,6 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr, signals) {
         <div style="font-size:.68rem;color:var(--muted2);margin-bottom:6px;font-weight:700;letter-spacing:1px;">◆ 歷史參考</div>
         <div style="font-size:.74rem;line-height:1.6;color:var(--text);">${tiny ? `此分數區間歷史樣本太少（${h.n} 筆），無法統計。` : `此分數區間：5日後上漲 <b>${h.w5}%</b>、20日後上漲 <b>${h.w20}%</b>
           <span style="color:var(--muted2);">（全部樣本 ${B.w5}% / ${B.w20}%）</span>${h.n < 500 ? '<span style="color:#ff9f40;">　樣本偏少（' + h.n + '）</span>' : ''}`}</div>
-        <div style="font-size:.64rem;line-height:1.6;color:var(--muted);margin-top:3px;">${M.stocks} 檔台股、${M.from}～${M.to}。分數高低與之後漲跌幾乎無關（分數最高的區間反而略差），僅描述目前技術面，不代表勝率；未扣交易成本。</div>
       </div>`;
   }
   const secT = 'font-size:.68rem;color:var(--muted2);margin-bottom:6px;font-weight:700;letter-spacing:1px;';
@@ -4840,8 +4825,6 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr, signals) {
     <div class="trade-grid">
       <div class="trow"><span class="tkey">技術面狀態</span><span class="tval act" style="color:${band.tcolor}">${band.icon} ${band.label}</span></div>
       <div class="trow"><span class="tkey">維度共振</span><span class="tval" style="color:${reso.color}">${reso.short}</span></div>
-      <div class="trow"><span class="tkey">下方最近支撐</span><span class="tval">${lvTxt(sup)}</span></div>
-      <div class="trow"><span class="tkey">上方最近壓力</span><span class="tval">${lvTxt(res)}</span></div>
       <div style="padding:8px 0 4px;border-bottom:1px solid var(--border);">
         <div style="${secT}">◆ 觀察條件</div>
         <div style="font-size:.74rem;line-height:1.6;margin-bottom:3px;"><span style="color:var(--up);">轉強</span>　${upCond}</div>
@@ -5661,15 +5644,6 @@ window.addEventListener('resize', () => { if (intradayMode) idLayout(); });
     bar.classList.toggle('show', show);
     if (show) sync();
   }, { threshold: 0 }).observe(hdr);
-})();
-
-// 策略模式收進「進階」後，摘要列顯示目前套用的策略
-(function () {
-  const sum = document.getElementById('stratAdvSum'), grid = document.querySelector('.strat-grid');
-  if (!sum || !grid) return;
-  const upd = () => { const a = document.querySelector('.strat-btn.active'); sum.textContent = '進階：策略模式（目前：' + (a ? a.textContent.trim() : '') + '）'; };
-  new MutationObserver(upd).observe(grid, { subtree: true, attributes: true, attributeFilter: ['class'] });
-  upd();
 })();
 </script>
 </body>
