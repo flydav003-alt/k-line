@@ -420,15 +420,20 @@ body.us-mode #stockInput{ width:110px; }
 }
 .score-ring-wrap{
   display:inline-flex;align-items:center;justify-content:center;
-  width:100px;height:100px;position:relative;margin-bottom:4px;
+  width:76px;height:76px;position:relative;margin-bottom:4px;
 }
-.score-ring-wrap svg{position:absolute;top:0;left:0;}
+.score-ring-wrap svg{position:absolute;top:0;left:0;width:76px;height:76px;}
 .score-inner{
-  font-family:var(--mono);font-size:2.4rem;font-weight:600;
-  line-height:1;z-index:1;
+  font-family:var(--mono);font-size:1.7rem;font-weight:600;
+  line-height:1;z-index:1;opacity:.85;
 }
-.score-verdict{font-size:.95rem;font-weight:700;margin-top:6px;}
+.score-verdict{font-size:1.3rem;font-weight:700;margin-top:8px;}
 .score-sub{font-size:.72rem;color:var(--muted2);margin-top:4px;}
+.strat-adv{width:100%;margin-top:10px;text-align:left;}
+.strat-adv summary{cursor:pointer;font-size:.68rem;color:var(--muted2);font-family:var(--mono);list-style:none;padding:5px 0;}
+.strat-adv summary::-webkit-details-marker{display:none;}
+.strat-adv summary::before{content:'▸ ';}
+.strat-adv[open] summary::before{content:'▾ ';}
 
 /* SECTION */
 .section{border-bottom:1px solid var(--border);}
@@ -928,8 +933,12 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           </div>
           <div class="score-verdict" id="scoreVerdict">等待分析</div>
           <div class="score-sub" id="scoreSub">輸入代號後點擊分析</div>
+          <div id="scoreReso" style="font-size:.74rem;font-family:var(--mono);margin-top:6px;"></div>
+          <div id="scoreNote" style="font-size:.62rem;color:var(--muted);margin-top:6px;line-height:1.5;max-width:270px;">分數只描述目前技術面狀態；歷史上分數高低與之後漲跌幾乎無關</div>
         </div>
-        <div class="score-right">
+        <details class="strat-adv">
+        <summary id="stratAdvSum">進階：策略模式</summary>
+        <div class="score-right" id="stratAdvBody">
           <div style="font-size:.6rem;color:var(--muted);font-family:var(--mono);letter-spacing:1px;margin-bottom:4px;text-align:left;">策略模式</div>
           <div class="strat-grid">
             <div class="strat-btn active" data-strat="balanced" onclick="selectStratBtn('balanced')">⚖ 平衡模式</div>
@@ -938,6 +947,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
             <div class="strat-btn" data-strat="reversal" onclick="selectStratBtn('reversal')">⚡ 反轉搶彈</div>
           </div>
         </div>
+        </details>
       </div>
 
       <!-- TRADE SECTION -->
@@ -949,6 +959,18 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         </div>
         <div class="section-body" id="body-secTrade">
           <div id="tradeContent"><div style="color:var(--muted);font-size:.78rem;">尚無資料</div></div>
+        </div>
+      </div>
+
+      <!-- RISK SECTION -->
+      <div class="section" id="secRisk">
+        <div class="section-hd" onclick="toggleSection('secRisk')">
+          <span class="section-title">風險概況</span>
+          <span class="sec-sum" id="sum-secRisk"></span>
+          <span class="section-arrow open" id="arr-secRisk">▼</span>
+        </div>
+        <div class="section-body" id="body-secRisk">
+          <div id="riskContent"><div style="color:var(--muted);font-size:.78rem;">尚無資料</div></div>
         </div>
       </div>
 
@@ -4031,6 +4053,7 @@ function runAnalysis(slicedData, twiiRaw) {
   renderScore(score, volStructScore, volStructLabel, autoStrategy);
   renderSignals(signals, score, bullPts, bearPts);
   renderTrade(data, score, lma20, rhi, rlo, lATR, signals);
+  renderRisk(data, lma20, volRatio);
   renderBias(data);
   renderShortTerm(shortTermData);
   renderBtResult(data);
@@ -4083,7 +4106,7 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
   document.getElementById('scoreSub').textContent = sub;
 
   ['autoStratTag','volStructTag'].forEach(id=>{const e=document.getElementById(id);if(e)e.remove();});
-  const hdr = document.querySelector('.score-header');
+  const hdr = document.getElementById('stratAdvBody') || document.querySelector('.score-header');   // 自動策略說明收在「進階」裡
 
   if (autoStrategy) {
     const names = { balanced:'⚖ 平衡', breakout:'🚀 突破追強', pullback:'🔄 回檔承接', reversal:'⚡ 反轉搶彈' };
@@ -4482,23 +4505,33 @@ function renderBtResult(data) {
     el.innerHTML = hdr + `<div style="font-size:.74rem;color:var(--muted2);">此日期之後還沒有交易資料可驗證。</div>`;
     return;
   }
-  const o = btOutcome(entry, btPlan, fut);
+  const o = btOutcome(entry, null, fut);   // 不再判斷止損／止盈（沒有資料支持其意義）
   const col = v => v == null ? 'var(--muted2)' : v > 0 ? 'var(--up)' : v < 0 ? 'var(--dn)' : 'var(--muted2)';
   const fp = v => v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(2)}%`;
+  // 同期加權指數（台股才有；使用回測用的大盤快取，含回測日之後）
+  const tw = (currentMarket === 'TW' && currentStockId !== 'TWII' && btMem.twii) ? btMem.twii : null;
+  let mk = null;
+  if (tw) {
+    let i0 = -1;
+    for (let i = tw.length - 1; i >= 0; i--) { if (tw[i].date <= last.date) { i0 = i; break; } }
+    if (i0 >= 0) { mk = {}; [5, 10, 20].forEach(k => { mk[k] = tw[i0 + k] ? (tw[i0 + k].close / tw[i0].close - 1) * 100 : null; }); }
+  }
+  const ex = k => (o.t[k] != null && mk && mk[k] != null) ? o.t[k] - mk[k] : null;
   const score = btPlan?.score;
+  const band = bandOf(score);
+  const bull = band.key === 'sbull' || band.key === 'bull', bear = band.key === 'bear' || band.key === 'sbear';
   let verdict = '';
   if (score != null && o.t[5] != null) {
-    const bull = score >= 62, bear = score < 45;
-    const ok = bull ? o.t[5] > 0 : bear ? o.t[5] < 0 : null;
-    verdict = `<div style="margin:2px 0 8px;font-size:.78rem;">分數 <b style="font-family:var(--mono)">${Math.round(score)}</b>（${bull ? '偏多' : bear ? '偏空' : '中性'}）→ T+5 <b style="font-family:var(--mono);color:${col(o.t[5])}">${fp(o.t[5])}</b> ${ok === null ? '<span style="color:var(--muted2)">（中性區不判對錯）</span>' : ok ? '<span style="color:var(--up)">✓ 方向正確</span>' : '<span style="color:var(--dn)">✗ 方向相反</span>'}</div>`;
+    const e5 = ex(5);
+    const ok = (e5 == null || (!bull && !bear)) ? null : bull ? e5 > 0 : e5 < 0;
+    const tail = ok === null ? `<span style="color:var(--muted2)">${mk ? '（中性區不判對錯）' : '（無大盤資料，無法判斷相對表現）'}</span>`
+      : ok ? '<span style="color:var(--up)">✓ 跑贏大盤</span>' : '<span style="color:var(--dn)">✗ 落後大盤</span>';
+    verdict = `<div style="margin:2px 0 8px;font-size:.78rem;line-height:1.7;">分數 <b style="font-family:var(--mono)">${Math.round(score)}</b>（${band.label}）→ T+5 <b style="font-family:var(--mono);color:${col(o.t[5])}">${fp(o.t[5])}</b>` +
+      (mk && mk[5] != null ? `　大盤 <span style="font-family:var(--mono)">${fp(mk[5])}</span>　超額 <b style="font-family:var(--mono);color:${col(e5)}">${fp(e5)}</b>` : '') + ` ${tail}</div>`;
   }
-  let hit = '<span style="color:var(--muted2)">20 日內未觸及硬止損／短線止盈</span>';
-  if (o.hit) {
-    const h = o.hit;
-    hit = h.kind === 'sl' ? `<span style="color:var(--dn)">第 ${h.day} 日先碰到硬止損 ${pfx}${btPlan.slHard.toFixed(2)}</span>`
-        : h.kind === 'tp' ? `<span style="color:var(--up)">第 ${h.day} 日先碰到短線止盈 ${pfx}${btPlan.tp1.toFixed(2)}</span>`
-        : `<span style="color:#ff9f40">第 ${h.day} 日同日觸及止損與止盈（順序無法判斷）</span>`;
-  }
+  const mkRows = mk ? `
+      <tr><td>同期加權指數</td>${[5, 10, 20].map(k => `<td style="color:${col(mk[k])};font-family:var(--mono)">${fp(mk[k])}</td>`).join('')}</tr>
+      <tr><td>超額（個股 − 大盤）</td>${[5, 10, 20].map(k => `<td style="color:${col(ex(k))};font-family:var(--mono)">${fp(ex(k))}</td>`).join('')}</tr>` : '';
   const lenNote = o.n < 20 ? `<div style="font-size:.63rem;color:var(--muted);margin-top:4px;">目前僅有 ${o.n} 個交易日，尚不足的天數顯示「—」</div>` : '';
   el.innerHTML = hdr + verdict + `
     <table>
@@ -4506,15 +4539,14 @@ function renderBtResult(data) {
       <tr><td>報酬（對回測日收盤 ${pfx}${entry.toFixed(2)}）</td>
         <td style="color:${col(o.t[5])};font-family:var(--mono)">${fp(o.t[5])}</td>
         <td style="color:${col(o.t[10])};font-family:var(--mono)">${fp(o.t[10])}</td>
-        <td style="color:${col(o.t[20])};font-family:var(--mono)">${fp(o.t[20])}</td></tr>
+        <td style="color:${col(o.t[20])};font-family:var(--mono)">${fp(o.t[20])}</td></tr>${mkRows}
     </table>
     <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-top:6px;">
       <span style="color:var(--muted2)">20日內最大有利</span><span style="font-family:var(--mono);color:${col(o.mfe)}">${fp(o.mfe)}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:.74rem;margin-top:3px;">
       <span style="color:var(--muted2)">20日內最大不利（回撤）</span><span style="font-family:var(--mono);color:${col(o.mae)}">${fp(o.mae)}</span></div>
-    <div style="font-size:.74rem;margin-top:6px;">${hit}</div>
     ${lenNote}
-    <div style="font-size:.62rem;color:var(--muted);margin-top:6px;line-height:1.6;">以回測日收盤為基準、未含手續費與稅；股價為未還原權息，除息日會有缺口。</div>`;
+    <div style="font-size:.62rem;color:var(--muted);margin-top:6px;line-height:1.6;">以回測日收盤為基準、未含手續費與稅；股價為未還原權息，除息日會有缺口。<br>對照：全樣本 5 日上漲率約 ${BT_STATS.base.w5}%、20 日約 ${BT_STATS.base.w20}%，只看漲跌容易被大盤行情左右；單一日期的結果不代表分數有效。</div>`;
 
   // 圖上畫出當日計算的進場／止損／止盈價位
   if (futureSeries && btPlan) {
@@ -4522,8 +4554,6 @@ function renderBtResult(data) {
     btPriceLines = [];
     const add = (price, color, title) => { if (price != null && isFinite(price)) { try { btPriceLines.push(futureSeries.createPriceLine({ price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible:true, title })); } catch {} } };
     add(entry, 'rgba(255,255,255,0.45)', '回測日收盤');
-    add(btPlan.slHard, '#00c896', '硬止損');
-    add(btPlan.tp1, '#ff4d6d', '短線止盈');
   }
 }
 
@@ -4693,6 +4723,47 @@ async function stepBt(dir) {
 // ═══════════════════════════════════════
 //  RENDER TRADE
 // ═══════════════════════════════════════
+// 歷史對照：bt_fourdim 批次匯出（台股樣本）。mae＝之後 20 日內最大不利波動（回撤）的平均
+const BT_RISK = {"bias":[{"label":"<-12%","n":7871,"mae":-8.7},{"label":"-12~-7%","n":14851,"mae":-9.1},{"label":"-7~-3%","n":36308,"mae":-8.1},{"label":"-3~+3%","n":101422,"mae":-6.7},{"label":"+3~+7%","n":34585,"mae":-7.5},{"label":"+7~+12%","n":16674,"mae":-8.7},{"label":">+12%","n":14296,"mae":-11.3}],"all_mae":-7.7,"hot":{"n":14293,"mae":-11.3,"maeNear":-6.7,"r20":4.8,"r20Near":1.7},"heavy":{"n":8971,"w5":46.0,"w5Base":49.4},"meta":{"stocks":449,"from":"2020-03","to":"2026-11"}};
+function renderRisk(data, ma20val, volRatio) {
+  const box = document.getElementById('riskContent');
+  if (!box || !data || data.length < 2) return;
+  const n = data.length, p = data[n - 1].close;
+  const bias = (Number.isFinite(ma20val) && ma20val > 0) ? (p / ma20val - 1) * 100 : null;
+  let sd = null;
+  if (n >= 21) {
+    const r = []; for (let i = n - 20; i < n; i++) r.push(data[i].close / data[i - 1].close - 1);
+    const m = r.reduce((a, b) => a + b, 0) / r.length;
+    sd = Math.sqrt(r.reduce((a, b) => a + (b - m) * (b - m), 0) / (r.length - 1)) * 100;
+  }
+  const R = BT_RISK, isStock = currentMarket !== 'US' && currentStockId !== 'TWII';
+  const fb = v => (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  let bk = null;
+  if (bias != null && isStock) {
+    const edges = [-12, -7, -3, 3, 7, 12];
+    let idx = edges.findIndex(e => bias < e); if (idx < 0) idx = edges.length;
+    bk = R.bias[idx];
+  }
+  const secT = 'font-size:.68rem;color:var(--muted2);margin-bottom:6px;font-weight:700;letter-spacing:1px;';
+  let hist = '';
+  if (isStock) {
+    const notes = [];
+    if (bk && !(bias > 12)) notes.push(`類似乖離區間（${bk.label}）：之後 20 日內最大回撤平均 <b>${bk.mae}%</b>（全部樣本 ${R.all_mae}%）`);
+    if (bias != null && bias > 12) notes.push(`乖離高於 +12% 時，歷史上 20 日內最大回撤平均 <b>${R.hot.mae}%</b>（接近均線時 ${R.hot.maeNear}%）；但樣本中之後 20 日平均報酬反而較高（${fb(R.hot.r20)} 對 ${fb(R.hot.r20Near)}），所以這代表「波動大、回撤深」，不代表「之後會跌」`);
+    if (volRatio >= 3) notes.push(`量比 3 倍以上時，歷史上 5 日後上漲機率約 <b>${R.heavy.w5}%</b>（一般 ${R.heavy.w5Base}%），平均報酬沒有比較差`);
+    hist = `<div style="padding:8px 0 2px;"><div style="${secT}">◆ 歷史對照（台股樣本）</div>` +
+      notes.map(t => `<div style="font-size:.74rem;line-height:1.6;margin-bottom:5px;">${t}</div>`).join('') +
+      `<div style="font-size:.64rem;line-height:1.6;color:var(--muted);margin-top:3px;">${R.meta.stocks} 檔台股、${R.meta.from}～${R.meta.to}。回撤本來就隨個股波動而異；僅供風險參考，不構成買賣建議；未扣交易成本。</div></div>`;
+  }
+  box.innerHTML = `
+    <div class="trade-grid">
+      <div class="trow"><span class="tkey">乖離 MA20</span><span class="tval">${bias != null ? fb(bias) : '-'}</span></div>
+      <div class="trow"><span class="tkey">量比（對20日均量）</span><span class="tval">${Number.isFinite(volRatio) ? volRatio.toFixed(2) + ' 倍' : '-'}</span></div>
+      <div class="trow"><span class="tkey">近20日日波動</span><span class="tval">${sd != null ? sd.toFixed(1) + '%' : '-'}</span></div>
+      ${hist}
+    </div>`;
+  setSecSummary('secRisk', `乖離 ${bias != null ? fb(bias) : '-'} · 量比 ${Number.isFinite(volRatio) ? volRatio.toFixed(1) : '-'}x`);
+}
 function renderTrade(data, score, ma20val, hi20, lo20, atr, signals) {
   const n = data.length;
   const last = data[n-1];
@@ -4724,6 +4795,7 @@ function renderTrade(data, score, ma20val, hi20, lo20, atr, signals) {
              tp2: (score >= 62 && tp2_price > p) ? tp2_price : null };
   // ── 技術面判讀（描述目前狀態，不給買賣指令）──
   const band = bandOf(score), reso = dimResonance(signals || []);
+  { const _re = document.getElementById('scoreReso'); if (_re) { _re.textContent = '維度共振：' + reso.short; _re.style.color = reso.color; } }
   const pfx = isUS ? '$' : '';
   const f = v => pfx + v.toFixed(2);
   const ma10v = ma(data, 10)[n-1], ma60v = ma(data, 60)[n-1];
@@ -5589,6 +5661,15 @@ window.addEventListener('resize', () => { if (intradayMode) idLayout(); });
     bar.classList.toggle('show', show);
     if (show) sync();
   }, { threshold: 0 }).observe(hdr);
+})();
+
+// 策略模式收進「進階」後，摘要列顯示目前套用的策略
+(function () {
+  const sum = document.getElementById('stratAdvSum'), grid = document.querySelector('.strat-grid');
+  if (!sum || !grid) return;
+  const upd = () => { const a = document.querySelector('.strat-btn.active'); sum.textContent = '進階：策略模式（目前：' + (a ? a.textContent.trim() : '') + '）'; };
+  new MutationObserver(upd).observe(grid, { subtree: true, attributes: true, attributeFilter: ['class'] });
+  upd();
 })();
 </script>
 </body>
