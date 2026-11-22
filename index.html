@@ -706,6 +706,9 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 }
 .market-badge.tw{background:rgba(232,184,75,.15);color:var(--gold);}
 .market-badge.us{background:rgba(74,158,255,.15);color:var(--blue);}
+.market-badge.crypto{background:rgba(247,147,26,.15);color:#f7931a;}
+/* 加密貨幣模式：只看K線，隱藏籌碼／財報區塊 */
+body.crypto-mode #secChip, body.crypto-mode #secRevenue{ display:none; }
 </style>
 </head>
 <body>
@@ -809,10 +812,11 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 <div id="splash">
   <div style="font-size:3rem">📊</div>
   <h2>台股 & 美股 K線技術分析系統 V3</h2>
-  <p>支援台股（2330、0050…）與美股（AAPL、NVDA…），即時抓取K線資料，整合蠟燭圖、技術指標、籌碼/機構持股、財報，四種策略模式，輸出白話操作建議。</p>
+  <p>支援台股（2330、0050…）、美股（AAPL、NVDA…）與加密貨幣（BTC、ETH、SOL，歸在美股），即時抓取K線資料，整合蠟燭圖、技術指標、籌碼/機構持股、財報，四種策略模式，輸出白話操作建議。</p>
   <div class="splash-feat">
     <div class="sf"><span class="sf-icon">🇹🇼</span>台股支援</div>
     <div class="sf"><span class="sf-icon">🇺🇸</span>美股支援</div>
+    <div class="sf"><span class="sf-icon">₿</span>BTC / ETH / SOL</div>
     <div class="sf"><span class="sf-icon">🕯️</span>TradingView蠟燭圖</div>
     <div class="sf"><span class="sf-icon">📈</span>MACD / RSI / KD</div>
     <div class="sf"><span class="sf-icon">🏦</span>機構持股分析</div>
@@ -1045,11 +1049,31 @@ const FINMIND_TOKEN = 'YOUR_TOKEN_HERE';
 // ═══════════════════════════════════════
 let currentMarket = 'TW'; // 'TW' | 'US'
 
+// ═══════════════════════════════════════
+//  加密貨幣（歸在美股市場；BTC/ETH/SOL 一律當現貨 → Yahoo BTC-USD 等）
+//  註：美股也有同代號的標的（如 BTC 信託、SOL 公司股），此處刻意以加密貨幣為主
+// ═══════════════════════════════════════
+const CRYPTO = {
+  BTC: { sym: 'BTC-USD', name: 'Bitcoin 比特幣',  alias: ['BTC','BITCOIN','比特幣'] },
+  ETH: { sym: 'ETH-USD', name: 'Ethereum 以太幣', alias: ['ETH','ETHEREUM','以太幣','以太坊'] },
+  SOL: { sym: 'SOL-USD', name: 'Solana 索拉納',   alias: ['SOL','SOLANA','索拉納'] },
+};
+const isCrypto = id => !!id && Object.prototype.hasOwnProperty.call(CRYPTO, String(id).toUpperCase());
+function fmtBigNum(v) {
+  const n = Number(v) || 0, a = Math.abs(n);
+  if (a >= 1e12) return (n/1e12).toFixed(2) + 'T';
+  if (a >= 1e9)  return (n/1e9).toFixed(2)  + 'B';
+  if (a >= 1e6)  return (n/1e6).toFixed(2)  + 'M';
+  if (a >= 1e3)  return (n/1e3).toFixed(2)  + 'K';
+  return n.toFixed(0);
+}
+
 function switchMarket(mkt) {
   currentMarket = mkt;
   document.getElementById('mktTW').classList.toggle('active', mkt === 'TW');
   document.getElementById('mktUS').classList.toggle('active', mkt === 'US');
   document.body.classList.toggle('us-mode', mkt === 'US');
+  if (mkt !== 'US') document.body.classList.remove('crypto-mode');
 
   const input = document.getElementById('stockInput');
   if (mkt === 'TW') {
@@ -1390,9 +1414,18 @@ async function loadStockList() {
 }
 function nameOf(id) { return stockNameCache[id] || (stockMap[id] && stockMap[id].name) || ''; }
 
+function searchCrypto(q) {
+  q = String(q || '').trim().toUpperCase();
+  if (!q) return [];
+  return Object.entries(CRYPTO)
+    .filter(([id, c]) => c.alias.some(a => a.toUpperCase().startsWith(q)) || c.name.toUpperCase().includes(q))
+    .map(([id, c]) => ({ id, name: c.name, ind: '加密貨幣' }));
+}
 function searchStocks(q, limit = 8) {
   q = String(q || '').trim().toUpperCase();
-  if (!q || !stockListReady) return [];
+  if (!q) return [];
+  const cr = searchCrypto(q);
+  if (!stockListReady) return cr.slice(0, limit);
   const out = [];
   for (const x of stockList) {
     const nm = x.name.toUpperCase();
@@ -1405,7 +1438,9 @@ function searchStocks(q, limit = 8) {
     if (sc >= 0) out.push([sc, x]);
   }
   out.sort((a, b) => a[0] - b[0] || a[1].id.length - b[1].id.length || a[1].id.localeCompare(b[1].id));
-  return out.slice(0, limit).map(o => o[1]);
+  const tw = out.slice(0, limit).map(o => o[1]);
+  const crIds = new Set(cr.map(x => x.id));
+  return cr.concat(tw.filter(x => !crIds.has(x.id))).slice(0, limit);
 }
 // 代號 / 中文股名 → 代號；無法辨識回傳 ''
 function resolveStockInput(raw) {
@@ -1413,6 +1448,7 @@ function resolveStockInput(raw) {
   if (!v) return '';
   const up = v.toUpperCase();
   if (['TWII', '^TWII', '加權', '加權指數', '大盤', '台股大盤', '台灣加權'].includes(up) || ['加權', '加權指數', '大盤', '台股大盤', '台灣加權'].includes(v)) return 'TWII';
+  for (const [id, c] of Object.entries(CRYPTO)) if (c.alias.some(a => a.toUpperCase() === up)) return id;
   if (/^\d{4,6}[A-Z]?$/.test(up) || /^[A-Z]{1,5}$/.test(up)) return up;
   if (stockNameIndex[v]) return stockNameIndex[v];
   const hit = searchStocks(v, 1)[0];
@@ -1877,7 +1913,7 @@ async function fetchYahooPrice(stockId) {
 async function fetchUSPrice(ticker) {
   const nodes  = ['query1', 'query2'];
   const ranges = ['10y', '5y', '2y'];
-  const symbol = ticker.toUpperCase();
+  const symbol = isCrypto(ticker) ? CRYPTO[ticker.toUpperCase()].sym : ticker.toUpperCase();
   for (const rng of ranges) {
     for (const node of nodes) {
       const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${rng}&includePrePost=false`;
@@ -2577,6 +2613,7 @@ async function analyze() {
 
 // ── 加權指數（^TWII）：只有價量K線，沒有籌碼／營收／EPS／大戶持股 ──
 async function analyzeIndex() {
+  document.body.classList.remove('crypto-mode');
   setStatus('正在抓取加權指數資料...', 'loading');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('mainContent').classList.add('show');
@@ -2606,6 +2643,7 @@ async function analyzeIndex() {
 // ── 台股分析 ──
 async function analyzeTW(stockId) {
   const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+  document.body.classList.remove('crypto-mode');
   setStatus(`正在抓取 ${stockId} 台股資料...`, 'loading');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('mainContent').classList.add('show');
@@ -2660,11 +2698,15 @@ async function analyzeTW(stockId) {
 
 // ── 美股分析 ──
 async function analyzeUS(ticker) {
-  setStatus(`正在抓取 ${ticker} 美股資料...`, 'loading');
+  setStatus(`正在抓取 ${ticker} ${isCrypto(ticker) ? '加密貨幣' : '美股'}資料...`, 'loading');
   document.getElementById('splash').style.display = 'none';
   document.getElementById('mainContent').classList.add('show');
   try {
-    const { price, fin: finNow, name } = await fetchUSData(ticker);
+    const crypto = isCrypto(ticker);
+    document.body.classList.toggle('crypto-mode', crypto);
+    const { price, fin: finNow, name } = crypto
+      ? { price: await fetchUSPrice(ticker), fin: null, name: CRYPTO[ticker].name }   // 加密貨幣：只抓K線，不抓財報／名稱
+      : await fetchUSData(ticker);
     const asOf = btDate();
     priceData = cleanBars(asOf ? price.filter(d => d.date <= asOf) : price);
     futureBars = asOf ? cleanBars(price.filter(d => d.date > asOf)) : [];
@@ -2686,7 +2728,7 @@ async function analyzeUS(ticker) {
     clearStatus();
     renderMeta(ticker, name, 'US');
     redraw();
-    renderUSFundamentals(fin);
+    if (!crypto) renderUSFundamentals(fin);
   } catch(err) {
     setStatus(`美股抓取失敗：${err.message}`, 'error');
   }
@@ -2722,10 +2764,12 @@ function renderMeta(stockId, stockName, market) {
   const yahooLink = stockId === 'TWII'
     ? 'https://tw.stock.yahoo.com/quote/%5ETWII'
     : isUS
-    ? `https://finance.yahoo.com/quote/${stockId}`
+    ? `https://finance.yahoo.com/quote/${isCrypto(stockId) ? CRYPTO[stockId].sym : stockId}`
     : `https://tw.stock.yahoo.com/quote/${stockId}${currentSuffix}`;
 
-  const marketBadge = isUS
+  const marketBadge = (isUS && isCrypto(stockId))
+    ? `<span class="market-badge crypto">₿ CRYPTO</span>`
+    : isUS
     ? `<span class="market-badge us">🇺🇸 US</span>`
     : `<span class="market-badge tw">🇹🇼 TW</span>`;
 
@@ -2733,7 +2777,9 @@ function renderMeta(stockId, stockName, market) {
     ? `$${last.close.toFixed(2)}`
     : last.close.toFixed(2);
 
-  const volText = isUS
+  const volText = (isUS && isCrypto(stockId))
+    ? fmtBigNum(last.Trading_Volume)
+    : isUS
     ? `${(last.Trading_Volume/1e6).toFixed(2)}M`
     : `${(last.Trading_Volume/1000).toFixed(0)}張`;
 
@@ -5230,7 +5276,7 @@ function renderBias(data) {
   const ud10 = udRatio(10), ud20 = udRatio(20);
   const isUS = currentMarket === 'US';
   const volUnit = isUS ? 'M股' : '張';
-  const volFmt = v => isUS ? (v/1e6).toFixed(2)+' M' : (v/1000).toFixed(0)+' 張';
+  const volFmt = v => (isUS && isCrypto(currentStockId)) ? fmtBigNum(v) : isUS ? (v/1e6).toFixed(2)+' M' : (v/1000).toFixed(0)+' 張';
   el.innerHTML = `
     <table style="border-collapse:collapse;font-size:.76rem;width:100%;">
       <tr><td colspan="2" style="padding:2px 0 6px;font-size:.63rem;color:var(--muted2);font-family:var(--mono);">乖離率 +3%偏高 / -3%偏低</td></tr>
@@ -5747,7 +5793,7 @@ let idData = null, idSymbol = '', idLoadedFor = '', idLastFetch = 0, idBusy = fa
 function idSymbolCandidates() {
   const id = currentStockId;
   if (!id) return [];
-  if (currentMarket === 'US') return [id.toUpperCase()];
+  if (currentMarket === 'US') return [isCrypto(id) ? CRYPTO[id.toUpperCase()].sym : id.toUpperCase()];
   if (id === 'TWII') return ['^TWII'];
   const first = currentSuffix === '.TWO' ? '.TWO' : '.TW';
   return [id + first, id + (first === '.TW' ? '.TWO' : '.TW')];
