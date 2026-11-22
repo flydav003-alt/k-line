@@ -754,7 +754,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
     <span class="kbd-hint" title="切換120日">2</span>
     <span class="kbd-hint" title="切換240日">3</span>
     <span class="kbd-hint" title="切換480日">4</span>
-    <span class="kbd-hint" title="T: 趨勢通道">T</span>
+    <span class="kbd-hint" title="T: 趨勢通道（含圖形型態）">T</span>
     <span class="kbd-hint" title="P: K線型態標記">P</span>
     <span class="kbd-hint" title="←／→：回測前後翻一個交易日">←→</span>
     <span class="kbd-hint" title="Esc: 清除回測">Esc</span>
@@ -840,7 +840,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
           <div class="pt" data-p="120" onclick="setActivePeriod(120)">120日</div>
           <div class="pt" data-p="240" onclick="setActivePeriod(240)">240日</div>
           <div class="pt" data-p="480" onclick="setActivePeriod(480)">480日</div>
-          <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" style="cursor:pointer;user-select:none;">
+          <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" title="趨勢通道：斜線趨勢線、水平支撐壓力、圖形型態（M頭／W底／頭肩／三角形）（T）" style="cursor:pointer;user-select:none;">
             趨勢通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
           </div>
           <div class="chart-tab" id="patternToggleBtn" onclick="togglePatterns()" style="cursor:pointer;user-select:none;" title="在K線圖上標示偵測到的K線型態（P）">
@@ -866,7 +866,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
         <div id="klineChart"></div>
       </div>
       <div class="sub-charts">
-        <div class="sub-chart-wrap">
+        <div class="sub-chart-wrap" style="height:60px;">
           <div class="chart-label" id="volLabel">
             <span>成交量</span>
             <span class="cl-item"><span class="cl-dot" style="background:#e8b84b"></span><span>量均20</span></span>
@@ -1287,6 +1287,8 @@ let ma5Series   = null, ma10Series = null, ma20Series = null, ma60Series = null,
 let volSeries   = null, volMaSeries = null;
 let macdSeries  = null, signalSeries= null, histSeries = null;
 let trendLines  = [];
+let trendSeries = [];   // 斜線趨勢線（line series）
+let patSeries = [];     // 型態頸線／邊界線（line series）
 let showTrend   = false;
 let currentPeriod = 60;
 let rsiChart    = null;
@@ -2890,15 +2892,15 @@ function buildCharts(data, keepRange = false) {
   if(kChart){ kChart.remove(); kChart=null; }
   if(volChart){ volChart.remove(); volChart=null; }
   if(macdChartObj){ macdChartObj.remove(); macdChartObj=null; }
-  trendLines = [];
+  trendLines = []; trendSeries = []; patSeries = [];
 
   const kRect = kEl.parentElement.getBoundingClientRect();
   const kH = (kRect.height > 50 ? kRect.height : kEl.parentElement.offsetHeight) || 340;
-  const vH = 90; const mH = 90;
+  const vH = 60; const mH = 90;
 
   kChart = LightweightCharts.createChart(kEl, {
     ...lwChartOpts(kH),
-    timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
+    timeScale:{ borderColor:'#1e2d4a', visible:true, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },   // 日期軸放在K線正下方
   });
 
   candleSeries = kChart.addCandlestickSeries({
@@ -3015,7 +3017,7 @@ function buildCharts(data, keepRange = false) {
   // MACD Chart — 使用固定 priceScaleId 確保不干擾 K 線圖
   macdChartObj = LightweightCharts.createChart(mEl, {
     ...lwChartOpts(mH),
-    timeScale:{ borderColor:'#1e2d4a', visible:true, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
+    timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
     rightPriceScale:{ scaleMargins:{top:.1,bottom:.1} },
   });
 
@@ -3179,39 +3181,60 @@ function toggleTrendChannel() {
     status.style.background = 'var(--border)'; status.style.color = 'var(--muted)'; status.textContent = 'OFF';
     trendLines.forEach(l => { try{ candleSeries?.removePriceLine(l); } catch{} });
     trendLines = [];
+    clearTrendSeries();
   }
+  if (_markerArgs) addVolumeMarkers(..._markerArgs);   // 圖形型態標記跟著趨勢通道開關
 }
+
+function clearPatSeries(){ patSeries.forEach(x => { try{ kChart.removeSeries(x); }catch{} }); patSeries = []; }
+function clearTrendSeries(){ trendSeries.forEach(x => { try{ kChart.removeSeries(x); }catch{} }); trendSeries = []; }
 
 function drawTrendChannel(data) {
   if(!kChart || !candleSeries) return;
   trendLines.forEach(l => { try{ candleSeries.removePriceLine(l); }catch{} });
   trendLines = [];
+  clearTrendSeries();
   const currentPrice = data[data.length-1].close;
-  const w = 3;
-  const resistances = [], supports = [];
-  for(let i = w; i < data.length - w; i++){
-    const isHigh = data.slice(i-w, i+w+1).every((d,j) => j===w || d.max <= data[i].max);
-    const isLow  = data.slice(i-w, i+w+1).every((d,j) => j===w || d.min >= data[i].min);
-    if(isHigh && data[i].max > currentPrice) resistances.push({ v: data[i].max });
-    if(isLow  && data[i].min < currentPrice) supports.push({ v: data[i].min });
-  }
-  const dedupe = (arr, isResistance) => {
-    const sorted = isResistance ? arr.sort((a,b) => a.v - b.v) : arr.sort((a,b) => b.v - a.v);
-    const result = [];
-    for(const item of sorted){
-      const last = result[result.length-1];
-      if(!last || Math.abs(item.v - last.v)/last.v > 0.01) result.push(item);
-      if(result.length >= 2) break;
+  // 水平支撐壓力：只顯示「≥2 次觸碰」（1% 內、相隔≥5根）的價位，上下各最多 1 條；單次出現的波段高低點不畫
+  try {
+    const A0 = vd(), off0 = A0.length - data.length;
+    if(off0 >= 0 && A0[off0] && A0[off0].date === data[0].date){
+      const ctx0 = buildTrendCtx(A0), k0 = A0.length - 1;
+      const levels = (isHi) => {
+        const pts = ctx0.pv(isHi, k0, A0.length).filter(p => p.i >= off0), out = [];
+        for(const p of pts){
+          if(isHi ? p.v <= currentPrice : p.v >= currentPrice) continue;
+          const g = []; for(const q of pts){ if(Math.abs(q.v-p.v) <= p.v*0.01 && (!g.length || g[g.length-1].i - q.i >= 5)) g.push(q); }
+          if(g.length >= 2 && !out.some(o => Math.abs(o.v-p.v) <= p.v*0.01)) out.push({ v:g.reduce((x,y)=>x+y.v,0)/g.length, n:g.length });
+        }
+        return out.sort((x,y) => Math.abs(x.v-currentPrice) - Math.abs(y.v-currentPrice)).slice(0,1);
+      };
+      const addLine = (price, col, label) => {
+        trendLines.push(candleSeries.createPriceLine({ price, color:col, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dotted, axisLabelVisible:false, title:label }));
+      };
+      levels(true).forEach(r => addLine(r.v, 'rgba(255,77,109,0.6)', `壓力 ${Math.round(r.v)}（${r.n}次）`));
+      levels(false).forEach(r => addLine(r.v, 'rgba(0,200,150,0.6)', `支撐 ${Math.round(r.v)}（${r.n}次）`));
     }
-  console.log("🔍 fetchUSData 最終返回的資料結構:", JSON.stringify(result, null, 2));
-    return result;
-  };
-  const addLine = (price, col, label) => {
-    const pl = candleSeries.createPriceLine({ price, color: col, lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: label });
-    trendLines.push(pl);
-  };
-  dedupe(resistances, true).forEach((r, i) => addLine(r.v, `rgba(255,77,109,${i===0?'0.9':'0.6'})`, `壓力 ${r.v}`));
-  dedupe(supports, false).forEach((s, i) => addLine(s.v, `rgba(0,200,150,${i===0?'0.9':'0.6'})`, `支撐 ${s.v}`));
+  } catch {}
+  // 斜線趨勢線：與K線型態濾網共用 buildTrendCtx（連最近兩個已確認轉折點）
+  try {
+    const A = vd(), off = A.length - data.length;
+    if(off >= 0 && A[off] && A[off].date === data[0].date){
+      const k = A.length - 1, T = buildTrendCtx(A).at(k);
+      [[T.res,'255,77,109','壓力線','突破'],[T.sup,'0,200,150','支撐線','跌破']].forEach(([L,rgb,nm,vb]) => {
+        if(!L) return;
+        const s0 = Math.max(L.p1.i, off);
+        if(s0 >= k) return;
+        const broken = L.brk >= 0, ok3 = L.touches >= 3;   // 斷線＝灰色虛線；3點以上＝實線；2點＝淡色點線（待驗證）
+        const col = broken ? 'rgba(148,163,184,0.8)' : `rgba(${rgb},${ok3?0.9:0.45})`;
+        const ls = broken ? LightweightCharts.LineStyle.Dashed : ok3 ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.Dotted;
+        const title = broken ? `${nm}已${vb} ${String(A[L.brk].date).slice(5)}` : `${nm} ${L.touches}點${ok3?'':'·待驗證'}`;
+        const ser = kChart.addLineSeries({ color:col, lineWidth:(ok3&&!broken)?2:1, lineStyle:ls, priceLineVisible:false, lastValueVisible:true, title, crosshairMarkerVisible:false });
+        ser.setData([{ time:A[s0].date, value:L.at(s0) }, { time:A[k].date, value:L.at(k) }]);
+        trendSeries.push(ser);
+      });
+    }
+  } catch {}
 }
 
 // ═══════════════════════════════════════
@@ -3674,6 +3697,11 @@ function runAnalysis(slicedData, twiiRaw) {
   }
 
   _sec('trend');
+  // ── 圖形型態／趨勢線事件（點數依本股歷史統計調整；見 scoreShapeEvents）──
+  try {
+    const _A=vd(); let _ki=_A.length-1; while(_ki>=0&&_A[_ki].date!==last.date) _ki--;
+    const _r=scoreShapeEvents(_A,_ki,w.pattern); _r.sigs.forEach(x=>signals.push(x)); bullPts+=_r.bull; bearPts+=_r.bear;
+  } catch {}
   // ── 支撐壓力 ──
   const r20=data.slice(-20);
   const rhi=Math.max(...r20.map(d=>d.max)), rlo=Math.min(...r20.map(d=>d.min));
@@ -4135,9 +4163,9 @@ function renderScore(score, volStructScore, volStructLabel, autoStrategy) {
 // ═══════════════════════════════════════
 const SIG_DIM = {'均線':'trend','週線強弱':'trend','月線強弱':'trend','均線糾結':'trend','支撐壓力':'trend','壓力強度':'trend','支撐強度':'trend',
   'MACD':'mom','RSI':'mom','RSI背離':'mom','KD':'mom','布林':'mom','K線型態':'mom','K線收斂':'mom','收盤強度':'mom','影線意圖':'mom','相對強弱':'mom','突破品質':'mom','缺口回補':'mom','漲跌停':'mom',
-  '量價':'vol','量能啟動':'vol','回測量縮':'vol','量能連續':'vol','籌碼':'chip','大戶持股':'chip'};
-const SIG_CORE = new Set(['盤中','均線','週線強弱','月線強弱','量價','量能啟動','回測量縮','K線型態','突破品質','缺口回補']);
-const SIG_BASE = {'均線':2,'週線強弱':2,'月線強弱':2,'均線糾結':2,'量價':2,'量能啟動':3,'K線型態':2,'突破品質':3,'回測量縮':2,'缺口回補':2,'漲跌停':3,'MACD':2,'RSI':1,'KD':1,'布林':1,'籌碼':2,'大戶持股':2,'相對強弱':2,'收盤強度':1,'影線意圖':1,'K線收斂':1,'支撐壓力':1,'壓力強度':1,'支撐強度':1,'RSI背離':2,'盤中':3};
+  '圖形型態':'trend','趨勢線':'trend','量價':'vol','量能啟動':'vol','回測量縮':'vol','量能連續':'vol','籌碼':'chip','大戶持股':'chip'};
+const SIG_CORE = new Set(['盤中','均線','週線強弱','月線強弱','量價','量能啟動','回測量縮','K線型態','圖形型態','趨勢線','突破品質','缺口回補']);
+const SIG_BASE = {'均線':2,'週線強弱':2,'月線強弱':2,'均線糾結':2,'量價':2,'量能啟動':3,'K線型態':2,'圖形型態':3,'趨勢線':2,'突破品質':3,'回測量縮':2,'缺口回補':2,'漲跌停':3,'MACD':2,'RSI':1,'KD':1,'布林':1,'籌碼':2,'大戶持股':2,'相對強弱':2,'收盤強度':1,'影線意圖':1,'K線收斂':1,'支撐壓力':1,'壓力強度':1,'支撐強度':1,'RSI背離':2,'盤中':3};
 function sigStrength(x){
   if (x.str) return x.str;
   let b = SIG_BASE[x.cat] || 1;
@@ -4211,6 +4239,255 @@ function renderSignals(signals, score, bullPts, bearPts) {
     + coreL.map(rowHtml).join('') + auxHtml + renderPatternStats(cp);
 }
 
+// ── 趨勢背景（共用）：轉折點＋趨勢線 ──
+// 第 k 根只使用「右側 w 根已走完、確認過」的轉折點，歷史偵測不會偷看未來。
+function buildTrendCtx(a, w=3){
+  const n=a.length, hi=[], lo=[];
+  for(let i=w;i<n-w;i++){
+    let H=true, L=true;
+    for(let j=i-w;j<=i+w;j++){ if(j===i) continue; if(a[j].max>a[i].max) H=false; if(a[j].min<a[i].min) L=false; if(!H&&!L) break; }
+    if(H) hi.push({i,v:a[i].max,conf:i+w});
+    if(L) lo.push({i,v:a[i].min,conf:i+w});
+  }
+  const last=(pts,k)=>{ let l=0,r=pts.length-1,res=-1; while(l<=r){ const m=(l+r)>>1; if(pts[m].conf<=k){res=m;l=m+1;} else r=m-1; } return res; };
+  const TOL=0.01, BRK=0.005;   // 觸碰容許 1%（相鄰觸碰至少隔5根，避免同一波高低點重複計）；收盤超過線 0.5% 才算有效突破／跌破
+  // 以最近已確認轉折 p2 為終點，在較早的 4 個候選轉折中挑「觸碰點最多」的連線（平手取最近）
+  const mkLine=(pts,k,isRes)=>{
+    const t=last(pts,k); if(t<1) return null;
+    const p2=pts[t]; let best=null, tried=0;
+    for(let q=t-1;q>=0&&tried<4;q--){
+      if(p2.i-pts[q].i<5) continue;
+      tried++;
+      const p1=pts[q], slope=(p2.v-p1.v)/(p2.i-p1.i), at=x=>p2.v+slope*(x-p2.i);
+      let touches=0, li=1e9; const lo0=Math.min(p1.i,p2.i-200);
+      for(let r=t;r>=0&&pts[r].i>=lo0;r--){ const v=at(pts[r].i); if(Math.abs(pts[r].v-v)<=Math.abs(v)*TOL && li-pts[r].i>=5){ touches++; li=pts[r].i; } }
+      if(!best||touches>best.touches) best={p1,p2,slope,at,touches};
+    }
+    if(!best) return null;
+    let brk=-1;
+    for(let j=p2.i+1;j<=k;j++){ const v=best.at(j), c=a[j].close; if(isRes?c>v*(1+BRK):c<v*(1-BRK)){ brk=j; break; } }
+    best.brk=brk;   // 首次有效突破／跌破的K棒索引，-1＝線仍有效
+    return best;
+  };
+  const level=(pts,k,isMax)=>{ let v=null; for(let t=last(pts,k); t>=0&&pts[t].i>=k-60; t--){ if(v===null||(isMax?pts[t].v>v:pts[t].v<v)) v=pts[t].v; } return v; };
+  const lvls=(pts,k)=>{ const o=[]; for(let t=last(pts,k); t>=0&&pts[t].i>=k-60; t--) o.push(pts[t].v); return o; };
+  // 擺盪轉折（ZigZag）：反向走勢達門檻（max(5%, 2.5×ATR%)）才確認一個高／低點，conf＝達標那根K棒（只用已確認資料）
+  const zz=[], atrZ=calcATR(a,14);
+  { let st='up', hc={i:0,v:a[0].max}, lc={i:0,v:a[0].min};
+    for(let j=1;j<n;j++){
+      const thr=Math.max(0.05, 2.5*(atrZ[j]||0)/a[j].close);
+      if(st==='up'){
+        if(a[j].max>hc.v) hc={i:j,v:a[j].max};
+        if(a[j].min<=hc.v*(1-thr)){ zz.push({i:hc.i,v:hc.v,type:'H',conf:j}); st='down'; lc={i:j,v:a[j].min}; }
+      } else {
+        if(a[j].min<lc.v) lc={i:j,v:a[j].min};
+        if(a[j].max>=lc.v*(1+thr)){ zz.push({i:lc.i,v:lc.v,type:'L',conf:j}); st='up'; hc={i:j,v:a[j].max}; }
+      }
+    }
+  }
+  const zp=k=>{ const t=last(zz,k); return t<0?[]:zz.slice(Math.max(0,t-7),t+1); };   // 已確認擺盪轉折（時間順序，最多8個）
+  const cache=new Map();
+  const pv=(isHi,k,lb)=>{ const pts=isHi?hi:lo, o=[]; for(let t=last(pts,k); t>=0&&pts[t].i>=k-lb; t--) o.push(pts[t]); return o; };   // 已確認轉折（由新到舊）
+  return { hi, lo, pv, zp, at:k=>{ let v=cache.get(k); if(!v){ v={ res:mkLine(hi,k,true), sup:mkLine(lo,k,false), hRes:level(hi,k,true), hSup:level(lo,k,false), rLv:lvls(hi,k), sLv:lvls(lo,k) }; cache.set(k,v); } return v; } };
+}
+// ── 型態：M頭／W底／上升三角形／下降三角形 ──
+// 事件在「突破／跌破」那根K棒觸發（第一次），只用 i 以前已確認的轉折點，不偷看未來。
+function flatLevel(pts){   // pts：由新到舊的轉折；找 1% 內、相隔≥5根、觸碰最多的水平價位
+  let best=null;
+  for(const p of pts){
+    const g=[]; for(const q of pts){ if(Math.abs(q.v-p.v)<=p.v*0.01 && (!g.length||g[g.length-1].i-q.i>=5)) g.push(q); }
+    if(!best||g.length>best.n) best={ v:g.reduce((x,y)=>x+y.v,0)/g.length, n:g.length, first:g[g.length-1].i, last:g[0].i };
+  }
+  return best;
+}
+function chartPatternsAt(a, i, atr, ctx){
+  const out=[]; if(i<40) return out;
+  const c=a[i].close, A=atr[i]||(a[i].max-a[i].min), BR=0.005, f=v=>v.toFixed(2);
+  const rMin=(x,y)=>{ let m=1e18; for(let j=Math.max(0,x);j<=y;j++) if(a[j].min<m) m=a[j].min; return m; };
+  const rMax=(x,y)=>{ let m=-1e18; for(let j=Math.max(0,x);j<=y;j++) if(a[j].max>m) m=a[j].max; return m; };
+  const argMin=(x,y)=>{ let m=1e18,k=Math.max(0,x); for(let j=Math.max(0,x);j<=y;j++) if(a[j].min<m){m=a[j].min;k=j;} return k; };
+  const argMax=(x,y)=>{ let m=-1e18,k=Math.max(0,x); for(let j=Math.max(0,x);j<=y;j++) if(a[j].max>m){m=a[j].max;k=j;} return k; };
+  const never=(x,y,fn)=>{ for(let j=x;j<y;j++) if(fn(a[j].close)) return false; return true; };   // x..y-1 都沒滿足條件
+  const hiP=ctx.pv(true,i,100), loP=ctx.pv(false,i,100);
+  // 反轉型態一律用擺盪轉折（ZigZag）連續高低交替的點，一個型態只會對應一組轉折點
+  const Z=ctx.zp(i);
+  const pre=(v,i0,top)=>{ const x=top?rMin(i0-60,i0):rMax(i0-60,i0); return top?(v-x)/v:(x-v)/x; };   // 型態之前的漲（跌）幅
+  const brkF=(top,x,n)=>top?x<n*(1-BR):x>n*(1+BR);
+  // M頭／W底：高-低-高（低-高-低），兩端相近，收盤第一次穿越中間的頸線
+  for(const top of [true,false]){
+    for(let e=Z.length-1;e>=Math.max(2,Z.length-3);e--){
+      const p1=Z[e-2], m=Z[e-1], p2=Z[e], ty=top?'H':'L';
+      if(p1.type!==ty||p2.type!==ty||m.type===ty) continue;
+      const gap=p2.i-p1.i, avg=(p1.v+p2.v)/2; if(gap<8||gap>120||i-p2.i>25) continue;
+      if(Math.abs(p1.v-p2.v)>avg*0.03) continue;
+      const dep=Math.abs(avg-m.v)/avg; if(dep<Math.max(0.05,2*A/avg)) continue;
+      if(pre(p1.v,p1.i,top)<0.10) continue;
+      if(top?rMax(p2.i,i)>Math.max(p1.v,p2.v)*1.03:rMin(p2.i,i)<Math.min(p1.v,p2.v)*0.97) continue;
+      if(brkF(top,c,m.v) && never(p2.i+1,i,x=>brkF(top,x,m.v))){
+        out.push({name:top?'M頭':'W底',dir:top?'bear':'bull',note:`頸線 ${f(m.v)}｜量度目標 ${f(top?m.v-(avg-m.v):m.v+(m.v-avg))}`,
+          segs:[{i0:p1.i,v0:m.v,i1:i,v1:m.v}], poly:[p1,m,p2], labels:top?['頂1','','頂2']:['底1','','底2']});
+        break; }
+    }
+  }
+  // 頭肩頂／頭肩底：肩-谷-頭-谷-肩（連續五個轉折），兩谷連成頸線，收盤第一次穿越頸線
+  if(Z.length>=5) for(const top of [true,false]){
+    for(let e=Z.length-1;e>=Math.max(4,Z.length-3);e--){
+      const [LS,T1,H,T2,RS]=Z.slice(e-4,e+1), ty=top?'H':'L';
+      if(LS.type!==ty||H.type!==ty||RS.type!==ty||T1.type===ty||T2.type===ty) continue;
+      if(i-RS.i>25) continue;
+      if(top?H.v<Math.max(LS.v,RS.v)*1.04:H.v>Math.min(LS.v,RS.v)*0.96) continue;           // 頭要明顯比兩肩極端
+      const sh=(LS.v+RS.v)/2; if(Math.abs(LS.v-RS.v)>sh*0.10) continue;                      // 兩肩高度接近
+      const tl=(T1.v+T2.v)/2; if(Math.abs(T1.v-T2.v)>tl*0.08) continue;                      // 頸線不能太斜
+      const d1=H.i-LS.i, d2=RS.i-H.i, tot=RS.i-LS.i; if(d1/d2<0.4||d1/d2>2.5||tot<15||tot>200) continue;   // 左右大致對稱
+      const nk=x=>T1.v+(T2.v-T1.v)*(x-T1.i)/(T2.i-T1.i);
+      const dep=top?(H.v-nk(H.i))/H.v:(nk(H.i)-H.v)/nk(H.i); if(dep<Math.max(0.05,2*A/H.v)) continue;
+      { const hh=top?H.v-nk(H.i):nk(H.i)-H.v, sd=top?H.v-Math.max(LS.v,RS.v):Math.min(LS.v,RS.v)-H.v; if(sd<hh*0.25) continue; }   // 頭要比較高的肩再突出至少 25% 的型態高度
+      if(pre(LS.v,LS.i,top)<0.10) continue;
+      if(top?rMax(RS.i,i)>H.v:rMin(RS.i,i)<H.v) continue;
+      if(!brkF(top,c,nk(i))) continue;
+      let first=true; for(let j=RS.i+1;j<i;j++) if(brkF(top,a[j].close,nk(j))){ first=false; break; }
+      if(!first) continue;
+      const tg=top?nk(i)-(H.v-nk(H.i)):nk(i)+(nk(H.i)-H.v);
+      out.push({name:top?'頭肩頂':'頭肩底',dir:top?'bear':'bull',note:`頸線 ${f(nk(i))}｜量度目標 ${f(tg)}`,
+        segs:[{i0:T1.i,v0:T1.v,i1:i,v1:nk(i)}], poly:[LS,T1,H,T2,RS], labels:['左肩','','頭','','右肩']});
+      break;
+    }
+  }
+  // 牛旗／熊旗：急漲（急跌）旗桿＋短暫、淺幅、反向或橫向的整理（旗面），收盤第一次突破旗面邊界，順勢延續
+  const flagAt=(ii,top)=>{   // top=true：牛旗（旗桿向上）；回傳 ii 這根K棒的突破事件或 null
+    if(ii<30) return null;
+    const cc=a[ii].close, AA=atr[ii]||(a[ii].max-a[ii].min);
+    const ex=j=>top?a[j].max:a[j].min, op=j=>top?a[j].min:a[j].max;        // ex：旗桿方向的極端價；op：反方向
+    const pt=top?argMax(ii-26,ii-5):argMin(ii-26,ii-5);                       // 旗桿終點（旗桿極端）
+    const pl=top?argMin(pt-30,pt-1):argMax(pt-30,pt-1);                       // 旗桿起點
+    const L=ii-1-pt; if(L<6||L>25||pt-pl<3||pt-pl>30) return null;
+    const pEx=ex(pt), pSt=op(pl), poleH=Math.abs(pEx-pSt);
+    if(poleH/pSt<Math.max(0.15,6*AA/cc)) return null;                          // 旗桿要夠陡
+    const fl=top?rMin(pt+1,ii-1):rMax(pt+1,ii-1);                              // 旗面反向極端
+    if(Math.abs(pEx-fl)/poleH>0.5) return null;                                // 回檔不超過旗桿一半
+    if(top?rMax(pt+1,ii-1)>pEx*1.02:rMin(pt+1,ii-1)<pEx*0.98) return null;    // 整理期間不可再大幅創新極端
+    const mv=(x,y)=>{ let t=0; for(let j=x+1;j<=y;j++) t+=Math.abs(a[j].close-a[j-1].close); return t/(y-x); };
+    if(mv(pt,ii-1)>mv(Math.max(pl,pt-10),pt)*0.7) return null;                                  // 旗面波動要明顯小於旗桿（整理而非續衝）
+    const mid=pt+Math.floor(L/2)+1;
+    const a1=top?argMax(pt+1,mid):argMin(pt+1,mid), b1=top?argMax(mid+1,ii-1):argMin(mid+1,ii-1);
+    if(b1<=a1) return null;
+    const sl=(ex(b1)-ex(a1))/ex(a1); if(top?sl>0.02:sl<-0.02) return null;    // 旗面邊界不可朝旗桿方向傾斜
+    const ln=x=>ex(a1)+(ex(b1)-ex(a1))*(x-a1)/(b1-a1);
+    const brk=(x,j)=>top?x>ln(j)*(1+BR):x<ln(j)*(1-BR);
+    if(!brk(cc,ii)) return null;
+    for(let j=pt+1;j<ii;j++) if(brk(a[j].close,j)) return null;                // 必須是第一次突破
+    const a2=top?argMin(pt+1,mid):argMax(pt+1,mid), b2=top?argMin(mid+1,ii-1):argMax(mid+1,ii-1);
+    const segs=[{i0:pt,v0:ln(pt),i1:ii,v1:ln(ii)}];
+    if(b2>a2){ const lo=x=>op(a2)+(op(b2)-op(a2))*(x-a2)/(b2-a2); segs.push({i0:pt,v0:lo(pt),i1:ii,v1:lo(ii)}); }
+    const avv=(x,y)=>{ let t=0,k=0; for(let j=Math.max(0,x);j<=y;j++){ t+=(+a[j].Trading_Volume||0); k++; } return k?t/k:0; };
+    const vp=avv(Math.max(pl,pt-10),pt), vf=avv(pt+1,ii-1), vcon=vp>0?vf<=vp*0.8:undefined;   // 旗面量縮
+    return {name:top?'牛旗':'熊旗',dir:top?'bull':'bear',note:`旗面邊界 ${f(ln(ii))}｜量度目標 ${f(top?ln(ii)+poleH:ln(ii)-poleH)}`,segs,poly:[{i:pl,v:pSt},{i:pt,v:pEx}],volContr:vcon};
+  };
+  for(const top of [true,false]){ const e=flagAt(i,top); if(e && !flagAt(i-1,top)) out.push(e); }   // 連續多根都滿足時，只在第一根觸發
+  const T=ctx.at(i);
+  // 上升三角形：水平壓力（≥2觸碰）＋上升支撐線（≥3點、未斷），收盤第一次突破壓力
+  const R=hiP.length>=2?flatLevel(hiP):null;
+  if(R && R.n>=2 && R.last>=i-60 && R.first<=i-15 && T.sup && T.sup.touches>=3 && T.sup.brk<0 && T.sup.slope>0){
+    const s0=T.sup.at(T.sup.p1.i), s1=T.sup.at(i);
+    if((s1-s0)/s0>=0.03 && s1<R.v && rMax(R.first,i-1)<=R.v*1.01 && c>R.v*(1+BR) && never(R.last,i,x=>x>R.v*(1+BR))){
+      const h=R.v-rMin(R.first,i);
+      out.push({name:'上升三角形',dir:'bull',note:`壓力 ${f(R.v)}｜量度目標 ${f(R.v+h)}`,segs:[{i0:R.first,v0:R.v,i1:i,v1:R.v},{i0:T.sup.p1.i,v0:s0,i1:i,v1:s1}]});
+    }
+  }
+  // 下降三角形：水平支撐（≥2觸碰）＋下降壓力線（≥3點、未斷），收盤第一次跌破支撐
+  const S=loP.length>=2?flatLevel(loP):null;
+  if(S && S.n>=2 && S.last>=i-60 && S.first<=i-15 && T.res && T.res.touches>=3 && T.res.brk<0 && T.res.slope<0){
+    const r0=T.res.at(T.res.p1.i), r1=T.res.at(i);
+    if((r0-r1)/r0>=0.03 && r1>S.v && rMin(S.first,i-1)>=S.v*0.99 && c<S.v*(1-BR) && never(S.last,i,x=>x<S.v*(1-BR))){
+      const h=rMax(S.first,i)-S.v;
+      out.push({name:'下降三角形',dir:'bear',note:`支撐 ${f(S.v)}｜量度目標 ${f(S.v-h)}`,segs:[{i0:S.first,v0:S.v,i1:i,v1:S.v},{i0:T.res.p1.i,v0:r0,i1:i,v1:r1}]});
+    }
+  }
+  // 楔形／對稱三角形：上下兩條有效趨勢線（各≥3點）收斂，收盤第一次突破或跌破其中一條（被突破的線排在 segs[0]）
+  if(T.res&&T.sup&&T.res.touches>=3&&T.sup.touches>=3){
+    const R2=T.res, S2=T.sup, s0=Math.max(R2.p1.i,S2.p1.i);
+    const upBrk=R2.brk===i&&S2.brk<0, dnBrk=S2.brk===i&&R2.brk<0;
+    if((upBrk||dnBrk)&&i-s0>=15&&i-s0<=150){
+      const r0=R2.at(s0), r1=R2.at(i), q0=S2.at(s0), q1=S2.at(i), g0=r0-q0, g1=r1-q1;
+      if(g0>0&&g1>0&&g1<g0*0.8){
+        const rr=(r1-r0)/r0, sr=(q1-q0)/q0; let nm=null, dir=null;
+        if(rr<=-0.02&&sr>=0.02){ nm='對稱三角形'; dir=upBrk?'bull':'bear'; }
+        else if(rr>=0.02&&sr>=0.02&&sr>rr&&dnBrk){ nm='上升楔形'; dir='bear'; }
+        else if(rr<=-0.02&&sr<=-0.02&&rr<sr&&upBrk){ nm='下降楔形'; dir='bull'; }
+        if(nm){
+          const fst=dir==='bull'?R2:S2, oth=dir==='bull'?S2:R2;
+          out.push({name:nm,dir,note:`${dir==='bull'?'上':'下'}緣被突破｜量度目標 ${f(dir==='bull'?r1+g0:q1-g0)}`,
+            segs:[{i0:s0,v0:fst.at(s0),i1:i,v1:fst.at(i)},{i0:s0,v0:oth.at(s0),i1:i,v1:oth.at(i)}]});
+        }
+      }
+    }
+  }
+  // 量能確認：突破當根量 ≥ 前20根均量的 1.3 倍才算放量（旗形另需旗面量縮）；沒有成交量資料則不判斷
+  { let sv=0,k=0; for(let j=Math.max(0,i-20);j<i;j++){ sv+=(+a[j].Trading_Volume||0); k++; }
+    const av=k?sv/k:0, vr=av>0?(+a[i].Trading_Volume||0)/av:null;
+    out.forEach(e=>{ if(!e.segs) return;
+      if(vr==null) return;
+      e.vr=vr; e.vok=(vr>=1.3&&e.volContr!==false);
+      e.note=(e.note||'')+`｜量比 ${vr.toFixed(1)}${e.vok?'（放量確認）':'（量能不足）'}`; });
+  }
+  return out;
+}
+// ── 假突破：突破後 F 根內，收盤回到被突破的邊界另一側（回傳失敗那根索引，沒有則 -1）──
+function findFail(a, e, j, F=10){
+  const sg=e.segs&&e.segs[0]; if(!sg) return -1;
+  const v=x=>sg.v0+(sg.v1-sg.v0)*(x-sg.i0)/(sg.i1-sg.i0);
+  for(let k=j+1;k<=Math.min(j+F,a.length-1);k++){ const c=a[k].close; if(e.dir==='bull'?c<v(k)*(1-0.005):c>v(k)*(1+0.005)) return k; }
+  return -1;
+}
+// ── 趨勢線突破／跌破事件（只進統計與評分，不畫標記）──
+function trendEventsAt(a, i, ctx){
+  const out=[]; if(i<30) return out;
+  const T=ctx.at(i);
+  if(T.sup && T.sup.touches>=3 && T.sup.brk===i) out.push({name:'跌破支撐線',dir:'bear',noMark:true,note:`收盤跌破有效支撐線（${T.sup.touches}點，線值 ${T.sup.at(i).toFixed(2)}）`});
+  if(T.res && T.res.touches>=3 && T.res.brk===i) out.push({name:'突破壓力線',dir:'bull',noMark:true,note:`收盤突破有效壓力線（${T.res.touches}點，線值 ${T.res.at(i).toFixed(2)}）`});
+  return out;
+}
+// ── 訊號評分：最近3根內的圖形型態／趨勢線事件；點數依「本股歷史5根勝率 vs 基準」調整 ──
+// 給分比例：樣本<5次→0.5；勝率較基準高且 z≥1→1；較基準高但不顯著→0.5；不優於基準→0（只示警）。
+// 當根全額、前1根一半、前2根不給分；同一根同方向只計最大的一個。
+function scoreShapeEvents(A, ki, wp){
+  const res={ sigs:[], bull:0, bear:0 }; if(ki<60||!A[ki]) return res;
+  if(ki<A.length-1) A=A.slice(0,ki+1);   // 回看歷史日期時，統計與事件都只用該日以前的資料
+  const atrF=calcATR(A,14), tc=buildTrendCtx(A), ps={}; patternStats(5,A).forEach(x=>ps[x.name]=x);
+  const SHAPES=new Set(['M頭','W底','頭肩頂','頭肩底','上升三角形','下降三角形','牛旗','熊旗','對稱三角形','上升楔形','下降楔形']);
+  const cand=[];
+  for(let age=0;age<=2;age++){
+    const j=ki-age; if(j<40) break;
+    chartPatternsAt(A,j,atrF,tc).concat(trendEventsAt(A,j,tc)).forEach(e=>{
+      const isShape=SHAPES.has(e.name), st=ps[e.name];
+      const fac=(!st||st.n<5)?0.5:st.z>=1?1:st.diff>0?0.5:0;
+      cand.push({e,age,isShape,st,fac,pts:(isShape?10:6)*wp*[1,0.5,0][age]*fac*(e.vok===false?0.6:1)});
+    });
+  }
+  cand.sort((x,y)=>y.pts-x.pts);
+  const seen=new Set();
+  cand.forEach(c=>{
+    const key=c.age+'|'+c.e.dir, dup=seen.has(key); seen.add(key);
+    const pts=dup?0:c.pts, st=c.st;
+    const stTxt=st?`本股歷史5根勝率 ${st.rate.toFixed(0)}%（${st.n}次，較基準${st.diff>=0?'+':''}${st.diff.toFixed(0)}%）`:'本股無歷史樣本';
+    let why=dup?'同根已計較大的訊號':c.age===2?'已過2根，只提示不給分':c.fac===0?'歷史不優於基準，只示警不加分':c.fac===0.5?'給分減半':'';
+    if(c.e.vok===false&&pts>0) why+=(why?'；':'')+'量能不足，再打6折';
+    res.sigs.push({ type:pts>0?c.e.dir:'neutral', cat:c.isShape?'圖形型態':'趨勢線', str:pts>0?(c.isShape?3:2):1,
+      text:`「${c.e.name}」${c.age===0?'最新一根':'前'+c.age+'根'}${c.e.note?'｜'+c.e.note:''}｜${stTxt}${why?'，'+why:''}` });
+    if(pts>0){ if(c.e.dir==='bull') res.bull+=pts; else res.bear+=pts; }
+  });
+  // 突破失敗警示（最近10根內的圖形型態，剛在最近2根收回型態內）：只示警、不給分
+  for(let age=1;age<=10;age++){
+    const j=ki-age; if(j<40) break;
+    chartPatternsAt(A,j,atrF,tc).forEach(e=>{
+      if(!e.segs) return;
+      const fk=findFail(A,e,j,10); if(fk<0||fk<ki-1) return;
+      const st=ps[e.name], fTxt=(st&&st.fn)?`｜本股歷史10根內失敗率 ${(st.ff/st.fn*100).toFixed(0)}%（${st.fn}次）`:'';
+      res.sigs.push({ type:'neutral', cat:'圖形型態', str:2, text:`「${e.name}」突破後第${fk-j}根收盤回到型態內（突破失敗）${fTxt}｜只示警不給分` });
+    });
+  }
+  return res;
+}
 // ── 歷史K線型態：偵測（純函式，可用於任一根K棒）──
 function isRedThree(b0,b1,b2){
   const ok=(x,pv)=> x.close>x.open && x.open>=Math.min(pv.open,pv.close) && x.open<=Math.max(pv.open,pv.close) && x.close>pv.close && (x.max-x.close) <= (x.close-x.open)*0.35;
@@ -4220,7 +4497,7 @@ function isBlackThree(b0,b1,b2){
   const ok=(x,pv)=> x.close<x.open && x.open>=Math.min(pv.open,pv.close) && x.open<=Math.max(pv.open,pv.close) && x.close<pv.close && (x.close-x.min) <= (x.open-x.close)*0.35;
   return b0.close<b0.open && ok(b1,b0) && ok(b2,b1);
 }
-function detectPatternsAt(a, i, atr, m20, basic=false){
+function detectPatternsAt(a, i, atr, m20, basic=false, ctx=null){
   const out=[]; if(i<22) return out;
   const b=a[i], p=a[i-1], p2=a[i-2];
   const body=Math.abs(b.close-b.open), rng=b.max-b.min; if(!(rng>0)) return out;
@@ -4229,18 +4506,30 @@ function detectPatternsAt(a, i, atr, m20, basic=false){
   const pos=(b.close-lo)/(hi-lo+1e-4);
   const dnT=(m20[i]&&m20[i-5])?m20[i]<m20[i-5]:pos<0.4, upT=(m20[i]&&m20[i-5])?m20[i]>m20[i-5]:pos>0.6;
   const bull=b.close>b.open, bear=b.close<b.open, pbody=Math.abs(p.close-p.open);
-  if(body>0&&dn>=body*2&&up<=body*0.5&&rng>=A*0.8){ if(dnT&&pos<0.5) out.push({name:'錘頭',dir:'bull'}); else if(upT&&pos>0.6) out.push({name:'吊人線',dir:'bear'}); }
-  if(body>0&&up>=body*2&&dn<=body*0.5&&rng>=A*0.8){ if(upT&&pos>0.6) out.push({name:'射擊之星',dir:'bear'}); else if(dnT&&pos<0.5) out.push({name:'倒錘頭',dir:'bull'}); }
-  if(bull&&p.close<p.open&&b.open<=p.close&&b.close>=p.open&&body>=A*0.6&&dnT) out.push({name:'多頭吞噬',dir:'bull'});
-  if(bear&&p.close>p.open&&b.open>=p.close&&b.close<=p.open&&body>=A*0.6&&upT) out.push({name:'空頭吞噬',dir:'bear'});
+  // 趨勢線濾網：反轉型態是否發生在壓力／支撐（水平或斜線）附近，或剛突破／跌破趨勢線。ctx 未提供時不加 strong 欄位
+  let sBull, sBear, pRes=false, pSup=false;
+  if(ctx){
+    const T=ctx.at(i), okL=L=>L&&L.touches>=3&&L.brk<0;   // 只採用3點以上、尚未被有效突破／跌破的線
+    const rl=okL(T.res)?T.res.at(i):null, sl=okL(T.sup)?T.sup.at(i):null;
+    const rv=[rl,T.hRes].filter(v=>v!=null), sv=[sl,T.hSup].filter(v=>v!=null);
+    const brokeSup=!!(T.sup&&T.sup.touches>=3&&T.sup.brk===i), brokeRes=!!(T.res&&T.res.touches>=3&&T.res.brk===i);
+    sBear=rv.some(v=>Math.abs(b.max-v)<=A)||brokeSup;
+    sBull=sv.some(v=>Math.abs(b.min-v)<=A)||brokeRes;
+    pRes=rv.concat(T.rLv).some(v=>b.max>v&&b.close<v); pSup=sv.concat(T.sLv).some(v=>b.min<v&&b.close>v);   // 假突破／破底翻：刺穿任一近60根已確認轉折或趨勢線後收回
+  }
+  const S=d=>ctx?(d==='bull'?sBull:sBear):undefined;
+  if(body>0&&dn>=body*2&&up<=body*0.5&&rng>=A*0.8){ if(dnT&&pos<0.5) out.push({name:'錘頭',dir:'bull',strong:S('bull')}); else if(upT&&pos>0.6) out.push({name:'吊人線',dir:'bear',strong:S('bear')}); }
+  if(body>0&&up>=body*2&&dn<=body*0.5&&rng>=A*0.8){ if(upT&&pos>0.6) out.push({name:'射擊之星',dir:'bear',strong:S('bear')}); else if(dnT&&pos<0.5) out.push({name:'倒錘頭',dir:'bull',strong:S('bull')}); }
+  if(bull&&p.close<p.open&&b.open<=p.close&&b.close>=p.open&&body>=A*0.6&&dnT) out.push({name:'多頭吞噬',dir:'bull',strong:S('bull')});
+  if(bear&&p.close>p.open&&b.open>=p.close&&b.close<=p.open&&body>=A*0.6&&upT) out.push({name:'空頭吞噬',dir:'bear',strong:S('bear')});
   if(isRedThree(p2,p,b)&&pos<0.8) out.push({name:'紅三兵',dir:'bull'});
   if(isBlackThree(p2,p,b)&&pos>0.2) out.push({name:'黑三鴉',dir:'bear'});
   const pb2=Math.abs(p2.close-p2.open), sm=pbody<=(p.max-p.min)*0.3;
-  if(p2.close<p2.open&&pb2>=A*0.6&&sm&&bull&&b.close>=(p2.open+p2.close)/2&&dnT) out.push({name:'晨星',dir:'bull'});
-  if(p2.close>p2.open&&pb2>=A*0.6&&sm&&bear&&b.close<=(p2.open+p2.close)/2&&upT) out.push({name:'暮星',dir:'bear'});
+  if(p2.close<p2.open&&pb2>=A*0.6&&sm&&bull&&b.close>=(p2.open+p2.close)/2&&dnT) out.push({name:'晨星',dir:'bull',strong:S('bull')});
+  if(p2.close>p2.open&&pb2>=A*0.6&&sm&&bear&&b.close<=(p2.open+p2.close)/2&&upT) out.push({name:'暮星',dir:'bear',strong:S('bear')});
   const pre=a.slice(i-20,i), pH=Math.max(...pre.map(d=>d.max)), pL=Math.min(...pre.map(d=>d.min));
-  if(b.max>pH&&b.close<pH&&up>=rng*0.4) out.push({name:'假突破',dir:'bear'});
-  if(b.min<pL&&b.close>pL&&dn>=rng*0.4) out.push({name:'破底翻',dir:'bull'});
+  if(b.max>pH&&b.close<pH&&up>=rng*0.4) out.push({name:'假突破',dir:'bear',strong:ctx?pRes:undefined});
+  if(b.min<pL&&b.close>pL&&dn>=rng*0.4) out.push({name:'破底翻',dir:'bull',strong:ctx?pSup:undefined});
   if(basic){
     if(bull&&body>=A*1.2&&(b.max-b.close)<=rng*0.2) out.push({name:'長紅K',dir:'bull'});
     if(bear&&body>=A*1.2&&(b.close-b.min)<=rng*0.2) out.push({name:'長黑K',dir:'bear'});
@@ -4249,6 +4538,7 @@ function detectPatternsAt(a, i, atr, m20, basic=false){
     if(b.close>pH&&bull) out.push({name:'突破20K高點',dir:'bull'});
     if(b.close<pL&&bear) out.push({name:'跌破20K低點',dir:'bear'});
   }
+  if(ctx){ chartPatternsAt(a,i,atr,ctx).forEach(e=>out.push(e)); trendEventsAt(a,i,ctx).forEach(e=>out.push(e)); }   // 圖形型態＋趨勢線事件
   return out;
 }
 // 顯著性判斷：差距要超過約2倍隨機誤差才算有訊息，否則視為無差別
@@ -4257,17 +4547,25 @@ function diffInfo(x){
   if(x.z<=-2) return { w:'', c:'#4a9eff' };
   return { w:'', c:'var(--muted2)' };
 }
+const _psCache=new Map();
 function patternStats(H=5, arr){
   const a=arr||vd(); if(!a||a.length<60) return [];
-  const atr=calcATR(a,14), m20=ma(a,20), map={};
+  const _k=a.length+'|'+a[0].date+'|'+a[a.length-1].date+'|'+a[a.length-1].close+'|'+H;
+  if(_psCache.has(_k)) return _psCache.get(_k);
+  const atr=calcATR(a,14), m20=ma(a,20), ctx=buildTrendCtx(a), map={}, seen={};
   let bn=0, bu=0, bd=0, bsum=0;   // 基準：任意一根K（不看型態）
   for(let i=22;i<a.length-H;i++){
     const r=(a[i+H].close-a[i].close)/a[i].close*100;
     if(Math.abs(r)>40) continue;   // 疑似除權／減資／分割造成的價格斷層，不納入統計
     bn++; bsum+=r; if(r>0) bu++; else if(r<0) bd++;
-    detectPatternsAt(a,i,atr,m20,true).forEach(x=>{
-    const m=map[x.name]||(map[x.name]={dir:x.dir,n:0,win:0,sum:0});
-    m.n++; m.sum+=(x.dir==='bear'?-r:r); if(r*(x.dir==='bear'?-1:1)>0) m.win++;
+    detectPatternsAt(a,i,atr,m20,true,ctx).forEach(x=>{
+    if(x.segs||x.noMark){ if(seen[x.name]!==undefined && i-seen[x.name]<10) return; seen[x.name]=i; }   // 同名事件10根內只算一次
+    const m=map[x.name]||(map[x.name]={dir:x.dir,n:0,win:0,sum:0,sn:0,swin:0,wn:0,wwin:0,un:0,uw:0,dn:0,dw:0,fn:0,ff:0});
+    const dr=(x.dir==='bear'?-r:r);
+    m.n++; m.sum+=dr; if(dr>0) m.win++;
+    if(x.strong===true){ m.sn++; if(dr>0) m.swin++; } else if(x.strong===false){ m.wn++; if(dr>0) m.wwin++; }
+    if(x.segs){ if(x.vok===true){ m.un++; if(dr>0) m.uw++; } else if(x.vok===false){ m.dn++; if(dr>0) m.dw++; }
+      if(i+10<a.length){ m.fn++; if(findFail(a,x,i,10)>=0) m.ff++; } }
     });
   }
   const base = { n:bn, up: bn?bu/bn*100:0, down: bn?bd/bn*100:0, avg: bn?bsum/bn:0 };
@@ -4276,9 +4574,10 @@ function patternStats(H=5, arr){
     const p0=(v.dir==='bull'?base.up:base.down), diff=rate-p0;
     const se=Math.sqrt(Math.max(p0*(100-p0),1)/v.n);   // 以基準機率估算的隨機誤差（百分點）
     const avg=v.sum/v.n, avgDiff=avg-(v.dir==='bull'?base.avg:-base.avg);
-    return {name:k,...v,rate,avg,avgDiff,diff,se,z:diff/se};
+    return {name:k,...v,rate,avg,avgDiff,diff,se,z:diff/se,srate:v.sn?v.swin/v.sn*100:null,wrate:v.wn?v.wwin/v.wn*100:null,urate:v.un?v.uw/v.un*100:null,drate:v.dn?v.dw/v.dn*100:null};
   }).sort((x,y)=>y.n-x.n);
   res.base = base;
+  _psCache.set(_k,res); if(_psCache.size>12) _psCache.delete(_psCache.keys().next().value);
   return res;
 }
 // ── 目前正在出現的型態（日／週／月 同時偵測，不受目前選的週期影響）──
@@ -4288,11 +4587,11 @@ function currentPatterns(){
   [['D','日K'],['W','週K'],['M','月K']].forEach(([tf,label])=>{
     const a = tf==='D' ? priceData : aggBars(priceData, tf);
     if(!a || a.length<30) return;
-    const atr=calcATR(a,14), m20=ma(a,20), st={}; const _ps=patternStats(5,a); _ps.forEach(x=>st[x.name]=x);
+    const atr=calcATR(a,14), m20=ma(a,20), ctx=buildTrendCtx(a), st={}; const _ps=patternStats(5,a); _ps.forEach(x=>st[x.name]=x);
     const hits=[];
     for(let k=0;k<3;k++){
       const i=a.length-1-k;
-      detectPatternsAt(a,i,atr,m20,true).forEach(h=>{ names.add(h.name); hits.push({...h,k,date:a[i].date,st:st[h.name]||null}); });
+      detectPatternsAt(a,i,atr,m20,true,ctx).forEach(h=>{ names.add(h.name); hits.push({...h,k,date:a[i].date,st:st[h.name]||null}); });
     }
     out.push({tf,label,date:a[a.length-1].date,hits});
   });
@@ -4306,7 +4605,7 @@ function renderCurrentPatterns(cp){
       const dv=h.st?h.st.diff:0, di=h.st?diffInfo(h.st):{w:'',c:'var(--muted2)'}, dc=di.c;
       const t=h.st?`　此股歷史勝率 ${h.st.rate.toFixed(0)}%（${h.st.n}次）<span style="color:${dc};">較基準${dv>=0?'+':''}${dv.toFixed(0)}%${di.w?'（'+di.w+'）':''}</span>`:'';
       const when=h.k===0?'最新':`前${h.k}根 ${h.date.slice(5)}`;
-      return `<span style="color:var(--muted2);font-size:.64rem;">[${when}]</span> <span style="color:${c};font-weight:${h.k===0?700:500};${h.k===0?'':'opacity:.8;'}">💡${arrow} ${h.name}</span><span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
+      return `<span style="color:var(--muted2);font-size:.64rem;">[${when}]</span> <span style="color:${c};font-weight:${h.k===0?700:500};${h.k===0?'':'opacity:.8;'}">💡${arrow} ${h.name}</span>${h.strong===true?'<span style="color:var(--gold);font-size:.64rem;"> ✓趨勢線確認</span>':h.strong===false?'<span style="color:var(--muted);font-size:.64rem;"> 無趨勢線配合</span>':''}${h.note?'<span style="color:var(--muted2);font-size:.64rem;"> '+h.note+'</span>':''}<span style="color:var(--muted2);font-size:.68rem;">${t}</span>`;
     }).join('<br>') : '<span style="color:var(--muted);">目前無明顯型態</span>';
     return `<div style="display:flex;gap:10px;padding:4px 0;border-top:1px solid var(--border);"><span style="min-width:44px;color:var(--gold2);font-weight:600;">${r.label}</span><div style="flex:1;font-size:.8rem;">${body}<div style="font-size:.62rem;color:var(--muted);">${r.date}</div></div></div>`;
   }).join('');
@@ -4316,17 +4615,18 @@ function renderCurrentPatterns(cp){
 }
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
+  const s20={}; patternStats(20).forEach(x=>s20[x.name]=x);
   const lit = cp ? cp.names : new Set();
-  const bs = st.base, baseRow = `<tr style="border-bottom:1px solid var(--border);color:var(--gold2);"><td style="padding:3px 6px;">任意一根K（基準）</td><td style="text-align:right;font-family:var(--mono)">${bs.n}</td><td colspan="3" style="text-align:right;font-size:.68rem;">5根後上漲 ${bs.up.toFixed(0)}%／下跌 ${bs.down.toFixed(0)}%／平均 ${bs.avg>=0?'+':''}${bs.avg.toFixed(1)}%</td></tr>`;
+  const bs = st.base, baseRow = `<tr style="border-bottom:1px solid var(--border);color:var(--gold2);"><td style="padding:3px 6px;">任意一根K（基準）</td><td style="text-align:right;font-family:var(--mono)">${bs.n}</td><td colspan="7" style="text-align:right;font-size:.68rem;">5根後上漲 ${bs.up.toFixed(0)}%／下跌 ${bs.down.toFixed(0)}%／平均 ${bs.avg>=0?'+':''}${bs.avg.toFixed(1)}%</td></tr>`;
   const rows=st.map(x=>{
     const on=lit.has(x.name), c=x.dir==='bull'?'var(--up)':'var(--dn)';
     const di=diffInfo(x), dc=di.c;
-    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}% <span style="font-size:.62rem;">${di.w}</span></td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td></tr>`;
+    return `<tr style="${on?'':'opacity:.45;'}"><td style="padding:3px 6px;color:${c};${on?'font-weight:700;':''}">${on?'💡 ':''}${x.name}</td><td style="text-align:right;font-family:var(--mono)">${x.n}</td><td style="text-align:right;font-family:var(--mono)">${x.rate.toFixed(0)}%</td><td style="text-align:right;font-family:var(--mono);color:${dc};">${x.diff>=0?'+':''}${x.diff.toFixed(0)}% <span style="font-size:.62rem;">${di.w}</span></td><td style="text-align:right;font-family:var(--mono)">${x.avg>=0?'+':''}${x.avg.toFixed(1)}%</td><td style="text-align:right;font-family:var(--mono);font-size:.68rem;">${x.sn?x.srate.toFixed(0)+'%('+x.sn+')':'–'} ／ ${x.wn?x.wrate.toFixed(0)+'%('+x.wn+')':'–'}</td><td style=\"text-align:right;font-family:var(--mono);font-size:.68rem;\">${(()=>{const y=s20[x.name];return y?y.rate.toFixed(0)+'%('+y.n+')':'–';})()}</td><td style='text-align:right;font-family:var(--mono);font-size:.68rem;'>${x.un||x.dn?(x.un?x.urate.toFixed(0)+'%('+x.un+')':'–')+' ／ '+(x.dn?x.drate.toFixed(0)+'%('+x.dn+')':'–'):'–'}</td><td style='text-align:right;font-family:var(--mono);font-size:.68rem;'>${x.fn?(x.ff/x.fn*100).toFixed(0)+'%('+x.fn+')':'–'}</td></tr>`;
   }).join('');
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
-    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td></tr>${baseRow}${rows}</table>
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；較基準數字顏色：黃＝勝率明顯高於基準（差距超過約2倍隨機誤差）、藍＝明顯低於基準、灰＝差距在隨機誤差內。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+    <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${baseRow}${rows}</table>
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘為歷史參考（變暗）。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；較基準數字顏色：黃＝勝率明顯高於基準（差距超過約2倍隨機誤差）、藍＝明顯低於基準、灰＝差距在隨機誤差內。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；趨勢線 強／弱勝率＝型態出現在壓力／支撐（或剛突破／跌破趨勢線）附近 vs. 其他位置的方向勝率，括號為次數；強明顯高於弱才代表濾網有用。20根勝率＝同樣算法改看第20根收盤（圖形型態的量度目標通常需要更久）。放量／量縮＝突破當根量 ≥ 前20根均量1.3倍（旗形另需旗面量縮）；失敗率＝突破後10根內收盤回到被突破邊界另一側的比例。次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
@@ -5203,8 +5503,9 @@ function detectRSIDivergence(data, rsiArr) {
 // ═══════════════════════════════════════
 function addVolumeMarkers(data, avgVolArr) {
   if(!candleSeries) return;
+  clearPatSeries();
   _markerArgs = [data, avgVolArr];
-  const markers = [];
+  const markers = []; let lastSmall = -99;
   data.forEach((d, i) => {
     const avg = avgVolArr[i];
     if(!avg) return;
@@ -5217,20 +5518,63 @@ function addVolumeMarkers(data, avgVolArr) {
         shape: isBull ? 'arrowUp' : 'arrowDown',
         text: `爆量×${ratio.toFixed(1)}`, size: 1,
       });
-    } else if(ratio < 0.35 && i > 0){
+    } else if(ratio < 0.35 && i > 0 && i - lastSmall >= 6){   // 縮量標記至少相隔6根，避免連成一排
+      lastSmall = i;
       markers.push({ time: d.date, position: 'aboveBar', color: 'rgba(100,116,139,0.7)', shape: 'circle', text: '縮', size: 0 });
     }
   });
   // 型態標記（用完整歷史偵測，只標顯示區間）— 由「K線型態」開關控制，預設關閉
-  if (showPatterns) try {
+  if (showPatterns || showTrend) try {
     const A=vd(), off=A.length-data.length;
     if(off>=0){
-      const atr=calcATR(A,14), m20=ma(A,20);
+      const atr=calcATR(A,14), m20=ma(A,20), tctx=buildTrendCtx(A), evs=[], lastShape={};
       data.forEach((d,j)=>{
         if(A[off+j]?.date!==d.date) return;
-        detectPatternsAt(A,off+j,atr,m20).forEach(x=>markers.push({
-          time:d.date, position:x.dir==='bull'?'belowBar':'aboveBar',
-          color:x.dir==='bull'?'#ff4d6d':'#00c896', shape:x.dir==='bull'?'arrowUp':'arrowDown', text:x.name, size:1 }));
+        detectPatternsAt(A,off+j,atr,m20,false,tctx).forEach(x=>{
+          if(x.noMark) return;
+          if(x.segs){   // 圖形型態（M頭／W底／頭肩／三角形／旗形／楔形）屬趨勢通道；同名型態10根內重複觸發只顯示第一次
+            if(!showTrend) return;
+            const jj=off+j; if(lastShape[x.name]!==undefined && jj-lastShape[x.name]<10) return;
+            lastShape[x.name]=jj; x._j=jj; evs.push(x);
+          } else if(!showPatterns) return;
+          const weak = x.strong===false;   // 無趨勢線配合：淡色、無文字
+          markers.push({
+            time:d.date, position:x.dir==='bull'?'belowBar':'aboveBar',
+            color:x.dir==='bull'?(weak?'rgba(255,77,109,0.3)':'#ff4d6d'):(weak?'rgba(0,200,150,0.3)':'#00c896'),
+            shape:x.dir==='bull'?'arrowUp':'arrowDown', text:weak?'':(x.segs?x.name+(x.vok===true?'·放量':x.vok===false?'·量縮':''):x.name), size:weak?0:1 });
+        });
+      });
+      // 只畫「時間上互不重疊」的最近 2 個型態：形狀（折線＋頸線／邊界線）、轉折點文字、突破失敗標記都只給它們，避免畫面太亂
+      const spanOf = x => { let st = x._j; x.segs.forEach(g => { st = Math.min(st, g.i0); }); if(x.poly) x.poly.forEach(p => { st = Math.min(st, p.i); }); return [Math.max(st, off), x._j]; };
+      const feat = [];
+      for(let q = evs.length - 1; q >= 0 && feat.length < 2; q--){
+        const sp = spanOf(evs[q]);
+        if(!feat.some(f => sp[0] <= f.sp[1] && sp[1] >= f.sp[0])) feat.push({ x:evs[q], sp });
+      }
+      feat.forEach(({ x }) => {
+        const ff = findFail(A, x, x._j, 10);
+        if(ff >= 0 && A[ff]){
+          const fs = kChart.addLineSeries({ color:'rgba(0,0,0,0)', lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+          fs.setData([{ time:A[ff].date, value:A[ff].close }]);
+          fs.setMarkers([{ time:A[ff].date, position:x.dir==='bull'?'aboveBar':'belowBar', color:'#ffb020', shape:x.dir==='bull'?'arrowDown':'arrowUp', text:x.name+(x.dir==='bull'?'突破':'跌破')+'失敗', size:1 }]);
+          patSeries.push(fs);
+        }
+        if(x.poly){
+          const pp = x.poly.filter(p => p.i >= off && A[p.i]);
+          if(pp.length >= 2){
+            const ser = kChart.addLineSeries({ color:'rgba(255,209,102,0.95)', lineWidth:2, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+            ser.setData(pp.map(p => ({ time:A[p.i].date, value:p.v }))); patSeries.push(ser);
+            const lm = []; x.poly.forEach((p,k) => { const lb = x.labels && x.labels[k]; if(lb && p.i >= off && A[p.i]) lm.push({ time:A[p.i].date, position:x.dir==='bear'?'aboveBar':'belowBar', color:'#ffd166', shape:'circle', text:lb, size:1 }); });
+            if(lm.length) ser.setMarkers(lm);
+          }
+        }
+        x.segs.forEach(sg => {
+          const i0 = Math.max(sg.i0, off); if(i0 >= sg.i1 || !A[i0] || !A[sg.i1]) return;
+          const vAt = k => sg.v0 + (sg.v1 - sg.v0) * (k - sg.i0) / (sg.i1 - sg.i0);
+          const ser = kChart.addLineSeries({ color:'rgba(255,209,102,0.95)', lineWidth:2, lineStyle:LightweightCharts.LineStyle.Dashed, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+          ser.setData([{ time:A[i0].date, value:vAt(i0) }, { time:A[sg.i1].date, value:sg.v1 }]);
+          patSeries.push(ser);
+        });
       });
     }
   } catch{}
