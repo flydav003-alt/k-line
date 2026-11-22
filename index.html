@@ -1289,6 +1289,7 @@ let macdSeries  = null, signalSeries= null, histSeries = null;
 let trendLines  = [];
 let trendSeries = [];   // 斜線趨勢線（line series）
 let patSeries = [];     // 型態頸線／邊界線（line series）
+let mmLines = [];       // 量度目標價線（price line，跟著型態標記一起清除）
 let showTrend   = false;
 let currentPeriod = 60;
 let rsiChart    = null;
@@ -2892,7 +2893,7 @@ function buildCharts(data, keepRange = false) {
   if(kChart){ kChart.remove(); kChart=null; }
   if(volChart){ volChart.remove(); volChart=null; }
   if(macdChartObj){ macdChartObj.remove(); macdChartObj=null; }
-  trendLines = []; trendSeries = []; patSeries = [];
+  trendLines = []; trendSeries = []; patSeries = []; mmLines = [];
 
   const kRect = kEl.parentElement.getBoundingClientRect();
   const kH = (kRect.height > 50 ? kRect.height : kEl.parentElement.offsetHeight) || 340;
@@ -3186,7 +3187,7 @@ function toggleTrendChannel() {
   if (_markerArgs) addVolumeMarkers(..._markerArgs);   // 圖形型態標記跟著趨勢通道開關
 }
 
-function clearPatSeries(){ patSeries.forEach(x => { try{ kChart.removeSeries(x); }catch{} }); patSeries = []; }
+function clearPatSeries(){ patSeries.forEach(x => { try{ kChart.removeSeries(x); }catch{} }); patSeries = []; mmLines.forEach(l => { try{ candleSeries?.removePriceLine(l); }catch{} }); mmLines = []; }
 function clearTrendSeries(){ trendSeries.forEach(x => { try{ kChart.removeSeries(x); }catch{} }); trendSeries = []; }
 
 function drawTrendChannel(data) {
@@ -4300,6 +4301,26 @@ function flatLevel(pts){   // pts：由新到舊的轉折；找 1% 內、相隔�
   }
   return best;
 }
+// ── 量度目標（Measured Move）：目標 = 頸線 ∓ 型態高度 × 比例 ──
+// 比例與括號內的先到價％來自台股約 450 檔、10 年回測（突破隔天開盤進場，60 根內「先到目標」而非先碰停損；
+// 停損＝右峰／右肩／右谷）。只保留回測對「同動能對照日」仍有額外優勢的形態：M頭、頭肩頂、頭肩底；W底無優勢，不畫目標線。
+// 空方形態的絕對報酬仍為負（多頭年代放空逆風），所以這裡是「持股警示＋目標價參考」，不是進場訊號。
+const MM_CFG = {
+  'M頭':   { show:[0.5,1],           hit:{0.5:76,1:56} },
+  '頭肩頂': { show:[0.382,0.5],      hit:{0.382:49,0.5:41,1:19}, full:true },
+  '頭肩底': { show:[0.382,0.5,0.618], hit:{0.382:65,0.5:58,0.618:53,1:37}, full:true }
+};
+function mmTargets(name, base, h, top){
+  const c = MM_CFG[name]; if(!c || !(h > 0)) return null;
+  const px = r => top ? base - h*r : base + h*r;
+  const list = c.show.map(r => ({ r, price:px(r), hit:c.hit[r] }));
+  return { list, full: c.full ? { r:1, price:px(1), hit:c.hit[1] } : null };
+}
+function mmNote(t){
+  if(!t) return '';
+  return '｜目標 ' + t.list.map(x => `${x.r}→${x.price.toFixed(2)}(${x.hit}%)`).join('｜')
+    + (t.full ? `｜完整等幅 ${t.full.price.toFixed(2)}(${t.full.hit}%)` : '');
+}
 function chartPatternsAt(a, i, atr, ctx){
   const out=[]; if(i<40) return out;
   const c=a[i].close, A=atr[i]||(a[i].max-a[i].min), BR=0.005, f=v=>v.toFixed(2);
@@ -4324,7 +4345,8 @@ function chartPatternsAt(a, i, atr, ctx){
       if(pre(p1.v,p1.i,top)<0.10) continue;
       if(top?rMax(p2.i,i)>Math.max(p1.v,p2.v)*1.03:rMin(p2.i,i)<Math.min(p1.v,p2.v)*0.97) continue;
       if(brkF(top,c,m.v) && never(p2.i+1,i,x=>brkF(top,x,m.v))){
-        out.push({name:top?'M頭':'W底',dir:top?'bear':'bull',note:`頸線 ${f(m.v)}｜量度目標 ${f(top?m.v-(avg-m.v):m.v+(m.v-avg))}`,
+        const mm = top ? mmTargets('M頭', m.v, Math.min(p1.v,p2.v)-m.v, true) : null;   // 高度取較低的那一峰（保守，與回測一致）
+        out.push({name:top?'M頭':'W底',dir:top?'bear':'bull',mm,note:top?`頸線 ${f(m.v)}${mmNote(mm)}`:`頸線 ${f(m.v)}｜量度目標 ${f(m.v+(m.v-avg))}｜回測：W底無額外優勢，僅供參考`,
           segs:[{i0:p1.i,v0:m.v,i1:i,v1:m.v}], poly:[p1,m,p2], labels:top?['頂1','','頂2']:['底1','','底2']});
         break; }
     }
@@ -4347,8 +4369,8 @@ function chartPatternsAt(a, i, atr, ctx){
       if(!brkF(top,c,nk(i))) continue;
       let first=true; for(let j=RS.i+1;j<i;j++) if(brkF(top,a[j].close,nk(j))){ first=false; break; }
       if(!first) continue;
-      const tg=top?nk(i)-(H.v-nk(H.i)):nk(i)+(nk(H.i)-H.v);
-      out.push({name:top?'頭肩頂':'頭肩底',dir:top?'bear':'bull',note:`頸線 ${f(nk(i))}｜量度目標 ${f(tg)}`,
+      const mm=mmTargets(top?'頭肩頂':'頭肩底', nk(i), top?H.v-nk(H.i):nk(H.i)-H.v, top);
+      out.push({name:top?'頭肩頂':'頭肩底',dir:top?'bear':'bull',mm,note:`頸線 ${f(nk(i))}${mmNote(mm)}`,
         segs:[{i0:T1.i,v0:T1.v,i1:i,v1:nk(i)}], poly:[LS,T1,H,T2,RS], labels:['左肩','','頭','','右肩']});
       break;
     }
@@ -4611,7 +4633,7 @@ function renderCurrentPatterns(cp){
   }).join('');
   return `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
     <div style="font-size:.82rem;font-weight:700;color:var(--gold);margin-bottom:2px;">💡 目前可能的K線型態（日／週／月）</div>${rows}
-    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">列出最新及前2根K棒出現的型態（含長紅黑、跳空、突破20K高低點）；週K、月K最新一根尚未收定，之後可能改變。</div></div>`;
+    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">列出最新及前2根K棒出現的型態（含長紅黑、跳空、突破20K高低點）；週K、月K最新一根尚未收定，之後可能改變。M頭／頭肩頂／頭肩底的目標括號＝台股約450檔、10年回測「先到該目標、後碰停損（右峰／右肩／右谷）」的比例，是目標價參考而不是進場訊號；空方形態建議當持股警示。W底回測無額外優勢。</div></div>`;
 }
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
@@ -5575,6 +5597,10 @@ function addVolumeMarkers(data, avgVolArr) {
           ser.setData([{ time:A[i0].date, value:vAt(i0) }, { time:A[sg.i1].date, value:sg.v1 }]);
           patSeries.push(ser);
         });
+        if(x.mm && x._j >= A.length - 61){   // 量度目標價線（突破後 60 根內才畫，與回測觀察期一致）
+          const col = x.dir==='bull' ? '#ff4d6d' : '#00c896';
+          x.mm.list.forEach(t => { try{ mmLines.push(candleSeries.createPriceLine({ price:t.price, color:col, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dashed, axisLabelVisible:true, title:`${x.name}目標${t.r}（${t.hit}%）` })); }catch{} });
+        }
       });
     }
   } catch{}
