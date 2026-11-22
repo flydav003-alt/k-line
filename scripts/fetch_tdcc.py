@@ -51,8 +51,7 @@ def download():
     GitHub 機房 IP 會被集保丟包，所以直連只給短逾時，避免卡很久。"""
     proxy = os.environ.get('TDCC_PROXY', '').strip()
     if proxy:
-        if 'tdcc=1' not in proxy:                                   # 變數只填 Worker 網址時自動補參數
-            proxy += ('&' if '?' in proxy else '/?') + 'tdcc=1'
+        proxy = proxy.split('?')[0].rstrip('/') + '/?tdcc=1'        # 變數填到哪都沒關係，一律只取網址再組參數
         text = _get(proxy, 'worker', 120, 2)
         if text:
             return text
