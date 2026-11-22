@@ -9,7 +9,7 @@
     python scripts/fetch_tdcc.py some_file.csv   # 用本機 CSV（除錯用）
 CSV 欄位（依位置讀取，不依賴標題文字）：資料日期, 證券代號, 持股分級(1~15, 16=差異數調整, 17=合計), 人數, 股數, 占集保庫存數比例%
 """
-import csv, io, json, os, re, sys, urllib.request
+import csv, io, json, os, re, sys, time, urllib.request
 from datetime import datetime, timezone
 
 URL = 'https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5'
@@ -17,13 +17,41 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 OUT_DIR = os.path.join(ROOT, 'data', 'holders')
 KEEP_WEEKS = 60                                   # 每檔保留約 14 個月
 CODE_RE = re.compile(r'^(\d{4}|00\d{2,4}[A-Z]?)$')  # 一般股票 + ETF；排除權證、債券等
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36'
 MIN_ROWS_SANITY = 5000                            # 解析到的列數低於此值視為下載異常
 
 
+def _get(url, label, timeout, tries):
+    """單一來源下載；失敗印出原因並重試，全失敗回傳 None"""
+    for k in range(1, tries + 1):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept': 'text/csv,*/*'})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                raw = r.read()
+            text = raw.decode('utf-8-sig', errors='replace')
+            if text.lstrip().startswith('{'):                       # Worker 回傳的錯誤 JSON
+                raise RuntimeError(text[:200])
+            print(f'[{label}] 第{k}次成功：{len(raw):,} bytes', file=sys.stderr)
+            return text
+        except Exception as e:
+            print(f'[{label}] 第{k}次失敗：{type(e).__name__}: {e}', file=sys.stderr)
+            if k < tries:
+                time.sleep(5)
+    return None
+
+
 def download():
-    req = urllib.request.Request(URL, headers={'User-Agent': 'Mozilla/5.0 (kline-holders-bot)'})
-    with urllib.request.urlopen(req, timeout=90) as r:
-        return r.read().decode('utf-8-sig', errors='replace')
+    """先走 Cloudflare Worker（環境變數 TDCC_PROXY，例 https://xxx.workers.dev/?tdcc=1），再直連集保。
+    GitHub 機房 IP 會被集保丟包，所以直連只給短逾時，避免卡很久。"""
+    proxy = os.environ.get('TDCC_PROXY', '').strip()
+    if proxy:
+        text = _get(proxy, 'worker', 120, 2)
+        if text:
+            return text
+    text = _get(URL, 'direct', 20, 2)
+    if text:
+        return text
+    raise SystemExit('集保下載失敗：Worker 與直連皆無法取得資料')
 
 
 def num(s):
