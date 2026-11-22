@@ -9,7 +9,7 @@
     python scripts/fetch_tdcc.py some_file.csv   # 用本機 CSV（除錯用）
 CSV 欄位（依位置讀取，不依賴標題文字）：資料日期, 證券代號, 持股分級(1~15, 16=差異數調整, 17=合計), 人數, 股數, 占集保庫存數比例%
 """
-import csv, io, json, os, re, sys, time, urllib.request
+import csv, io, json, os, re, sys, time, urllib.error, urllib.request
 from datetime import datetime, timezone
 
 URL = 'https://smart.tdcc.com.tw/opendata/getOD.ashx?id=1-5'
@@ -34,7 +34,13 @@ def _get(url, label, timeout, tries):
             print(f'[{label}] 第{k}次成功：{len(raw):,} bytes', file=sys.stderr)
             return text
         except Exception as e:
-            print(f'[{label}] 第{k}次失敗：{type(e).__name__}: {e}', file=sys.stderr)
+            body = ''
+            if isinstance(e, urllib.error.HTTPError):
+                try:
+                    body = ' ' + e.read(200).decode('utf-8', 'replace')
+                except Exception:
+                    pass
+            print(f'[{label}] 第{k}次失敗：{type(e).__name__}: {e}{body}', file=sys.stderr)
             if k < tries:
                 time.sleep(5)
     return None
@@ -45,6 +51,8 @@ def download():
     GitHub 機房 IP 會被集保丟包，所以直連只給短逾時，避免卡很久。"""
     proxy = os.environ.get('TDCC_PROXY', '').strip()
     if proxy:
+        if 'tdcc=1' not in proxy:                                   # 變數只填 Worker 網址時自動補參數
+            proxy += ('&' if '?' in proxy else '/?') + 'tdcc=1'
         text = _get(proxy, 'worker', 120, 2)
         if text:
             return text
