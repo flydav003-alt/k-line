@@ -597,6 +597,7 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
 .wl-item.drag-over-after::after{right:-5px;}
 .wl-grip{color:var(--border2);font-size:.75rem;cursor:grab;line-height:1;transition:color .15s;}
 .wl-item:hover .wl-grip{color:var(--muted);}
+.wl-alert{margin-left:4px;padding:0 6px;border-radius:8px;font-size:.62rem;font-weight:600;color:#ff9f40;background:rgba(255,159,64,.14);border:1px solid rgba(255,159,64,.5);white-space:nowrap;cursor:help;}
 .wl-del{color:var(--muted);font-size:.62rem;width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;line-height:1;transition:all .15s;}
 .wl-del:hover{color:#fff;background:var(--red);}
 .wl-add-btn{
@@ -799,6 +800,7 @@ body.crypto-mode #secChip, body.crypto-mode #secRevenue{ display:none; }
   <div id="wlItems" style="display:flex;gap:5px;flex-wrap:wrap;align-items:center;">
     <span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（點右側按鈕加入代號，或拖曳排序）</span>
   </div>
+  <span id="wlAlertSum" style="font-size:.68rem;color:#ff9f40;font-weight:600;"></span>
   <button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入追蹤</button>
 </div>
 
@@ -1589,6 +1591,76 @@ function loadStock(code) {
 renderRecent();
 
 // ── WATCHLIST ──
+// ── 追蹤清單：空方形態警示（M頭／頭肩頂）──
+// 用途是「持股警示＋目標價參考」，不是進場訊號：回測中空方形態的絕對報酬仍為負，只有相對同動能對照日有額外優勢。
+// 掃描最近 40 根內突破的 M頭／頭肩頂；停損＝右峰／右肩（與回測一致），價格站上停損即視為失效、不再顯示。
+let wlAlerts = {};   // code -> { d:最後一根K棒日期, list:[警示], close, atrStop, atrDist }
+try { wlAlerts = JSON.parse(localStorage.getItem('kline_wl_alerts') || '{}') || {}; } catch { wlAlerts = {}; }
+let wlScanBusy = false, wlScanAt = 0;
+function scanBearAlerts(bars) {
+  const a = bars.slice(-600), n = a.length;
+  if (n < 120) return null;
+  const atr = calcATR(a, 14), ctx = buildTrendCtx(a), seen = new Set(), list = [];
+  for (let i = n - 1; i >= Math.max(40, n - 40); i--) {
+    let evs; try { evs = chartPatternsAt(a, i, atr, ctx); } catch { continue; }
+    for (const e of evs) {
+      if (!e.mm || (e.name !== 'M頭' && e.name !== '頭肩頂') || seen.has(e.name)) continue;
+      seen.add(e.name);                                           // 同一種形態只留最近一次
+      const stop = e.poly[e.poly.length - 1].v, neck = e.segs[0].v1;
+      let maxH = -Infinity; const lows = [];
+      for (let j = i + 1; j < n; j++) { if (a[j].max > maxH) maxH = a[j].max; lows.push(a[j].min); }
+      if (maxH >= stop) continue;                                 // 已站上右峰／右肩：形態失效
+      const minL = lows.length ? Math.min(...lows) : Infinity;
+      const tg = e.mm.list.concat(e.mm.full ? [e.mm.full] : []).map(t => ({ r: t.r, price: t.price, hit: t.hit, reached: minL <= t.price }));
+      const far = tg.filter(t => t.reached).pop();                // 已達的最遠目標
+      list.push({ name: e.name, date: a[i].date, ago: n - 1 - i, neck, stop, targets: tg, status: far ? 'reached' : 'active', farR: far ? far.r : null });
+    }
+  }
+  list.sort((x, y) => x.ago - y.ago);
+  const close = a[n - 1].close; let hiC = -Infinity;
+  for (let j = Math.max(0, n - 22); j < n; j++) if (a[j].close > hiC) hiC = a[j].close;
+  const atrStop = hiC - 3 * (atr[n - 1] || 0);                    // 多單 3×ATR 移動停損（近 22 日最高收盤往下 3 倍 ATR）
+  return { d: a[n - 1].date, list, close, atrStop, atrDist: atrStop > 0 ? close / atrStop - 1 : null };
+}
+async function scanWatchlistAlerts(force) {
+  if (wlScanBusy) return;
+  if (!force && wlScanAt && Date.now() - wlScanAt < 30 * 60 * 1000) return;
+  const codes = watchlist.slice(0, 30);
+  if (!codes.length) return;
+  wlScanBusy = true; wlScanAt = Date.now();
+  const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+  try {
+    for (const code of codes) {
+      let bars = null;
+      try {
+        if (isCrypto(code) || !/^\d/.test(code)) bars = cleanBars(await fetchUSPrice(code));
+        else { try { bars = cleanBars(await fetchPrice(code, token)); } catch { bars = cleanBars(await fetchYahooPrice(code)); } }
+      } catch (e) { console.warn('[追蹤清單警示]', code, e.message); continue; }   // 抓不到就保留舊結果，不誤報
+      const r = bars && bars.length ? scanBearAlerts(bars) : null;
+      if (r) wlAlerts[code] = r;
+      if (!_wlDragCode) renderWatchlist();
+      await new Promise(res => setTimeout(res, 300));
+    }
+    Object.keys(wlAlerts).forEach(c => { if (!watchlist.includes(c)) delete wlAlerts[c]; });
+    try { localStorage.setItem('kline_wl_alerts', JSON.stringify(wlAlerts)); } catch {}
+  } finally { wlScanBusy = false; if (!_wlDragCode) renderWatchlist(); }
+}
+function alertBadge(code) {
+  const r = wlAlerts[code]; if (!r || !r.list || !r.list.length) return '';
+  const x = r.list[0], f2 = v => (+v).toFixed(2);
+  const tag = x.status === 'reached' ? `⚠${x.name}·已達${x.farR}` : `⚠${x.name}`;
+  const more = r.list.length > 1 ? ` +${r.list.length - 1}` : '';
+  const tip = r.list.map(y => `${y.name}｜突破日 ${y.date}（${y.ago} 根前）\n頸線 ${f2(y.neck)}｜停損（右${y.name === 'M頭' ? '峰' : '肩'}）${f2(y.stop)}\n目標 ` +
+    y.targets.map(t => `${t.r}→${f2(t.price)}（${t.hit}%）${t.reached ? '✓' : ''}`).join('｜')).join('\n\n')
+    + (r.atrDist != null ? `\n\n若持有多單：3×ATR 移動停損 ${f2(r.atrStop)}，${r.atrDist >= 0 ? '距現價 −' + (r.atrDist / (1 + r.atrDist) * 100).toFixed(1) + '%' : '現價已跌破'}` : '')
+    + `\n\n持股警示，不是進場訊號；括號＝台股約450檔10年回測先到價率（✓＝已到價）\n資料日 ${r.d}`;
+  return `<span class="wl-alert" title="${escHtml(tip)}">${escHtml(tag + more)}</span>`;
+}
+function renderWlAlertSum() {
+  const el = document.getElementById('wlAlertSum'); if (!el) return;
+  const n = watchlist.filter(c => wlAlerts[c] && wlAlerts[c].list && wlAlerts[c].list.length).length;
+  el.textContent = n ? `⚠ ${n} 檔出現空方形態` : '';
+}
 function renderWatchlist() {
   const items = document.getElementById('wlItems');
   const emptyMsg = document.getElementById('wlEmpty');
@@ -1596,10 +1668,11 @@ function renderWatchlist() {
   items.innerHTML = (watchlist.length ? '' : '<span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（點右側按鈕加入代號，或拖曳排序）</span>') + watchlist.map(code => `
     <div class="wl-item" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="拖曳可調整順序，點擊查看 ${code}">
       <span class="wl-grip" onmousedown="event.stopPropagation()">⠿</span>
-      ${displayLabel(code)}${quoteBadge(code)}
+      ${displayLabel(code)}${quoteBadge(code)}${alertBadge(code)}
       <span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span>
     </div>`).join('');
   initWatchlistDrag();
+  renderWlAlertSum();
 }
 
 // ── 追蹤清單拖曳排序（滑鼠拖拉調整順序）──
@@ -1670,6 +1743,7 @@ function addToWatchlist() {
   localStorage.setItem('kline_watchlist', JSON.stringify(watchlist));
   renderWatchlist();
   refreshWatchlistQuotes();
+  scanWatchlistAlerts(true);
 }
 function removeFromWatchlist(e, code) {
   e.stopPropagation();
@@ -1740,8 +1814,9 @@ function wlTick(force) {
 setTimeout(() => {
   loadStockList();
   refreshWatchlistQuotes();
+  scanWatchlistAlerts();
   setInterval(wlTick, 15000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) wlTick(true); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { wlTick(true); scanWatchlistAlerts(); } });
 }, 0);
 
 function setStatus(msg, type) {
