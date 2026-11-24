@@ -736,8 +736,8 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 
 /* ── 副圖：比例分配、可拖曳調整、可收合 ── */
 .chart-block{min-height:220px;}
-.sub-charts{flex:none;height:var(--subH, max(220px, min(clamp(320px, 69.4vh, 694px), calc(100vh - 440px))));overflow:hidden;}   /* 前一版 34.7vh 的 2 倍；上限為保留 K 線圖約 250px 以上 */
-@media(max-width:960px){.sub-charts{height:var(--subH, clamp(160px, 34.7vh, 347px));}}   /* 手機版直式堆疊，空間不足，維持前一版高度 */
+.sub-charts{flex:none;height:var(--subH, max(147px, min(clamp(213px, 46.3vh, 463px), calc(100vh - 440px))));overflow:hidden;}   /* 預設高度再降 1/3（原 69.4vh → 46.3vh）；上限為保留 K 線圖約 250px 以上 */
+@media(max-width:960px){.sub-charts{height:var(--subH, clamp(107px, 23.1vh, 231px));}}   /* 手機版同步降低 1/3 */
 .sub-charts .sub-chart-wrap{height:auto !important;flex:1 1 0;min-height:0;}
 .sub-charts .sub-chart-wrap:first-child{flex:.7 1 0;}
 body.sub-collapsed .sub-charts{display:none;}
