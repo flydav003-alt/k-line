@@ -712,6 +712,7 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wl-main{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
 .wl-right{text-align:right;white-space:nowrap;}
 .wl-px{font-size:.78rem;}
+.wl-chg{font-size:.72rem;opacity:.9;margin:0 2px 0 4px;}
 .wl-sub{grid-column:2 / -1;min-width:0;}
 .wl-sub .wl-alert{margin-left:0;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 #rpWatch .recent-bar{display:flex;border-top:1px solid var(--border);border-bottom:none;padding:10px 12px;background:transparent;}
@@ -1843,7 +1844,7 @@ async function refreshWlYahoo() {
     const todo = watchlist.filter(c => { const q = wlQuotes[c]; return !(q && q.price != null && !q.approx && q.t && now - q.t < 25000); }).slice(0, 20);
     let k = 0;
     const worker = async () => { while (k < todo.length) { const c = todo[k++]; const r = await fetchYahooQuote(c).catch(() => null);
-      if (r) wlQuotes[c] = { price: r.price, chg: r.prev ? (r.price - r.prev) / r.prev * 100 : null, approx: false, t: Date.now(), src: 'yahoo' }; } };
+      if (r) wlQuotes[c] = { price: r.price, diff: r.prev ? r.price - r.prev : null, chg: r.prev ? (r.price - r.prev) / r.prev * 100 : null, approx: false, t: Date.now(), src: 'yahoo' }; } };
     await Promise.all([worker(), worker(), worker()]);
     renderWatchlist();
   } finally { wlYBusy = false; }
@@ -1854,7 +1855,7 @@ function wlPushFromBars(id) {
   const pd = priceData; if (!pd || pd.length < 2 || !id) return;
   const l = pd[pd.length - 1], pr = pd[pd.length - 2];
   if (!(l.close > 0) || !(pr.close > 0)) return;
-  wlQuotes[id] = { price: l.close, chg: (l.close - pr.close) / pr.close * 100, approx: false, t: Date.now() };
+  wlQuotes[id] = { price: l.close, diff: l.close - pr.close, chg: (l.close - pr.close) / pr.close * 100, approx: false, t: Date.now() };
   renderWatchlist();
 }
 let wlLastPx = {};   // code -> 上次渲染的價格，用來判斷是否需要閃爍提示
@@ -1863,13 +1864,14 @@ function quoteBadge(code) {
   if ((!q || q.price == null) && wlLast[code] && wlLast[code].close != null) {
     const L = wlLast[code], ch = L.prev ? (L.close - L.prev) / L.prev * 100 : null;
     const up = ch > 0, dn = ch < 0, color = up ? 'var(--up)' : dn ? 'var(--green)' : 'var(--muted2)';
-    const pct = ch == null ? '' : ` ${up ? '▲' : dn ? '▼' : ''}${Math.abs(ch).toFixed(2)}%`;
+    const pct = ch == null ? '' : ` <span class="wl-chg">${up ? '▲' : dn ? '▼' : ''}${Math.abs(L.close - L.prev).toFixed(2)}</span> ${Math.abs(ch).toFixed(2)}%`;
     return `<span class="wl-px" style="color:${color};opacity:.75" title="最近收盤 ${L.d}（尚無即時報價）">${L.close.toFixed(2)}${pct}</span>`;
   }
   if (!q || q.price == null) return (wlTried && (/^\d/.test(code) || code === 'TWII')) ? '<span class="wl-px" style="color:var(--muted)" title="尚無報價（可能尚未成交或來源失敗，詳見 Console）">—</span>' : '';
   const up = q.chg > 0, dn = q.chg < 0;
   const color = up ? 'var(--up)' : dn ? 'var(--green)' : 'var(--muted2)';
-  const pct = q.chg == null ? '' : ` ${up ? '▲' : dn ? '▼' : ''}${Math.abs(q.chg).toFixed(2)}%`;
+  const dTxt = q.diff == null ? '' : `<span class="wl-chg">${up ? '▲' : dn ? '▼' : ''}${Math.abs(q.diff).toFixed(2)}</span> `;
+  const pct = q.chg == null ? '' : ` ${dTxt}${Math.abs(q.chg).toFixed(2)}%`;
   const prevPx = wlLastPx[code];
   let flashCls = '';
   if (prevPx != null && prevPx !== q.price) flashCls = q.price > prevPx ? ' flash-up' : ' flash-dn';
@@ -1891,7 +1893,7 @@ function parseWatchQuotes(j) {
       if (a && b) { z = (a + b) / 2; approx = true; }
       else if (wlQuotes[it.c]?.price != null) return;       // 都沒有 → 保留上一筆，不要把報價清掉
     }
-    wlQuotes[it.c] = { price: z, chg: (z != null && y) ? (z - y) / y * 100 : null, approx, t: Date.now() };
+    wlQuotes[it.c] = { price: z, diff: (z != null && y) ? z - y : null, chg: (z != null && y) ? (z - y) / y * 100 : null, approx, t: Date.now() };
   });
 }
 async function refreshWatchlistQuotes() {
