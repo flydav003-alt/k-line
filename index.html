@@ -4,6 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>K線分析 V3</title>
+<script>
+var THEMES=['dark','light','beige'], THEME_LABEL={dark:'🌙 暗色',light:'☀ 淺色',beige:'🍂 米色'};
+var THEME_MA={dark:{5:'#e8b84b',10:'#4a9eff',20:'#ff6b9d',60:'#a78bfa',120:'#34d399',240:'#fb923c'},
+  light:{5:'#b7791f',10:'#2563eb',20:'#d6336c',60:'#7c3aed',120:'#0f9d6b',240:'#ea580c'},
+  beige:{5:'#a8741a',10:'#2f5fa8',20:'#c2345e',60:'#6d4fc2',120:'#1f8a62',240:'#d2570f'}};
+function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+function applyTheme(t,persist){
+  if(THEMES.indexOf(t)<0)t='dark';
+  document.documentElement.setAttribute('data-theme',t);
+  if(persist!==false){try{localStorage.setItem('kline_theme',t);}catch(e){}}
+  var b=document.getElementById('themeBtn'); if(b){b.textContent=THEME_LABEL[t].split(' ')[0]; b.title='主題：'+THEME_LABEL[t].split(' ')[1]+'（點一下切換：暗色→淺色→米色）';}
+  if(window.__onTheme){try{window.__onTheme();}catch(e){console.warn('[theme]',e);}}
+}
+function cycleTheme(){applyTheme(THEMES[(THEMES.indexOf(document.documentElement.getAttribute('data-theme'))+1)%THEMES.length]);}
+(function(){var t=null;try{t=localStorage.getItem('kline_theme');}catch(e){}
+  if(THEMES.indexOf(t)<0)t=(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';
+  document.documentElement.setAttribute('data-theme',t);
+  document.addEventListener('DOMContentLoaded',function(){applyTheme(t,false);});})();
+</script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 
 <style>
@@ -29,7 +48,31 @@
   --muted2:   #6a85a8;
   --font:     'Noto Sans TC', sans-serif;
   --mono:     'IBM Plex Mono', monospace;
+  --c-text:#c8d8f0; --c-text2:#6a85a8; --c-border:#1e2d4a; --c-grid:#131a2e; --c-label:#1e3a5f;
+  --c-cross:rgba(255,255,255,.6); --panel-a:rgba(13,18,32,.95); --vwap:rgba(255,200,50,.85); --pat-line:rgba(255,209,102,.95);
+  color-scheme:dark;
 }
+:root[data-theme="light"]{
+  --bg:#f2f4f8; --s1:#ffffff; --s2:#f0f3f8; --s3:#e4e9f2; --border:#d9e0ec; --border2:#c3cddf;
+  --gold:#b7791f; --gold2:#d08a1c; --cyan:#0e8f8f; --blue:#2563eb; --red:#d6334f; --green:#0a9a73; --up:#d6334f; --dn:#0a9a73;
+  --text:#1f2a3d; --muted:#7a889f; --muted2:#55647c;
+  --c-text:#3a475c; --c-text2:#7a889f; --c-border:#d9e0ec; --c-grid:#e8ecf4; --c-label:#cfd8e8;
+  --c-cross:rgba(30,42,61,.55); --panel-a:rgba(255,255,255,.96); --vwap:rgba(183,121,31,.9); --pat-line:rgba(194,120,3,.95);
+  color-scheme:light;
+}
+:root[data-theme="beige"]{
+  --bg:#f1eada; --s1:#faf5e9; --s2:#f0e8d5; --s3:#e6dcc4; --border:#ddd1b5; --border2:#cdbf9e;
+  --gold:#a8741a; --gold2:#c28a1f; --cyan:#1b7f7a; --blue:#2f5fa8; --red:#c8344a; --green:#1f8a62; --up:#c8344a; --dn:#1f8a62;
+  --text:#3b3224; --muted:#8c7f68; --muted2:#6b5f4a;
+  --c-text:#5a4e3a; --c-text2:#8c7f68; --c-border:#ddd1b5; --c-grid:#e9e0ca; --c-label:#d9cdb0;
+  --c-cross:rgba(59,50,36,.55); --panel-a:rgba(250,245,233,.96); --vwap:rgba(168,116,26,.9); --pat-line:rgba(176,106,10,.95);
+  color-scheme:light;
+}
+:root[data-theme="light"] .ma-chip-btn[data-ma="5"],:root[data-theme="beige"] .ma-chip-btn[data-ma="5"]{color:var(--gold)!important;border-color:var(--gold)!important;}
+:root[data-theme="light"] #vwapChip,:root[data-theme="beige"] #vwapChip{color:var(--gold)!important;border-color:var(--gold)!important;}
+.ma-toggle-bar .tg-sp{flex:1;min-width:6px;}
+.ma-toggle-bar .chart-tab{padding:3px 9px;border:1px solid var(--border2);border-radius:10px;font-size:.65rem;font-family:var(--mono);}
+#tfRow.htf-on ~ .ma-toggle-bar #trendToggleBtn,#tfRow.htf-on ~ .ma-toggle-bar #patternToggleBtn{display:none;}
 
 *{margin:0;padding:0;box-sizing:border-box}
 
@@ -307,7 +350,6 @@ body.us-mode #stockInput{ width:110px; }
 #intradayWrap.show{display:flex;}
 #chartsCol.id-on .sub-charts .sub-chart-wrap:nth-child(n+2){visibility:hidden;}
 #tfRow.id-on .pt:not(.tf), #tfRow.id-on #trendToggleBtn, #tfRow.id-on #patternToggleBtn{display:none;}
-#tfRow.htf-on #trendToggleBtn, #tfRow.htf-on #patternToggleBtn{display:none;}
 .htf-note{font-size:.64rem;color:var(--muted2);font-family:var(--mono);padding:0 8px;white-space:nowrap;align-self:center;}
 @media(max-width:700px){.htf-note{display:none !important;}
   #tfRow .chart-tabs{min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding:0 6px;-webkit-overflow-scrolling:touch;}
@@ -802,7 +844,7 @@ body.sub-collapsed .sub-charts{display:none;}
 .dw-btn:disabled{opacity:.3;cursor:default;pointer-events:none;}
 .dw-btn.on{background:rgba(232,184,75,.14);border-color:rgba(232,184,75,.55);color:var(--gold);}
 .dw-sep{display:block;width:22px;height:1px;background:var(--border2);margin:5px 0;flex:none;}
-.dw-props{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:7;display:none;align-items:center;gap:5px;padding:4px 8px;background:rgba(13,18,32,.95);border:1px solid var(--border2);border-radius:8px;max-width:calc(100% - 16px);flex-wrap:wrap;font-size:.7rem;color:var(--muted2);}
+.dw-props{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:7;display:none;align-items:center;gap:5px;padding:4px 8px;background:var(--panel-a);border:1px solid var(--border2);border-radius:8px;max-width:calc(100% - 16px);flex-wrap:wrap;font-size:.7rem;color:var(--muted2);}
 .dw-props.show{display:flex;}
 .dw-pn{color:var(--text);font-weight:600;margin-right:2px;white-space:nowrap;}
 .dw-sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;flex:none;}
@@ -818,9 +860,9 @@ body.sub-collapsed .sub-charts{display:none;}
 #klineChart.dw-tool *{cursor:crosshair !important;}
 @media(max-width:960px){
   .draw-bar{position:absolute;top:6px;left:6px;z-index:8;width:auto;flex-direction:row;align-items:flex-start;background:transparent;border:none;overflow:visible;}
-  .dw-toggle{display:flex;width:34px;height:34px;align-items:center;justify-content:center;border-radius:50%;background:rgba(13,18,32,.92);border:1px solid var(--border2);color:var(--gold);font-size:1rem;cursor:pointer;padding:0;flex:none;}
+  .dw-toggle{display:flex;width:34px;height:34px;align-items:center;justify-content:center;border-radius:50%;background:var(--panel-a);border:1px solid var(--border2);color:var(--gold);font-size:1rem;cursor:pointer;padding:0;flex:none;}
   .draw-bar.open .dw-toggle{border-color:var(--gold);}
-  .dw-tools{display:none;flex-direction:row;flex-wrap:wrap;gap:2px;padding:3px;width:auto;margin-left:4px;background:rgba(13,18,32,.95);border:1px solid var(--border2);border-radius:8px;max-width:calc(100vw - 72px);}
+  .dw-tools{display:none;flex-direction:row;flex-wrap:wrap;gap:2px;padding:3px;width:auto;margin-left:4px;background:var(--panel-a);border:1px solid var(--border2);border-radius:8px;max-width:calc(100vw - 72px);}
   .draw-bar.open .dw-tools{display:flex;}
   .dw-sep{width:1px;height:22px;margin:0 4px;}
   .dw-props{top:auto;bottom:34px;left:6px;transform:none;max-width:calc(100% - 12px);}
@@ -851,7 +893,7 @@ body.sub-collapsed .sub-charts{display:none;}
   </div>
 
   <div class="more-wrap" id="moreWrap">
-    <button class="more-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="更多">⋯</button>
+    <button class="more-btn" id="themeBtn" onclick="cycleTheme()" title="切換主題" style="margin-right:4px;">🌙</button><button class="more-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="更多">⋯</button>
     <div class="more-menu" id="moreMenu">
       <div class="more-title">回測</div>
       <div class="date-range-bar">
@@ -871,7 +913,7 @@ body.sub-collapsed .sub-charts{display:none;}
       </div>
       <div class="more-title" style="margin-top:12px;">快捷鍵</div>
       <div class="more-keys">
-        <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> 60／120／240／480 日</span>
+        <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> 半年／1年／2年／5年</span>
         <span><kbd>T</kbd> 趨勢通道</span>
         <span><kbd>P</kbd> K線型態</span>
         <span><kbd>←</kbd><kbd>→</kbd> 回測前後一日</span>
@@ -930,17 +972,11 @@ body.sub-collapsed .sub-charts{display:none;}
           <div class="pt tf" data-tf="W" onclick="setTF('W')">週K</div>
           <div class="pt tf" data-tf="M" onclick="setTF('M')">月K</div>
           <span style="display:inline-block;width:10px;"></span>
-          <div class="pt active" data-p="60" onclick="setActivePeriod(60)">60日</div>
-          <div class="pt" data-p="120" onclick="setActivePeriod(120)">120日</div>
-          <div class="pt" data-p="240" onclick="setActivePeriod(240)">240日</div>
-          <div class="pt" data-p="480" onclick="setActivePeriod(480)">480日</div>
+          <div class="pt active" data-p="120" onclick="setActivePeriod(120)">半年</div>
+          <div class="pt" data-p="240" onclick="setActivePeriod(240)">1年</div>
+          <div class="pt" data-p="480" onclick="setActivePeriod(480)">2年</div>
+          <div class="pt" data-p="1200" onclick="setActivePeriod(1200)">5年</div>
           <span class="htf-note" id="htfNote" style="display:none"></span>
-          <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" title="趨勢通道：斜線趨勢線、水平支撐壓力、圖形型態（M頭／W底／頭肩／三角形）（T）" style="cursor:pointer;user-select:none;">
-            趨勢通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
-          </div>
-          <div class="chart-tab" id="patternToggleBtn" onclick="togglePatterns()" style="cursor:pointer;user-select:none;" title="在K線圖上標示偵測到的K線型態（P）">
-            K線型態&nbsp;<span id="patternStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
-          </div>
         </div>
       </div>
 
@@ -956,6 +992,13 @@ body.sub-collapsed .sub-charts{display:none;}
         <div class="ma-chip-btn" id="vwapChip" data-off="0" style="background:rgba(255,200,50,.12);border-color:rgba(255,200,50,.6);color:rgba(255,200,50,.9);margin-left:4px;" onclick="toggleVWAP()" title="VWAP：由目前顯示區間第一根K棒起算的成交量加權均價（點擊開關）">VWAP</div>
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
+        <span class="tg-sp"></span>
+        <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" title="趨勢通道：斜線趨勢線、水平支撐壓力、圖形型態（M頭／W底／頭肩／三角形）（T）" style="cursor:pointer;user-select:none;">
+            通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
+          </div>
+        <div class="chart-tab" id="patternToggleBtn" onclick="togglePatterns()" style="cursor:pointer;user-select:none;" title="在K線圖上標示偵測到的K線型態（P）">
+            型態&nbsp;<span id="patternStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
+          </div>
       </div>
       <div class="chart-block" id="chartBlock">
         <div class="draw-bar" id="drawBar">
@@ -1228,7 +1271,7 @@ function vd(){
   if (key !== _vdKey) { _vdVal = aggBars(priceData, currentTF); _vdKey = key; }
   return _vdVal;
 }
-const TF_WIN = { D:[[60,'60日'],[120,'120日'],[240,'240日'],[480,'480日']], W:[[26,'26週'],[52,'52週'],[104,'104週'],[208,'208週']], M:[[24,'24月'],[36,'36月'],[60,'60月'],[120,'120月']],
+const TF_WIN = { D:[[120,'半年'],[240,'1年'],[480,'2年'],[1200,'5年']], W:[[26,'半年'],[52,'1年'],[104,'2年'],[260,'5年']], M:[[24,'24月'],[36,'36月'],[60,'60月'],[120,'120月']],
   H1:[[120,'120根'],[240,'240根'],[480,'480根'],[960,'960根']], H4:[[60,'60根'],[120,'120根'],[240,'240根'],[480,'480根']] };
 const TF_DEF_IDX = { D:0, W:1, M:1, H1:1, H4:2 };
 const h4Allowed = () => currentMarket !== 'TW';   // 台股一天只交易 4.5 小時，4H 沒意義
@@ -1419,7 +1462,7 @@ let trendSeries = [];   // 斜線趨勢線（line series）
 let patSeries = [];     // 型態頸線／邊界線（line series）
 let mmLines = [];       // 量度目標價線（price line，跟著型態標記一起清除）
 let showTrend   = false;
-let currentPeriod = 60;
+let currentPeriod = 120;
 let rsiChart    = null;
 let rsiSeries   = null;
 let rsiOBSeries = null;
@@ -3228,7 +3271,7 @@ function renderMeta(stockId, stockName, market) {
   bar.innerHTML = `
     ${marketBadge}
     <a href="${yahooLink}" target="_blank" rel="noopener" style="text-decoration:none;display:contents;">
-      <span class="stock-title" style="cursor:pointer;border-bottom:1px dashed rgba(212,223,240,.25);"
+      <span class="stock-title" style="cursor:pointer;border-bottom:1px dashed var(--border2);"
         title="點擊前往 Yahoo Finance">${stockId} 🔗</span>
     </a>
     ${nameTag}
@@ -3341,15 +3384,15 @@ function renderUSFundamentals(fin) {
 // ═══════════════════════════════════════
 const lwChartOpts = (h) => ({
   width: 0, height: h,
-  layout:{ background:{type:'Solid',color:'transparent'}, textColor:'#c8d8f0' },
-  grid:{ vertLines:{color:'#131a2e'}, horzLines:{color:'#131a2e'} },
+  layout:{ background:{type:'Solid',color:'transparent'}, textColor:cssv('--c-text') },
+  grid:{ vertLines:{color:cssv('--c-grid')}, horzLines:{color:cssv('--c-grid')} },
   crosshair:{
     mode: LightweightCharts.CrosshairMode.Normal,
-    vertLine:{ color:'rgba(255,255,255,0.6)', width:1, style:LightweightCharts.LineStyle.Dashed, labelBackgroundColor:'#1e3a5f', labelVisible:true },
-    horzLine:{ color:'rgba(255,255,255,0.6)', width:1, style:LightweightCharts.LineStyle.Dashed, labelBackgroundColor:'#1e3a5f', labelVisible:true },
+    vertLine:{ color:cssv('--c-cross'), width:1, style:LightweightCharts.LineStyle.Dashed, labelBackgroundColor:cssv('--c-label'), labelVisible:true },
+    horzLine:{ color:cssv('--c-cross'), width:1, style:LightweightCharts.LineStyle.Dashed, labelBackgroundColor:cssv('--c-label'), labelVisible:true },
   },
-  rightPriceScale:{ borderColor:'#1e2d4a', textColor:'#c8d8f0' },
-  timeScale:{ borderColor:'#1e2d4a', timeVisible:true, secondsVisible:false, textColor:'#c8d8f0' },
+  rightPriceScale:{ borderColor:cssv('--c-border'), textColor:cssv('--c-text') },
+  timeScale:{ borderColor:cssv('--c-border'), timeVisible:true, secondsVisible:false, textColor:cssv('--c-text') },
   handleScroll:{ mouseWheel:true, pressedMouseMove:true },
   handleScale:{ mouseWheel:true, pinch:true, axisPressedMouseMove:true },
 });
@@ -3389,23 +3432,23 @@ function buildCharts(data, keepRange = false) {
 
   kChart = LightweightCharts.createChart(kEl, {
     ...lwChartOpts(kH),
-    timeScale:{ borderColor:'#1e2d4a', visible:true, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },   // 日期軸放在K線正下方
+    timeScale:{ borderColor:cssv('--c-border'), visible:true, timeVisible:true, secondsVisible:false, textColor:cssv('--c-text2') },   // 日期軸放在K線正下方
   });
 
   candleSeries = kChart.addCandlestickSeries({
-    upColor:'#ff4d6d', downColor:'#00c896',
-    borderUpColor:'#ff4d6d', borderDownColor:'#00c896',
-    wickUpColor:'#ff4d6d', wickDownColor:'#00c896',
+    upColor:cssv('--up'), downColor:cssv('--dn'),
+    borderUpColor:cssv('--up'), borderDownColor:cssv('--dn'),
+    wickUpColor:cssv('--up'), wickDownColor:cssv('--dn'),
     lastValueVisible: true, priceLineVisible: true,
-    priceLineColor: 'rgba(255,255,255,0.5)',
+    priceLineColor: cssv('--c-cross'),
     priceLineStyle: LightweightCharts.LineStyle.Dashed,
     priceLineWidth: 1,
   });
   kChart.applyOptions({
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
-      vertLine: { color: 'rgba(255,255,255,0.55)', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#1e3a5f' },
-      horzLine: { color: 'rgba(255,255,255,0.55)', width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: '#1e3a5f' },
+      vertLine: { color: cssv('--c-cross'), width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: cssv('--c-label') },
+      horzLine: { color: cssv('--c-cross'), width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: cssv('--c-label') },
     }
   });
   candleSeries.setData(data.map(d=>({
@@ -3433,7 +3476,7 @@ function buildCharts(data, keepRange = false) {
     if (isHTF()) _markerArgs = null; else setTimeout(() => addVolumeMarkers(data, avgV), 50);   // 小時線不標型態／爆量標記
   }
 
-  const maColors = { 5:'#e8b84b', 10:'#4a9eff', 20:'#ff6b9d', 60:'#a78bfa', 120:'#34d399', 240:'#fb923c' };
+  const maColors = THEME_MA[document.documentElement.getAttribute('data-theme')] || THEME_MA.dark;
   const addMA = (p, col) => {
     const s = kChart.addLineSeries({ color:col, lineWidth:1, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false, visible: maVisibility[p] });
     s.setData(calcMA(vd(), p).filter(x => x.time >= data[0].date));
@@ -3456,7 +3499,7 @@ function buildCharts(data, keepRange = false) {
       return { time: d.date, value: cumV > 0 ? cumPV / cumV : d.close };
     });
     vwapSeries = kChart.addLineSeries({
-      color: 'rgba(255,200,50,0.85)', lineWidth: 2,
+      color: cssv('--vwap'), lineWidth: 2,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       priceLineVisible: false, lastValueVisible: true,
       crosshairMarkerVisible: false, title: 'VWAP', visible: vwapVisible,
@@ -3488,7 +3531,7 @@ function buildCharts(data, keepRange = false) {
   // Volume Chart
   volChart = LightweightCharts.createChart(vEl, {
     ...lwChartOpts(vH),
-    timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false },
+    timeScale:{ borderColor:cssv('--c-border'), visible:false, timeVisible:true, secondsVisible:false },
     rightPriceScale:{ scaleMargins:{top:.1,bottom:0} },
   });
   volSeries = volChart.addHistogramSeries({ priceFormat:{ type:'volume' }, priceScaleId:'' });
@@ -3500,13 +3543,13 @@ function buildCharts(data, keepRange = false) {
     time:d.date, value:d.Trading_Volume,
     color: d.close>=d.open ? 'rgba(255,77,109,0.25)' : 'rgba(0,200,150,0.25)'
   }))]);
-  volMaSeries = volChart.addLineSeries({ color:'#e8b84b', lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+  volMaSeries = volChart.addLineSeries({ color:cssv('--gold'), lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   volMaSeries.setData(calcAvgVol(data, 20));
 
   // MACD Chart — 使用固定 priceScaleId 確保不干擾 K 線圖
   macdChartObj = LightweightCharts.createChart(mEl, {
     ...lwChartOpts(mH),
-    timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false, textColor:'#6a85a8' },
+    timeScale:{ borderColor:cssv('--c-border'), visible:false, timeVisible:true, secondsVisible:false, textColor:cssv('--c-text2') },
     rightPriceScale:{ scaleMargins:{top:.1,bottom:.1} },
   });
 
@@ -3556,7 +3599,7 @@ function buildCharts(data, keepRange = false) {
   if(rsiEl) {
     rsiChart = LightweightCharts.createChart(rsiEl, {
       ...lwChartOpts(90),
-      timeScale:{ borderColor:'#1e2d4a', visible:false, timeVisible:true, secondsVisible:false },
+      timeScale:{ borderColor:cssv('--c-border'), visible:false, timeVisible:true, secondsVisible:false },
       rightPriceScale:{ scaleMargins:{top:.1,bottom:.1} },
     });
     const rsiVals = (() => {
@@ -4856,7 +4899,7 @@ function renderCurrentPatterns(cp){
   }).join('');
   return `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
     <div style="font-size:.82rem;font-weight:700;color:var(--gold);margin-bottom:2px;">💡 目前可能的K線型態（日／週／月）</div>${rows}
-    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;"></div></div>`;
+    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">列出最新及前2根K棒出現的型態（含長紅黑、跳空、突破20K高低點）；週K、月K最新一根尚未收定，之後可能改變。M頭／頭肩頂／頭肩底的目標括號＝台股約450檔、10年回測「先到該目標、後碰停損（右峰／右肩／右谷）」的比例，是目標價參考而不是進場訊號；空方形態建議當持股警示。W底回測無額外優勢。</div></div>`;
 }
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
@@ -4873,7 +4916,7 @@ function renderPatternStats(cp){
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${baseRow}${litRows}</table>${litRows?'':'<div style="font-size:.72rem;color:var(--muted);padding:4px 6px;">目前日／週／月K沒有出現列表中的型態</div>'}${otherL.length?`<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:.72rem;color:var(--muted2);padding:3px 0;">其他型態的歷史表現（${otherL.length}）</summary><table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${otherL.map(rowOf).join('')}</table></details>`:''}
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;"></div></div>`;
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘型態收在下方摺疊區。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；較基準數字顏色：黃＝勝率明顯高於基準（差距超過約2倍隨機誤差）、藍＝明顯低於基準、灰＝差距在隨機誤差內。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；趨勢線 強／弱勝率＝型態出現在壓力／支撐（或剛突破／跌破趨勢線）附近 vs. 其他位置的方向勝率，括號為次數；強明顯高於弱才代表濾網有用。20根勝率＝同樣算法改看第20根收盤（圖形型態的量度目標通常需要更久）。放量／量縮＝突破當根量 ≥ 前20根均量1.3倍（旗形另需旗面量縮）；失敗率＝突破後10根內收盤回到被突破邊界另一側的比例。次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
 }
 
 // ═══════════════════════════════════════
@@ -5079,7 +5122,7 @@ function renderBtResult(data) {
     btPriceLines.forEach(l => { try { futureSeries.removePriceLine(l); } catch {} });
     btPriceLines = [];
     const add = (price, color, title) => { if (price != null && isFinite(price)) { try { btPriceLines.push(futureSeries.createPriceLine({ price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible:true, title })); } catch {} } };
-    add(entry, 'rgba(255,255,255,0.45)', '回測日收盤');
+    add(entry, cssv('--c-cross'), '回測日收盤');
   }
 }
 
@@ -5578,7 +5621,7 @@ function addVolumeMarkers(data, avgVolArr) {
           const weak = x.strong===false;   // 無趨勢線配合：淡色、無文字
           markers.push({
             time:d.date, position:x.dir==='bull'?'belowBar':'aboveBar',
-            color:x.dir==='bull'?(weak?'rgba(255,77,109,0.3)':'#ff4d6d'):(weak?'rgba(0,200,150,0.3)':'#00c896'),
+            color:x.dir==='bull'?(weak?'rgba(255,77,109,0.3)':cssv('--up')):(weak?'rgba(0,200,150,0.3)':cssv('--dn')),
             shape:x.dir==='bull'?'arrowUp':'arrowDown', text:weak?'':(x.segs?x.name+(x.vok===true?'·放量':x.vok===false?'·量縮':''):x.name), size:weak?0:1 });
         });
       });
@@ -5600,7 +5643,7 @@ function addVolumeMarkers(data, avgVolArr) {
         if(x.poly){
           const pp = x.poly.filter(p => p.i >= off && A[p.i]);
           if(pp.length >= 2){
-            const ser = kChart.addLineSeries({ color:'rgba(255,209,102,0.95)', lineWidth:2, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+            const ser = kChart.addLineSeries({ color:cssv('--pat-line'), lineWidth:2, lineStyle:LightweightCharts.LineStyle.Solid, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
             ser.setData(pp.map(p => ({ time:A[p.i].date, value:p.v }))); patSeries.push(ser);
             const lm = []; x.poly.forEach((p,k) => { const lb = x.labels && x.labels[k]; if(lb && p.i >= off && A[p.i]) lm.push({ time:A[p.i].date, position:x.dir==='bear'?'aboveBar':'belowBar', color:'#ffd166', shape:'circle', text:lb, size:1 }); });
             if(lm.length) ser.setMarkers(lm);
@@ -5609,7 +5652,7 @@ function addVolumeMarkers(data, avgVolArr) {
         x.segs.forEach(sg => {
           const i0 = Math.max(sg.i0, off); if(i0 >= sg.i1 || !A[i0] || !A[sg.i1]) return;
           const vAt = k => sg.v0 + (sg.v1 - sg.v0) * (k - sg.i0) / (sg.i1 - sg.i0);
-          const ser = kChart.addLineSeries({ color:'rgba(255,209,102,0.95)', lineWidth:2, lineStyle:LightweightCharts.LineStyle.Dashed, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
+          const ser = kChart.addLineSeries({ color:cssv('--pat-line'), lineWidth:2, lineStyle:LightweightCharts.LineStyle.Dashed, priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
           ser.setData([{ time:A[i0].date, value:vAt(i0) }, { time:A[sg.i1].date, value:sg.v1 }]);
           patSeries.push(ser);
         });
@@ -5624,7 +5667,7 @@ function addVolumeMarkers(data, avgVolArr) {
           mmLive = !failedP && !doneP;
         }
         if(mmLive){
-          const col = x.dir==='bull' ? '#ff4d6d' : '#00c896';
+          const col = x.dir==='bull' ? cssv('--up') : cssv('--dn');
           x.mm.list.forEach(t => { try{ mmLines.push(candleSeries.createPriceLine({ price:t.price, color:col, lineWidth:1, lineStyle:LightweightCharts.LineStyle.Dashed, axisLabelVisible:true, title:`${x.name}目標${t.r}（${t.hit}%）` })); }catch{} });
         }
       });
@@ -5643,8 +5686,8 @@ function addVolumeMarkers(data, avgVolArr) {
 const DL = (() => {
   const LS_PREFIX = 'kline_dw:';
   const LS_MAGNET = 'kline_dw_magnet', LS_VIS = 'kline_dw_vis', LS_COLORS = 'kline_dw_colors';
-  const PALETTE = ['#e8b84b', '#4a9eff', '#29c5c5', '#ff6b9d', '#a78bfa', '#d4dff0'];
-  const DEF_COLOR = { hline: '#e8b84b', trend: '#4a9eff', fib: '#a78bfa', prange: '#29c5c5', drange: '#ff6b9d' };
+  const PALETTE = ['#d9a021', '#4a9eff', '#29c5c5', '#ff6b9d', '#a78bfa', '#8a9bb8'];
+  const DEF_COLOR = { hline: '#d9a021', trend: '#4a9eff', fib: '#a78bfa', prange: '#29c5c5', drange: '#ff6b9d' };
   const TYPE_NAME = { hline: '水平線', trend: '趨勢線', fib: '費波那契', prange: '價格範圍', drange: '日期範圍' };
   const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
   const NEED = { hline: 1, trend: 2, fib: 2, prange: 2, drange: 2 };
@@ -5799,13 +5842,13 @@ const DL = (() => {
     x = Math.min(Math.max(x, 2), Math.max(2, W - bw - 2)); y = Math.min(Math.max(y, 2), Math.max(2, H - bh - 2));
     ctx.fillStyle = 'rgba(8,12,20,.92)'; ctx.strokeStyle = color; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.rect(x, y, bw, bh); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#d4dff0'; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.fillStyle = cssv('--text'); ctx.textBaseline = 'top'; ctx.textAlign = 'left';
     lines.forEach((t, i) => ctx.fillText(t, x + 6, y + 4 + i * 15));
   }
   function handle(ctx, x, y, color) {
     if (isNaN(x) || isNaN(y)) return;
     ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#0d1220'; ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = cssv('--s1'); ctx.fill(); ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
   }
   function arrow(ctx, x0, y0, x1, y1) {
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
@@ -5825,7 +5868,7 @@ const DL = (() => {
     if (it.type === 'hline') {
       const y = Math.round(P[0].y) + 0.5;
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-      if (sel) [0.2, 0.5, 0.8].forEach(k => { ctx.fillStyle = '#0d1220'; ctx.fillRect(W * k - 4, y - 4, 8, 8); ctx.strokeRect(W * k - 4, y - 4, 8, 8); });
+      if (sel) [0.2, 0.5, 0.8].forEach(k => { ctx.fillStyle = cssv('--s1'); ctx.fillRect(W * k - 4, y - 4, 8, 8); ctx.strokeRect(W * k - 4, y - 4, 8, 8); });
       return;
     }
     const [a, b] = P;
@@ -6388,10 +6431,10 @@ function idShowInfo(bar, cumVol) {
 function idMessage(t) { const m = document.getElementById('idMsg'); if (m) m.textContent = t || ''; }
 const idRef = (() => { try { return { avg: true, ma5: false, ma10: false, open: false, ...JSON.parse(localStorage.getItem('kline_id_ref') || '{}') }; } catch { return { avg: true, ma5: false, ma10: false, open: false }; } })();
 const ID_REF_DEF = [
-  ['avg',  '日均價', '#e8eef8'],
+  ['avg',  '日均價', cssv('--text')],
   ['ma5',  '5MA',    '#d9485f'],
   ['ma10', '10MA',   '#2fb37a'],
-  ['open', '開盤價', '#e8b84b'],
+  ['open', '開盤價', '#d9a021'],
 ];
 function renderIdChips() {
   const box = document.getElementById('idChips');
@@ -6439,15 +6482,15 @@ function renderIntraday() {
   const w = box.clientWidth || 600, h = box.clientHeight || 340;
   idChartObj = LightweightCharts.createChart(box, {
     ...lwChartOpts(h), width: w,
-    rightPriceScale: { borderColor: '#1e2d4a', textColor: '#c8d8f0', scaleMargins: { top: .08, bottom: .28 } },
-    timeScale: { borderColor: '#1e2d4a', timeVisible: true, secondsVisible: false, textColor: '#c8d8f0', rightOffset: 0 },
+    rightPriceScale: { borderColor: cssv('--c-border'), textColor: cssv('--c-text'), scaleMargins: { top: .08, bottom: .28 } },
+    timeScale: { borderColor: cssv('--c-border'), timeVisible: true, secondsVisible: false, textColor: cssv('--c-text'), rightOffset: 0 },
   });
   const bars = idData.bars;
   const base = Math.floor(bars[0].time / 86400) * 86400;       // 當地日期 00:00（已含 gmtoffset）
   const dateStr = new Date(base * 1000).toISOString().slice(0, 10);
   const prev = idData.prev || bars[0].open;
   const last = bars[bars.length - 1];
-  const UP = '#ff4d6d', DN = '#00c896', EQ = '#c8d8f0';
+  const UP = cssv('--up'), DN = cssv('--dn'), EQ = cssv('--c-text');
   const colOf = v => v > prev ? UP : v < prev ? DN : EQ;
   const noScale = { autoscaleInfoProvider: () => null };
 
@@ -6480,7 +6523,7 @@ function renderIntraday() {
   };
   if (idRef.avg) {
     let pv = 0, vv = 0, cs = 0, n = 0;
-    addRef('#e8eef8', bars.map(b => { n++; cs += b.close; pv += b.close * b.vol; vv += b.vol; return { time: b.time, value: vv > 0 ? pv / vv : cs / n }; }));
+    addRef(cssv('--text'), bars.map(b => { n++; cs += b.close; pv += b.close * b.vol; vv += b.vol; return { time: b.time, value: vv > 0 ? pv / vv : cs / n }; }));
   }
   const closes = (typeof priceData !== 'undefined' ? priceData : []).filter(d => d.date < dateStr).map(d => d.close);
   [['ma5', 5, '#d9485f'], ['ma10', 10, '#2fb37a']].forEach(([k, n, col]) => {
@@ -6488,7 +6531,7 @@ function renderIntraday() {
     const sum = closes.slice(-(n - 1)).reduce((x, y) => x + y, 0);
     addRef(col, bars.map(b => ({ time: b.time, value: (sum + b.close) / n })));
   });
-  if (idRef.open) addRef('#e8b84b', bars.map(b => ({ time: b.time, value: bars[0].open })), { lineStyle: LightweightCharts.LineStyle.Dashed });
+  if (idRef.open) addRef('#d9a021', bars.map(b => ({ time: b.time, value: bars[0].open })), { lineStyle: LightweightCharts.LineStyle.Dashed });
 
   // 成交量
   const hasVol = currentStockId !== 'TWII' && bars.some(b => b.vol > 0);
@@ -6586,6 +6629,12 @@ setInterval(() => {
   else if (currentMarket === 'US' || isTWMarketOpen()) loadIntraday(false);
 }, 2000);
 window.addEventListener('resize', () => { if (intradayMode) idLayout(); });
+
+window.__onTheme = function () {
+  try { if (typeof priceData !== 'undefined' && priceData.length && !document.getElementById('splash').offsetParent) redraw(true); } catch (e) { console.warn(e); }
+  try { if (typeof intradayMode !== 'undefined' && intradayMode && idChartObj) idChartObj.applyOptions({ layout: { textColor: cssv('--c-text') }, grid: { vertLines: { color: cssv('--c-grid') }, horzLines: { color: cssv('--c-grid') } }, rightPriceScale: { borderColor: cssv('--c-border') }, timeScale: { borderColor: cssv('--c-border') } }); } catch (e) {}
+  try { hsRender(); } catch (e) {}
+};
 
 // ═══════════════════════════════════════
 //  右側欄 tab、⋯選單
