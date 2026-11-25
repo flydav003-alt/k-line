@@ -940,6 +940,7 @@ body.sub-collapsed .sub-charts{display:none;}
 .wk-cpx{margin-left:auto;font-family:var(--mono);font-size:1rem;font-weight:600;white-space:nowrap;}
 .wk-cchg{font-family:var(--mono);font-size:.74rem;white-space:nowrap;}
 .wk-ctm{font-family:var(--mono);font-size:.6rem;color:var(--muted);white-space:nowrap;}
+.wk-cmd{background:var(--s2);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:1px 7px;font-size:.72rem;cursor:pointer;}.wk-cmd.t{background:var(--gold);color:#000;font-weight:700;border-color:var(--gold);}
 .wk-cgo,.wk-crf{background:var(--s2);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:1px 7px;font-size:.72rem;cursor:pointer;}
 .wk-cgo:hover,.wk-crf:hover{border-color:var(--gold);color:var(--gold);}
 .wk-leg{flex:none;min-height:16px;padding:0 8px 2px;font-family:var(--mono);font-size:.64rem;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -7278,16 +7279,17 @@ document.addEventListener('click', e => { const w = document.getElementById('mor
 //  每格獨立的小圖表，不碰主圖的全域狀態；日線資料共用 cmpFetch 的快取，報價盤中自動刷新
 // ═══════════════════════════════════════
 const WALL_KEY = 'kline_wall', WALL_DEF = ['TWII', '2330', 'NVDA', 'BTC'];
-const wall = { open: false, n: 4, codes: [], link: true, cells: [], syncing: false, rsync: false, lastSync: 0, timer: null, busy: false };
+const wall = { open: false, n: 4, codes: [], modes: [], link: true, cells: [], syncing: false, rsync: false, lastSync: 0, timer: null, busy: false };
 (function wallLoadCfg() {
   let c = null; try { c = JSON.parse(localStorage.getItem(WALL_KEY) || 'null'); } catch {}
   if (c && typeof c === 'object') {
     if (Array.isArray(c.codes)) wall.codes = c.codes.filter(x => typeof x === 'string' && isValidCode(x)).slice(0, 4);
+    if (Array.isArray(c.modes)) wall.modes = c.modes.slice(0, 4).map(m => m === 'T' ? 'T' : 'D');
     if (c.n === 1 || c.n === 2 || c.n === 4) wall.n = c.n;
     if (c.link === false) wall.link = false;
   }
 })();
-function wallSave() { try { localStorage.setItem(WALL_KEY, JSON.stringify({ n: wall.n, codes: wall.codes, link: wall.link })); } catch {} }
+function wallSave() { try { localStorage.setItem(WALL_KEY, JSON.stringify({ n: wall.n, codes: wall.codes, modes: wall.modes, link: wall.link })); } catch {} }
 function wallFill() {   // 補滿 4 個代號：先用自選前幾檔，再用預設
   const used = new Set(wall.codes);
   for (const c of watchlist.concat(WALL_DEF)) {
@@ -7345,19 +7347,28 @@ function wallRender() {
 function wallMakeCell(i) {
   const code = wall.codes[i];
   const el = document.createElement('div'); el.className = 'wk-cell';
-  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
+  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><button class="wk-cmd" title="切換：日K ／ 當日分時（1分K）">日K</button><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
   const q = s => el.querySelector(s);
   const c = { i, code, el, inp: q('.wk-cin'), sel: q('.wk-csel'), nm: q('.wk-cnm'), px: q('.wk-cpx'), chg: q('.wk-cchg'), tm: q('.wk-ctm'), leg: q('.wk-leg'), cc: q('.wk-cc'), msg: q('.wk-msg'),
-    chart: null, candle: null, m20: null, m60: null, vol: null, bars: [], idx: new Map(), seq: 0, loading: false, loadedAt: 0, qAt: 0, quote: null };
+    mode: wall.modes[i] === 'T' ? 'T' : 'D', pl: null, chart: null, candle: null, m20: null, m60: null, vol: null, bars: [], idx: new Map(), seq: 0, loading: false, loadedAt: 0, qAt: 0, quote: null };
   c.sel.innerHTML = '<option value="">自選</option>' + watchlist.map(w => `<option value="${escHtml(w)}">${escHtml(w)} ${escHtml(wallName(w))}</option>`).join('');
   c.sel.onchange = () => { const v = c.sel.value; c.sel.value = ''; if (v) wallSetCode(c, v); };
   c.inp.addEventListener('keydown', e => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); wallSetCode(c, c.inp.value); c.inp.blur(); } });
   c.inp.addEventListener('focus', () => c.inp.select());
   c.nm.onclick = q('.wk-cgo').onclick = () => wallGo(c.code);
+  c.md = q('.wk-cmd'); c.md.onclick = () => wallSetMode(c, c.mode === 'T' ? 'D' : 'T'); wallModeUi(c);
   q('.wk-crf').onclick = () => wallLoadCell(c, true);
   c.cc.addEventListener('dblclick', () => wallGo(c.code));
   c.nm.textContent = wallName(code) || ''; 
   return c;
+}
+function wallModeUi(c) { if (!c.md) return; c.md.textContent = c.mode === 'T' ? '分時' : '日K'; c.md.classList.toggle('t', c.mode === 'T'); }
+function wallSetMode(c, m) {
+  if (c.mode === m) return;
+  c.mode = m; wall.modes[c.i] = m; wallSave(); wallModeUi(c);
+  c.bars = []; c.quote = null; wallClearSeries(c);
+  try { c.chart.applyOptions({ timeScale: { timeVisible: m === 'T', secondsVisible: false } }); } catch {}
+  wallLoadCell(c, true);
 }
 function wallSetCode(c, raw) {
   const id = resolveStockInput(raw);
@@ -7388,7 +7399,7 @@ function wallInitChart(c) {
     wall.syncing = true;
     try {
       wall.cells.forEach(o => {
-        if (o === c || !o.chart) return;
+        if (o === c || !o.chart || o.mode !== c.mode) return;
         const i = p && p.time ? o.idx.get(p.time) : undefined;
         if (i != null) { try { o.chart.setCrosshairPosition(o.bars[i].close, p.time, o.candle); } catch {} wallLeg(o, p.time); }
         else { try { o.chart.clearCrosshairPosition(); } catch {} wallLeg(o, null); }
@@ -7404,7 +7415,7 @@ function wallSyncRange(c, r) {
   wall.rsync = true;
   try {
     wall.cells.forEach(o => {
-      if (o === c || !o.chart || !o.bars.length) return;
+      if (o === c || !o.chart || !o.bars.length || o.mode !== 'D' || c.mode !== 'D') return;
       try { const cur = o.chart.timeScale().getVisibleRange(); if (cur && cur.from === r.from && cur.to === r.to) return; o.chart.timeScale().setVisibleRange({ from: r.from, to: r.to }); } catch {}
     });
   } finally { wall.rsync = false; wall.lastSync = Date.now(); }
@@ -7414,14 +7425,24 @@ function wallLeg(c, time) {
   const i = time ? c.idx.get(time) : undefined;
   if (i == null) { c.leg.textContent = ''; return; }
   const d = c.bars[i], pv = i > 0 ? c.bars[i - 1].close : null, ch = pv ? (d.close / pv - 1) * 100 : null;
-  c.leg.innerHTML = `${escHtml(String(d.date).slice(5))}　開 ${wallFmt(d.open)}　高 ${wallFmt(d.max)}　低 ${wallFmt(d.min)}　收 <b style="color:${wallColor(ch)}">${wallFmt(d.close)}</b>${ch == null ? '' : ` <span style="color:${wallColor(ch)}">${wallPct(ch)}</span>`}`;
+  c.leg.innerHTML = `${escHtml(c.mode === 'T' ? wallTLabel(d.date) : String(d.date).slice(5))}　開 ${wallFmt(d.open)}　高 ${wallFmt(d.max)}　低 ${wallFmt(d.min)}　收 <b style="color:${wallColor(ch)}">${wallFmt(d.close)}</b>${ch == null ? '' : ` <span style="color:${wallColor(ch)}">${wallPct(ch)}</span>`}`;
 }
 function wallMsg(c, t) { if (c.msg) c.msg.textContent = t || ''; }
 function wallReindex(c) { c.idx = new Map(); c.bars.forEach((d, i) => c.idx.set(d.date, i)); }
 function wallClearSeries(c) { try { c.candle.setData([]); c.m20.setData([]); c.m60.setData([]); c.vol.setData([]); } catch {} c.idx = new Map(); wallLeg(c, null); }
 const wallVolCol = d => d.close >= d.open ? 'rgba(255,77,109,0.5)' : 'rgba(0,200,150,0.5)';
+function wallTLabel(t) { const d = new Date(t * 1000), p = n => String(n).padStart(2, '0'); return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; }
 function wallDraw(c) {
   const b = c.bars, n = b.length; if (!c.chart || !n) return;
+  if (c.mode === 'T') {
+    c.candle.setData(b.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close })));
+    c.m20.setData([]); c.m60.setData([]);
+    c.vol.setData(b.map(d => ({ time: d.date, value: d.Trading_Volume || 0, color: wallVolCol(d) })));
+    try { if (c.pl) c.candle.removePriceLine(c.pl); } catch {} c.pl = null;
+    if (c.quote && c.quote.prev > 0) c.pl = c.candle.createPriceLine({ price: c.quote.prev, color: cssv('--c-text'), lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: false, title: '昨收' });
+    c.chart.timeScale().fitContent();
+    return;
+  }
   c.candle.setData(b.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close })));
   const a20 = ma(b, 20), a60 = ma(b, 60);
   c.m20.setData(b.map((d, i) => a20[i] == null ? null : { time: d.date, value: a20[i] }).filter(Boolean));
@@ -7463,6 +7484,7 @@ function wallHead(c) {
 async function wallLoadCell(c, force) {
   if (!c.chart) return;
   const seq = ++c.seq; c.loading = true; wallMsg(c, '載入中…');
+  if (c.mode === 'T') return wallLoadIntra(c, seq);
   let bars = [];
   try { if (force) delete cmpMem[c.code]; bars = await cmpFetch(c.code); } catch (e) { console.warn('[看盤牆]', c.code, e && e.message); }
   if (c.seq !== seq || !wall.open) return;
@@ -7472,8 +7494,37 @@ async function wallLoadCell(c, force) {
   c.loadedAt = Date.now(); c.quote = null; wallReindex(c); wallMsg(c, ''); wallDraw(c); wallHead(c);
   await wallQuote(c);
 }
+// 當日分時：Yahoo 1 分K（range=1d），時間加上交易所時差，軸上直接顯示當地時間
+async function wallFetchIntra(code) {
+  const parse = raw => {
+    const j = unwrapProxy(raw), r = j && j.chart && j.chart.result && j.chart.result[0];
+    if (!r || !r.timestamp || !r.timestamp.length) throw new Error('no data');
+    const q = r.indicators.quote[0], off = r.meta.gmtoffset || 0, out = [];
+    r.timestamp.forEach((t, i) => { if (q.close[i] == null || q.open[i] == null) return; out.push({ date: t + off, open: q.open[i], max: q.high[i], min: q.low[i], close: q.close[i], Trading_Volume: q.volume[i] || 0 }); });
+    if (!out.length) throw new Error('empty');
+    return { bars: out, prev: r.meta.chartPreviousClose != null ? r.meta.chartPreviousClose : r.meta.previousClose, lastT: r.timestamp[r.timestamp.length - 1] };
+  };
+  const syms = /^\^|=[XF]$|\.[A-Z]{2}$/.test(code) ? [code] : code === 'TWII' ? ['^TWII'] : isCrypto(code) ? [CRYPTO[String(code).toUpperCase()].sym] : /^\d/.test(code) ? [code + '.TW', code + '.TWO'] : [code];
+  for (const sym of syms) {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&_=${Date.now()}`;
+    const r = await fetchViaProxies(url, parse, 'WLintra');
+    if (r) return r;
+  }
+  return null;
+}
+async function wallLoadIntra(c, seq) {
+  let r = null;
+  try { r = await withTimeout(wallFetchIntra(c.code), 15000); } catch (e) { console.warn('[看盤牆分時]', c.code, e && e.message); }
+  if (c.seq !== seq || !wall.open || c.mode !== 'T') return;
+  c.loading = false; c.loadedAt = Date.now(); c.qAt = Date.now();
+  if (!r) { wallMsg(c, ''); if (!c.bars.length) { wallClearSeries(c); wallMsg(c, '取不到分時資料，按 ⟳ 重試'); wallHead(c); } return; }
+  c.bars = r.bars; wallReindex(c); wallMsg(c, '');
+  c.quote = { price: r.bars[r.bars.length - 1].close, prev: r.prev > 0 ? r.prev : null, live: Date.now() / 1000 - r.lastT < 600, t: Date.now() };
+  wallDraw(c); wallHead(c);
+}
 // 報價：台股用證交所 MIS（含當日量），其他用 Yahoo；只在「昨收對得上」時才改最後一根，避免把錯的價位畫進K棒
 async function wallQuote(c) {
+  if (c.mode === 'T') { await wallLoadIntra(c, c.seq); return; }
   const code = c.code, b = c.bars; if (!b.length || !c.chart) return;
   const seq = c.seq;
   try {
