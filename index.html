@@ -14,10 +14,9 @@ function applyTheme(t,persist){
   if(THEMES.indexOf(t)<0)t='dark';
   document.documentElement.setAttribute('data-theme',t);
   if(persist!==false){try{localStorage.setItem('kline_theme',t);}catch(e){}}
-  var b=document.getElementById('themeBtn'); if(b){b.textContent=THEME_LABEL[t].split(' ')[0]; b.title='主題：'+THEME_LABEL[t].split(' ')[1]+'（點一下切換：暗色→淺色→米色）';}
+  document.querySelectorAll('[data-theme-btn]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-theme-btn')===t);});
   if(window.__onTheme){try{window.__onTheme();}catch(e){console.warn('[theme]',e);}}
 }
-function cycleTheme(){applyTheme(THEMES[(THEMES.indexOf(document.documentElement.getAttribute('data-theme'))+1)%THEMES.length]);}
 (function(){var t=null;try{t=localStorage.getItem('kline_theme');}catch(e){}
   if(THEMES.indexOf(t)<0)t=(window.matchMedia&&matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';
   document.documentElement.setAttribute('data-theme',t);
@@ -580,19 +579,18 @@ body.no-stock #splash{justify-content:flex-start;align-items:stretch;}
 .td-tag.up{color:var(--up);border-color:rgba(255,77,109,.5);background:rgba(255,77,109,.08);}
 .td-empty{padding:14px 12px;font-size:.74rem;color:var(--muted);}
 @media(max-width:700px){.td-row{flex-wrap:wrap;gap:4px 10px;}.td-nm{min-width:0;}}
-/* 設定備份 */
-#bkIO{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;}
-#bkIO.on{display:flex;}
-#bkIO .wio-box{width:min(480px,100%);background:var(--s1);border:1px solid var(--border2);border-radius:12px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);}
-#bkIO .wio-t{font-weight:700;color:var(--gold);margin-bottom:4px;}
-#bkIO .wio-h{font-size:.7rem;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-#bkIO textarea{width:100%;height:200px;resize:vertical;box-sizing:border-box;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-family:var(--mono);font-size:.7rem;line-height:1.5;}
-#bkIO .wio-b{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;justify-content:flex-end;align-items:center;}
-#bkIO .wio-msg{font-size:.7rem;color:var(--muted);margin-right:auto;}
-#bkIO .sync-box{border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:10px;background:var(--s2);}
-#bkIO .sync-box .sync-t{font-size:.75rem;font-weight:700;color:var(--text);margin-bottom:4px;}
-#bkIO .sync-box input{width:100%;box-sizing:border-box;background:var(--s1);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:.72rem;margin:4px 0 6px;}
-#bkIO .sync-box .wio-b{margin-top:0;justify-content:flex-start;}
+/* 設定選單：主題 / 備份 */
+#moreMenu{max-height:calc(100vh - 56px);overflow-y:auto;min-width:320px;}
+.theme-seg{display:flex;gap:6px;}
+.theme-seg button{flex:1;background:var(--s1);color:var(--muted2);border:1px solid var(--border);border-radius:6px;padding:7px 4px;font-size:.74rem;cursor:pointer;font-family:inherit;}
+.theme-seg button:hover{border-color:var(--gold);color:var(--text);}
+.theme-seg button.on{border-color:var(--gold);color:var(--gold);font-weight:700;}
+.more-menu .sync-box{border:1px solid var(--border);border-radius:8px;padding:8px;background:var(--s1);}
+.more-menu .sync-t{font-size:.75rem;font-weight:700;color:var(--text);margin-bottom:4px;}
+.more-menu .sync-h{font-size:.68rem;color:var(--muted);line-height:1.5;}
+.more-menu .sync-box input{width:100%;box-sizing:border-box;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-family:var(--mono);font-size:.72rem;margin:6px 0;}
+.more-menu .sync-b{display:flex;flex-wrap:wrap;gap:6px;}
+.more-menu .sync-msg{font-size:.7rem;color:var(--muted);margin-top:6px;}
 #splash p{font-size:.85rem;line-height:1.8;text-align:center;max-width:480px;}
 .splash-feat{
   display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px;
@@ -832,14 +830,6 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wl-right{text-align:right;white-space:nowrap;}
 .wl-px{font-size:.78rem;}
 .wl-chg{font-size:.72rem;opacity:.9;margin:0 2px 0 4px;}
-#wlIO{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;}
-#wlIO.on{display:flex;}
-#wlIO .wio-box{width:min(420px,100%);background:var(--s1);border:1px solid var(--border2);border-radius:12px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);}
-#wlIO .wio-t{font-weight:700;color:var(--gold);margin-bottom:4px;}
-#wlIO .wio-h{font-size:.7rem;color:var(--muted);margin-bottom:8px;line-height:1.5;}
-#wlIO textarea{width:100%;height:240px;resize:vertical;box-sizing:border-box;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-family:var(--mono);font-size:.8rem;line-height:1.6;}
-#wlIO .wio-b{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;justify-content:flex-end;align-items:center;}
-#wlIO .wio-msg{font-size:.7rem;color:var(--muted);margin-right:auto;}
 .wl-sub{grid-column:2 / -1;min-width:0;}
 .wl-sub .wl-alert{margin-left:0;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 #rpWatch .recent-bar{display:flex;border-top:1px solid var(--border);border-bottom:none;padding:10px 12px;background:transparent;}
@@ -974,33 +964,42 @@ body.sub-collapsed .sub-charts{display:none;}
   </div>
 
   <div class="more-wrap" id="moreWrap">
-    <button class="more-btn" id="themeBtn" onclick="cycleTheme()" title="切換主題" style="margin-right:4px;">🌙</button><button class="more-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="更多">⋯</button>
+    <button class="more-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="設定">⋯</button>
     <div class="more-menu" id="moreMenu">
-      <div class="more-title">回測</div>
-      <div class="date-range-bar">
-        <span style="font-size:.7rem;color:var(--muted2);white-space:nowrap;">回測至</span>
-        <button class="btn-step" id="btnPrevDay" onclick="stepBt(-1)" title="前一交易日（鍵盤 ←）">◀</button>
-        <input type="date" id="dateTo" class="date-input" title="指定結束日期，往前推所選天數" />
-        <button class="btn-step" id="btnNextDay" onclick="stepBt(1)" title="後一交易日（鍵盤 →）">▶</button>
+      <div class="more-title">主題</div>
+      <div class="theme-seg" id="themeSeg">
+        <button type="button" data-theme-btn="dark" onclick="applyTheme('dark')">🌙 暗色</button>
+        <button type="button" data-theme-btn="light" onclick="applyTheme('light')">☀ 淺色</button>
+        <button type="button" data-theme-btn="beige" onclick="applyTheme('beige')">🍂 米色</button>
       </div>
-      <div class="date-range-bar" style="margin-top:6px;">
-        <button class="btn-clear-date" onclick="clearDateRange()" title="清除，回到今天">✕ 清除</button>
+      <div class="more-title" style="margin-top:14px;">備份</div>
+      <div class="sync-box">
+        <div class="sync-t">☁ 雲端備份（自動，內容加密）</div>
+        <div class="sync-h">第一台裝置按「產生同步碼」並保存；其他裝置貼上同一串碼後按「連線」。之後畫線、改自選、首頁方格、主題都會自動同步。</div>
+        <input id="syncCode" spellcheck="false" autocomplete="off" placeholder="同步碼（貼在這裡，或按產生）">
+        <div class="sync-b">
+          <button class="wl-add-btn" onclick="KSYNC.generate()">產生同步碼</button>
+          <button class="wl-add-btn" onclick="KSYNC.connect()">連線</button>
+          <button class="wl-add-btn" onclick="KSYNC.copy()">複製碼</button>
+          <button class="wl-add-btn" onclick="KSYNC.now()">立即同步</button>
+          <button class="wl-add-btn" onclick="KSYNC.stop()">停止</button>
+        </div>
+        <div class="sync-msg" id="syncMsg">尚未啟用</div>
       </div>
-      <div class="more-title" style="margin-top:12px;">繪圖資料</div>
-      <div class="date-range-bar">
-        <button class="btn-clear-date" onclick="DL.exportAll()" title="把所有代號的繪圖存成 JSON 檔，可搬到其他裝置">⬇ 匯出 JSON</button>
-        <button class="btn-clear-date" onclick="document.getElementById('dwImportFile').click()" title="讀入 JSON，與現有繪圖合併">⬆ 匯入 JSON</button>
-        <input type="file" id="dwImportFile" accept=".json,application/json" style="display:none" onchange="DL.importFile(this.files[0]);this.value=''" />
-      </div>
-      <div class="more-title" style="margin-top:12px;">快捷鍵</div>
+      <div class="more-title" style="margin-top:14px;">快捷鍵</div>
       <div class="more-keys">
         <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> 半年／1年／2年／5年</span>
         <span><kbd>T</kbd> 趨勢通道</span>
         <span><kbd>P</kbd> K線型態</span>
-        <span><kbd>←</kbd><kbd>→</kbd> 回測前後一日</span>
         <span><kbd>Del</kbd> 刪除選取的繪圖</span>
         <span><kbd>Esc</kbd> 取消繪圖／清除回測</span>
       </div>
+    </div>
+    <!-- 回測控制：選單已不顯示，但回放／鍵盤 ←→ 仍會用到這些元素，保留為隱藏 -->
+    <div id="btHidden" style="display:none">
+      <button class="btn-step" id="btnPrevDay" onclick="stepBt(-1)">◀</button>
+      <input type="date" id="dateTo" class="date-input" />
+      <button class="btn-step" id="btnNextDay" onclick="stepBt(1)">▶</button>
     </div>
   </div>
 </header>
@@ -1022,7 +1021,7 @@ body.sub-collapsed .sub-charts{display:none;}
   <div id="homeStrip">
     <div class="hs-head">
       <span class="hs-title">市場總覽</span><span class="hs-time" id="hsTime"></span>
-      <span class="hs-btns"><button class="wl-add-btn" onclick="hsRefresh(true)" title="更新行情">⟳</button><button class="wl-add-btn" onclick="openBackup()" title="匯出／匯入全部設定（自選、繪圖、首頁方格、主題…）">💾 備份</button><button class="wl-add-btn" id="hsEditBtn" onclick="hsToggleEdit()">編輯</button></span>
+      <span class="hs-btns"><button class="wl-add-btn" onclick="hsRefresh(true)" title="更新行情">⟳</button><button class="wl-add-btn" id="hsEditBtn" onclick="hsToggleEdit()">編輯</button></span>
     </div>
     <div class="hs-grid" id="hsGrid"></div>
     <div class="hs-edit" id="hsEdit" style="display:none">
@@ -1178,7 +1177,7 @@ body.sub-collapsed .sub-charts{display:none;}
       <div class="rp-pane on" id="rpWatch">
         <div class="wl-head">
           <span id="wlAlertSum" style="font-size:.68rem;color:#ff9f40;font-weight:600;"></span>
-          <span style="display:flex;gap:6px;"><button class="wl-add-btn" onclick="wlRefreshAll()" title="更新自選報價">⟳</button><button class="wl-add-btn" onclick="openWlIO()" title="匯出／匯入自選（純文字）">⇅ 匯出入</button><button class="wl-add-btn" onclick="openBackup()" title="匯出／匯入全部設定（自選、繪圖、首頁方格、主題…）">💾 備份</button><button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入目前代號</button></span>
+          <span style="display:flex;gap:6px;"><button class="wl-add-btn" onclick="wlRefreshAll()" title="更新自選報價">⟳</button><button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入目前代號</button></span>
         </div>
         <div id="wlItems"><span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（輸入代號後按「＋ 加入目前代號」，列可拖曳排序）</span></div>
         <div id="recentBar" class="recent-bar" style="display:none;">
@@ -2287,125 +2286,6 @@ function addToWatchlist() {
   renderWatchlist();
   refreshWatchlistQuotes();
   scanWatchlistAlerts(true);
-}
-// ── 自選匯出／匯入（純文字，一行一檔：名稱+代號）──
-function wlExportText() {
-  return watchlist.map(c => {
-    const nm = c === 'TWII' ? '加權指數' : nameOf(c);
-    if (!nm) return c;
-    return nm + (/[A-Za-z0-9]$/.test(nm) ? ' ' : '') + c;   // 名稱結尾是英數時加空格，避免和代號黏在一起
-  }).join('\n');
-}
-function wlParseText(text) {
-  const out = [], seen = new Set();
-  String(text || '').split(/\r?\n/).forEach(raw => {
-    let line = normInput(raw).trim();
-    if (!line || line[0] === '#') return;
-    const tok = line.split(/[\s,，、;；\t]+/).filter(Boolean).pop().toUpperCase();
-    let code = isValidCode(tok) ? tok : ((tok.match(/(\^[A-Z0-9.]+|[A-Z0-9.]+=[XF]|\d{6}\.[A-Z]{2}|\d{4,6}[A-Z]?|[A-Z]{1,5})$/) || [])[1] || '');
-    if (code === 'T00') code = 'TWII';
-    if (!isValidCode(code) || seen.has(code)) return;
-    seen.add(code);
-    const name = line.slice(0, line.toUpperCase().lastIndexOf(code)).replace(/[\s,，、;；]+$/, '').trim();
-    out.push({ code, name });
-  });
-  return out;
-}
-function openWlIO() {
-  document.getElementById('wlIOText').value = wlExportText();
-  document.getElementById('wlIOMsg').textContent = `目前 ${watchlist.length} 檔`;
-  document.getElementById('wlIO').classList.add('on');
-}
-function closeWlIO() { document.getElementById('wlIO').classList.remove('on'); }
-
-// ── 全部設定 匯出／匯入 ──
-// 範圍：localStorage 中 kline_ 開頭的設定（自選、名稱、K線繪圖、首頁方格、主題、面板高度…）。
-// 可重新抓取的快取（股名清單、首頁行情快取、掃描結果）不匯出，還原後會自動重建。
-const BK_SKIP = /^(kline_stocklist_v1|kline_home_cache|kline_wl_alerts|kline_wl_last)$/;
-const BK_KEY_OK = /^kline_[^\s]{1,80}$/;
-function bkCollect() {
-  const data = {};
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k || !k.startsWith('kline_') || BK_SKIP.test(k)) continue;
-      const v = localStorage.getItem(k);
-      if (v != null) data[k] = v;
-    }
-  } catch {}
-  return { app: 'kline-backup', v: 1, at: new Date().toISOString(), data };
-}
-function bkStats(data) {
-  let wl = 0, dw = 0;
-  try { const w = JSON.parse(data.kline_watchlist || '[]'); if (Array.isArray(w)) wl = w.length; } catch {}
-  Object.keys(data).forEach(k => { if (k.startsWith('kline_dw:')) dw++; });
-  return `共 ${Object.keys(data).length} 項設定（自選 ${wl} 檔、有繪圖的標的 ${dw} 檔）`;
-}
-function bkMsg(t) { const el = document.getElementById('bkMsg'); if (el) el.textContent = t; }
-function openBackup() {
-  const o = bkCollect();
-  document.getElementById('bkText').value = JSON.stringify(o);
-  bkMsg(bkStats(o.data));
-  document.getElementById('bkIO').classList.add('on');
-}
-function closeBackup() { document.getElementById('bkIO').classList.remove('on'); }
-async function bkCopy() {
-  const ta = document.getElementById('bkText');
-  try { await navigator.clipboard.writeText(ta.value); bkMsg('已複製'); }
-  catch { ta.select(); document.execCommand('copy'); bkMsg('已複製'); }
-}
-function bkDownload() {
-  const o = bkCollect(), d = new Date(), p = n => String(n).padStart(2, '0');
-  const blob = new Blob([JSON.stringify(o)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `kline-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  bkMsg('已下載備份檔；' + bkStats(o.data));
-}
-function bkLoadFile(inp) {
-  const f = inp.files && inp.files[0]; if (!f) return;
-  const r = new FileReader();
-  r.onload = () => { document.getElementById('bkText').value = String(r.result || ''); bkMsg(`已讀入「${f.name}」，確認內容後按「還原」`); inp.value = ''; };
-  r.onerror = () => bkMsg('讀檔失敗');
-  r.readAsText(f);
-}
-function bkRestore() {
-  let o;
-  try { o = JSON.parse(document.getElementById('bkText').value.trim()); } catch { bkMsg('格式錯誤：不是有效的備份內容'); return; }
-  if (!o || o.app !== 'kline-backup' || !o.data || typeof o.data !== 'object') { bkMsg('格式錯誤：這不是本頁匯出的備份'); return; }
-  const keys = Object.keys(o.data).filter(k => BK_KEY_OK.test(k) && !BK_SKIP.test(k) && typeof o.data[k] === 'string' && o.data[k].length < 2e6);
-  if (!keys.length) { bkMsg('備份裡沒有可還原的設定'); return; }
-  const sub = {}; keys.forEach(k => sub[k] = o.data[k]);
-  if (!confirm(`將還原 ${bkStats(sub)}${o.at ? '\n備份時間：' + o.at.replace('T', ' ').slice(0, 16) : ''}\n\n同名設定會被覆蓋（備份裡沒有的項目保留），完成後會重新載入頁面。確定？`)) return;
-  let fail = 0;
-  keys.forEach(k => { try { localStorage.setItem(k, sub[k]); } catch { fail++; } });
-  if (fail) { bkMsg(`有 ${fail} 項寫入失敗（瀏覽器空間不足？）`); return; }
-  bkMsg('已還原，重新載入中…');
-  setTimeout(() => location.reload(), 400);
-}
-async function wlIOCopy() {
-  const ta = document.getElementById('wlIOText'), msg = document.getElementById('wlIOMsg');
-  try { await navigator.clipboard.writeText(ta.value); msg.textContent = '已複製'; }
-  catch { ta.select(); document.execCommand('copy'); msg.textContent = '已複製'; }
-}
-function wlIOImport(mode) {
-  const list = wlParseText(document.getElementById('wlIOText').value), msg = document.getElementById('wlIOMsg');
-  if (!list.length) { msg.textContent = '沒有讀到有效代號'; return; }
-  if (mode === 'replace' && watchlist.length && !confirm(`將以這 ${list.length} 檔取代目前自選（${watchlist.length} 檔），確定？`)) return;
-  const before = watchlist.length;
-  const next = mode === 'replace' ? [] : watchlist.slice();
-  list.forEach(({ code, name }) => {
-    if (name && !nameOf(code) && code !== 'TWII') rememberName(code, name);
-    if (!next.includes(code)) next.push(code);
-  });
-  watchlist = next;
-  localStorage.setItem('kline_watchlist', JSON.stringify(watchlist));
-  renderWatchlist();
-  wlRefreshAll(); scanWatchlistAlerts(true);
-  msg.textContent = mode === 'replace' ? `已覆蓋，共 ${watchlist.length} 檔` : `已加入 ${watchlist.length - before} 檔，共 ${watchlist.length} 檔`;
-  document.getElementById('wlIOText').value = wlExportText();
 }
 function removeFromWatchlist(e, code) {
   e.stopPropagation();
@@ -6682,39 +6562,6 @@ const DL = (() => {
       if (S.sel) { select(null); return true; }
       return false;
     },
-    exportAll() {
-      const out = { format: 'kline-drawings', version: 1, exported: new Date().toISOString(), symbols: {} };
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k && k.startsWith(LS_PREFIX)) { const a = parseList(localStorage.getItem(k)); if (a.length) out.symbols[k.slice(LS_PREFIX.length)] = a; }
-      }
-      const n = Object.keys(out.symbols).length;
-      if (!n) { alert('目前沒有任何已儲存的繪圖可匯出。'); return; }
-      const blob = new Blob([JSON.stringify(out, null, 1)], { type: 'application/json' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob); a.download = 'kline-drawings-' + new Date().toISOString().slice(0, 10) + '.json';
-      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-    },
-    importFile(file) {
-      if (!file) return;
-      const rd = new FileReader();
-      rd.onload = () => {
-        let j; try { j = JSON.parse(rd.result); } catch { alert('匯入失敗：不是有效的 JSON 檔。'); return; }
-        if (!j || j.format !== 'kline-drawings' || typeof j.symbols !== 'object') { alert('匯入失敗：不是本頁匯出的繪圖檔。'); return; }
-        let added = 0, skipped = 0;
-        Object.keys(j.symbols).forEach(sym => {
-          const incoming = Array.isArray(j.symbols[sym]) ? j.symbols[sym].filter(validItem) : [];
-          const cur = sym === S.sym ? S.items.filter(i => !i.tmp) : parseList(lsGet(LS_PREFIX + sym, '[]'));
-          const ids = new Set(cur.map(i => i.id));
-          incoming.forEach(it => { if (ids.has(it.id)) skipped++; else { cur.push(it); ids.add(it.id); added++; } });
-          if (cur.length) lsSet(LS_PREFIX + sym, JSON.stringify(cur));
-          if (sym === S.sym) S.items = cur;
-        });
-        S.sel = null; refreshUI(); req();
-        alert(`匯入完成：新增 ${added} 個繪圖，略過 ${skipped} 個重複。`);
-      };
-      rd.readAsText(file);
-    },
     _state: S,
   };
   return api;
@@ -7221,7 +7068,7 @@ function setRpTab(t) {
   try { localStorage.setItem('kline_rp_tab', t); } catch {}
 }
 try { setRpTab(localStorage.getItem('kline_rp_tab') || 'watch'); } catch { setRpTab('watch'); }
-function toggleMoreMenu(e) { e && e.stopPropagation(); document.getElementById('moreMenu').classList.toggle('show'); }
+function toggleMoreMenu(e) { e && e.stopPropagation(); const m = document.getElementById('moreMenu'); m.classList.toggle('show'); if (m.classList.contains('show') && window.KSYNC && KSYNC.ui) KSYNC.ui(); }
 document.addEventListener('click', e => { const w = document.getElementById('moreWrap'); if (w && !w.contains(e.target)) document.getElementById('moreMenu').classList.remove('show'); });
 
 // ═══════════════════════════════════════
@@ -7624,49 +7471,6 @@ function wallOnTheme() { if (wall.open) wallRender(); }
   </div>
   <div class="wk-grid n4" id="wallGrid"></div>
 </div>
-<div id="bkIO" onclick="if(event.target===this)closeBackup()">
-  <div class="wio-box">
-    <div class="wio-t">備份／還原全部設定</div>
-    <div class="wio-h">包含自選清單、股票名稱、K線繪圖、首頁方格、主題與面板設定（行情與掃描快取不含，會自動重抓）。設定只存在這個瀏覽器裡，換電腦、清快取或換網址前請先備份。還原：貼上備份文字或選擇備份檔，再按「還原」。</div>
-    <div class="sync-box">
-      <div class="sync-t">☁ 雲端同步（自動，內容加密）</div>
-      <div class="wio-h" style="margin-bottom:2px">第一台裝置按「產生同步碼」並保存；其他裝置把同一串碼貼進下方欄位，按「連線」。之後畫線、改自選都會自動同步。</div>
-      <input id="syncCode" spellcheck="false" autocomplete="off" placeholder="同步碼（貼在這裡，或按產生）">
-      <div class="wio-b">
-        <button class="wl-add-btn" onclick="KSYNC.generate()">產生同步碼</button>
-        <button class="wl-add-btn" onclick="KSYNC.connect()">連線</button>
-        <button class="wl-add-btn" onclick="KSYNC.copy()">複製碼</button>
-        <button class="wl-add-btn" onclick="KSYNC.now()">立即同步</button>
-        <button class="wl-add-btn" onclick="KSYNC.stop()">停止</button>
-      </div>
-      <div class="wio-msg" id="syncMsg" style="margin-top:6px">尚未啟用</div>
-    </div>
-    <textarea id="bkText" spellcheck="false" placeholder="備份內容（JSON）"></textarea>
-    <div class="wio-b">
-      <span class="wio-msg" id="bkMsg"></span>
-      <button class="wl-add-btn" onclick="bkCopy()">複製</button>
-      <button class="wl-add-btn" onclick="bkDownload()">下載檔案</button>
-      <button class="wl-add-btn" onclick="document.getElementById('bkFile').click()">選擇檔案</button>
-      <button class="wl-add-btn" onclick="bkRestore()">還原</button>
-      <button class="wl-add-btn" onclick="closeBackup()">關閉</button>
-    </div>
-    <input type="file" id="bkFile" accept=".json,application/json,text/plain" style="display:none" onchange="bkLoadFile(this)">
-  </div>
-</div>
-<div id="wlIO" onclick="if(event.target===this)closeWlIO()">
-  <div class="wio-box">
-    <div class="wio-t">自選清單 匯出／匯入</div>
-    <div class="wio-h">一行一檔，例如「台積電2330」。匯入時只認每行最後的代號，名稱可有可無（直接貼 2330 也行）。</div>
-    <textarea id="wlIOText" spellcheck="false" placeholder="加權指數TWII&#10;台積電2330&#10;NVDA"></textarea>
-    <div class="wio-b">
-      <span class="wio-msg" id="wlIOMsg"></span>
-      <button class="wl-add-btn" onclick="wlIOCopy()">複製</button>
-      <button class="wl-add-btn" onclick="wlIOImport('merge')">加入（合併）</button>
-      <button class="wl-add-btn" onclick="wlIOImport('replace')">覆蓋</button>
-      <button class="wl-add-btn" onclick="closeWlIO()">關閉</button>
-    </div>
-  </div>
-</div>
 <script>
 /* ☁ 雲端同步（自動、端對端加密）— 同步範圍：自選、繪圖、首頁方格、主題等；不含行情 */
 (function () {
@@ -7790,7 +7594,7 @@ function wallOnTheme() { if (wall.open) wallRender(); }
     } finally { busy = false; }
   }
 
-  /* 介面（在「💾 備份」視窗裡） */
+  /* 介面（在右上角 ⋯ 設定選單的「備份」區） */
   const hhmm = () => { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
   const msg = t => { const e = $('syncMsg'); if (e) e.textContent = t; };
   const norm = t => String(t || '').replace(/[\s-]/g, '').toUpperCase();
@@ -7823,8 +7627,7 @@ function wallOnTheme() { if (wall.open) wallRender(); }
     },
     copy() { const e = $('syncCode'); if (!e || !e.value) return; try { navigator.clipboard.writeText(e.value); msg('同步碼已複製'); } catch { e.select(); document.execCommand('copy'); msg('同步碼已複製'); } },
   };
-  const ob = window.openBackup;
-  if (typeof ob === 'function') window.openBackup = function () { ob.apply(this, arguments); ui(); };
+  window.KSYNC.ui = ui;
 
   let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
