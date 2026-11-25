@@ -61,16 +61,22 @@ function cycleTheme(){applyTheme(THEMES[(THEMES.indexOf(document.documentElement
   color-scheme:light;
 }
 :root[data-theme="beige"]{
-  --bg:#eeeae1; --s1:#f7f4ed; --s2:#ede8dc; --s3:#e3ddcf; --border:#d8d1c0; --border2:#c8bfaa;
-  --gold:#a07324; --gold2:#b98a2c; --cyan:#1b7f7a; --blue:#2f5fa8; --red:#c8344a; --green:#1f8a62; --up:#c8344a; --dn:#1f8a62;
-  --text:#38332a; --muted:#8a8272; --muted2:#675f50;
-  --c-text:#554e40; --c-text2:#8a8272; --c-border:#d8d1c0; --c-grid:#e5dfd1; --c-label:#d5cdb9;
-  --c-cross:rgba(56,51,42,.55); --panel-a:rgba(247,244,237,.96); --vwap:rgba(160,115,36,.9); --pat-line:rgba(170,108,16,.95);
+  --bg:#f1eada; --s1:#faf5e9; --s2:#f0e8d5; --s3:#e6dcc4; --border:#ddd1b5; --border2:#cdbf9e;
+  --gold:#a8741a; --gold2:#c28a1f; --cyan:#1b7f7a; --blue:#2f5fa8; --red:#c8344a; --green:#1f8a62; --up:#c8344a; --dn:#1f8a62;
+  --text:#3b3224; --muted:#8c7f68; --muted2:#6b5f4a;
+  --c-text:#5a4e3a; --c-text2:#8c7f68; --c-border:#ddd1b5; --c-grid:#e9e0ca; --c-label:#d9cdb0;
+  --c-cross:rgba(59,50,36,.55); --panel-a:rgba(250,245,233,.96); --vwap:rgba(168,116,26,.9); --pat-line:rgba(176,106,10,.95);
   color-scheme:light;
 }
 :root[data-theme="light"] .ma-chip-btn[data-ma="5"],:root[data-theme="beige"] .ma-chip-btn[data-ma="5"]{color:var(--gold)!important;border-color:var(--gold)!important;}
 :root[data-theme="light"] #vwapChip,:root[data-theme="beige"] #vwapChip{color:var(--gold)!important;border-color:var(--gold)!important;}
 .ma-toggle-bar .tg-sp{flex:1;min-width:6px;}
+.rp-bar{display:none;align-items:center;gap:6px;padding:6px 16px;border-bottom:1px solid var(--border);background:var(--s1);flex-wrap:wrap;font-family:var(--mono);font-size:.72rem;color:var(--muted2);}
+.rp-bar.on{display:flex;}
+.rp-bar input[type=range]{flex:1;min-width:140px;accent-color:var(--gold);}
+.rp-bar select,.rp-bar input[type=date]{background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:3px 6px;font-size:.7rem;font-family:var(--mono);}
+.rp-bar .rp-info b{color:var(--text);font-weight:600;}
+.rp-bar .rp-note{font-size:.62rem;color:var(--muted);margin-left:auto;}
 .ma-toggle-bar .chart-tab{padding:3px 9px;border:1px solid var(--border2);border-radius:10px;font-size:.65rem;font-family:var(--mono);}
 #tfRow.htf-on ~ .ma-toggle-bar #trendToggleBtn,#tfRow.htf-on ~ .ma-toggle-bar #patternToggleBtn{display:none;}
 
@@ -993,12 +999,24 @@ body.sub-collapsed .sub-charts{display:none;}
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
         <span class="tg-sp"></span>
+        <div class="ma-chip-btn" id="rpChip" onclick="rpStart()" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-right:6px;" title="逐根播放：一根一根看走勢（先猜再看）。空白鍵播放／暫停，← → 前後一根，Esc 結束">▶ 回放</div>
         <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" title="趨勢通道：斜線趨勢線、水平支撐壓力、圖形型態（M頭／W底／頭肩／三角形）（T）" style="cursor:pointer;user-select:none;">
             通道&nbsp;<span id="trendStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
           </div>
         <div class="chart-tab" id="patternToggleBtn" onclick="togglePatterns()" style="cursor:pointer;user-select:none;" title="在K線圖上標示偵測到的K線型態（P）">
             型態&nbsp;<span id="patternStatus" style="font-size:.65rem;padding:2px 7px;border-radius:10px;background:var(--border);color:var(--muted);transition:all .2s;">OFF</span>
           </div>
+      </div>
+      <div class="rp-bar" id="rpBar">
+        <button class="wl-add-btn" id="rpPlay" onclick="rpToggle()" title="播放／暫停（空白鍵）">▶</button>
+        <button class="wl-add-btn" onclick="rpStep(-1)" title="前一根（←）">◀</button>
+        <button class="wl-add-btn" onclick="rpStep(1)" title="後一根（→）">▶|</button>
+        <select id="rpSpeed" onchange="rpSetSpeed(this.value)" title="播放速度"><option value="1000">1×</option><option value="500" selected>2×</option><option value="200">5×</option><option value="100">10×</option></select>
+        <input type="range" id="rpSlider" min="0" max="0" value="0" oninput="rpSeek(+this.value)">
+        <input type="date" id="rpDate" onchange="rpJumpDate(this.value)" title="跳到指定日期">
+        <span class="rp-info" id="rpInfo"></span>
+        <button class="wl-add-btn" onclick="rpStop(true)" title="結束並同步右側分析（Esc）">結束</button>
+        <span class="rp-note">播放中右側分析暫停更新，結束後同步到當根</span>
       </div>
       <div class="chart-block" id="chartBlock">
         <div class="draw-bar" id="drawBar">
@@ -3058,6 +3076,7 @@ async function fetchFutureTW(stockId, token, asOf) {
 //  MAIN ANALYZE
 // ═══════════════════════════════════════
 async function analyze() {
+  if (rp.on) rpStop(false);   // 播放中換股／重新分析：先結束播放
   let rawInput = normInput(document.getElementById('stockInput').value).trim();
   if (!rawInput) { setStatus('請輸入股票代號或股名','error'); return; }
   const rid = resolveStockInput(rawInput);
@@ -4899,7 +4918,7 @@ function renderCurrentPatterns(cp){
   }).join('');
   return `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
     <div style="font-size:.82rem;font-weight:700;color:var(--gold);margin-bottom:2px;">💡 目前可能的K線型態（日／週／月）</div>${rows}
-    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">列出最新及前2根K棒出現的型態（含長紅黑、跳空、突破20K高低點）；週K、月K最新一根尚未收定，之後可能改變。M頭／頭肩頂／頭肩底的目標括號＝台股約450檔、10年回測「先到該目標、後碰停損（右峰／右肩／右谷）」的比例，是目標價參考而不是進場訊號；空方形態建議當持股警示。W底回測無額外優勢。</div></div>`;
+  </div>`;
 }
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
@@ -4916,7 +4935,7 @@ function renderPatternStats(cp){
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${baseRow}${litRows}</table>${litRows?'':'<div style="font-size:.72rem;color:var(--muted);padding:4px 6px;">目前日／週／月K沒有出現列表中的型態</div>'}${otherL.length?`<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:.72rem;color:var(--muted2);padding:3px 0;">其他型態的歷史表現（${otherL.length}）</summary><table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${otherL.map(rowOf).join('')}</table></details>`:''}
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡＝目前日／週／月K正在出現的型態，其餘型態收在下方摺疊區。較基準＝勝率減去基準（多方型態比基準上漲機率、空方型態比基準下跌機率）；較基準數字顏色：黃＝勝率明顯高於基準（差距超過約2倍隨機誤差）、藍＝明顯低於基準、灰＝差距在隨機誤差內。勝率＝多方型態後第5根收盤高於型態當根、空方型態後第5根收盤低於型態當根的比例；平均報酬已依方向換算（正數＝型態方向有賺）；趨勢線 強／弱勝率＝型態出現在壓力／支撐（或剛突破／跌破趨勢線）附近 vs. 其他位置的方向勝率，括號為次數；強明顯高於弱才代表濾網有用。20根勝率＝同樣算法改看第20根收盤（圖形型態的量度目標通常需要更久）。放量／量縮＝突破當根量 ≥ 前20根均量1.3倍（旗形另需旗面量縮）；失敗率＝突破後10根內收盤回到被突破邊界另一側的比例。次數少的型態參考價值低，未計手續費與滑價。</div></div>`;
+  </div>`;
 }
 
 // ═══════════════════════════════════════
@@ -6264,6 +6283,12 @@ const DL = (() => {
 // ═══════════════════════════════════════
 document.addEventListener('keydown', e => {
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  if (rp.on && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key === ' ') { e.preventDefault(); rpToggle(); return; }
+    if (e.key === 'ArrowRight') { e.preventDefault(); rpStep(1); return; }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); rpStep(-1); return; }
+    if (e.key === 'Escape') { rpStop(true); return; }
+  }
   switch(e.key){
     case '1': document.querySelectorAll('.pt:not(.tf)')[0]?.click(); break;
     case '2': document.querySelectorAll('.pt:not(.tf)')[1]?.click(); break;
@@ -6630,8 +6655,90 @@ setInterval(() => {
 }, 2000);
 window.addEventListener('resize', () => { if (intradayMode) idLayout(); });
 
+
+// ═══════════════════════════════════════
+//  逐根播放：只重畫圖表（不重跑籌碼／財報／分數），結束時才同步右側分析
+// ═══════════════════════════════════════
+const rp = { on: false, playing: false, full: [], idx: 0, timer: null, speed: 500, raf: 0 };
+function rpStart() {
+  if (rp.on) { rpStop(true); return; }
+  if (!priceData.length) { setStatus('請先載入個股，再開始逐根播放', 'error'); return; }
+  if (isHTF() || intradayMode) { setStatus('逐根播放請先切到日K／週K／月K', 'error'); return; }
+  if (rtTimer) stopRealtime();
+  const last = priceData[priceData.length - 1].date;
+  rp.full = priceData.concat(futureBars.filter(b => b.date > last));
+  if (rp.full.length < 40) { setStatus('資料太少，無法逐根播放', 'error'); return; }
+  const hasBt = !!document.getElementById('dateTo').value;
+  rp.idx = hasBt ? priceData.length - 1 : Math.max(30, rp.full.length - 1 - 250);   // 已在回測模式就從該日開始，否則從約一年前開始
+  rp.on = true; rp.playing = false; rp.speed = +document.getElementById('rpSpeed').value;
+  const sl = document.getElementById('rpSlider'); sl.min = 30; sl.max = rp.full.length - 1;
+  const dt = document.getElementById('rpDate'); dt.min = rp.full[30].date; dt.max = rp.full[rp.full.length - 1].date;
+  document.getElementById('rpBar').classList.add('on');
+  document.getElementById('rpChip').textContent = '■ 結束回放';
+  rpRender();
+}
+function rpRender() {
+  if (!rp.on) return;
+  priceData = rp.full.slice(0, rp.idx + 1); futureBars = [];
+  try { buildCharts(vd().slice(-currentPeriod), false); } catch (e) { console.warn('[回放]', e); }
+  try { renderMeta(currentStockId, (document.querySelector('#metaBar .stock-name-tag') || {}).textContent || '', currentMarket); } catch (e) {}   // 上方報價列跟著當根走，不洩漏之後的價格
+  rpHud();
+}
+function rpHud() {
+  const b = rp.full[rp.idx], pv = rp.full[rp.idx - 1];
+  const chg = pv ? (b.close / pv.close - 1) * 100 : 0, col = chg > 0 ? 'var(--up)' : chg < 0 ? 'var(--dn)' : 'var(--muted2)';
+  document.getElementById('rpSlider').value = rp.idx;
+  document.getElementById('rpDate').value = b.date;
+  document.getElementById('rpInfo').innerHTML = `<b>${b.date}</b>　收 <b>${b.close.toFixed(2)}</b> <span style="color:${col}">${chg > 0 ? '▲' : chg < 0 ? '▼' : ''}${Math.abs(chg).toFixed(2)}%</span>　${rp.idx + 1}/${rp.full.length}`;
+  document.getElementById('rpPlay').textContent = rp.playing ? '❚❚' : '▶';
+}
+function rpStep(d) {
+  if (!rp.on) return;
+  rpPause();
+  const n = Math.max(30, Math.min(rp.full.length - 1, rp.idx + d));
+  if (n === rp.idx) return;
+  rp.idx = n; rpRender();
+}
+function rpToggle() {
+  if (!rp.on) return;
+  if (rp.playing) { rpPause(); return; }
+  if (rp.idx >= rp.full.length - 1) { setStatus('已經播到最新一根', 'error'); return; }
+  rp.playing = true; rpHud(); rpLoop();
+}
+function rpLoop() {
+  clearTimeout(rp.timer);
+  if (!rp.on || !rp.playing) return;
+  rp.timer = setTimeout(() => {
+    if (!rp.on || !rp.playing) return;
+    if (rp.idx >= rp.full.length - 1) { rpPause(); return; }
+    rp.idx++; rpRender(); rpLoop();
+  }, rp.speed);
+}
+function rpPause() { rp.playing = false; clearTimeout(rp.timer); if (rp.on) rpHud(); }
+function rpSetSpeed(v) { rp.speed = +v; if (rp.playing) rpLoop(); }
+function rpSeek(i) {
+  if (!rp.on) return;
+  rpPause(); rp.idx = Math.max(30, Math.min(rp.full.length - 1, i));
+  cancelAnimationFrame(rp.raf); rp.raf = requestAnimationFrame(rpRender);
+}
+function rpJumpDate(d) {
+  if (!rp.on || !d) return;
+  let k = 30; for (let i = rp.full.length - 1; i >= 30; i--) { if (rp.full[i].date <= d) { k = i; break; } }
+  rpSeek(k);
+}
+function rpStop(sync) {
+  const wasOn = rp.on, idx = rp.idx, full = rp.full;
+  rpPause(); rp.on = false; rp.full = [];
+  document.getElementById('rpBar').classList.remove('on');
+  document.getElementById('rpChip').textContent = '▶ 回放';
+  if (!wasOn || !sync) return;
+  const atEnd = idx >= full.length - 1;
+  document.getElementById('dateTo').value = atEnd ? '' : full[idx].date;   // 同步成回測模式：右側分析與「之後走勢」都對應到這一根
+  analyze();
+}
+
 window.__onTheme = function () {
-  try { if (typeof priceData !== 'undefined' && priceData.length && !document.getElementById('splash').offsetParent) redraw(true); } catch (e) { console.warn(e); }
+  try { if (rp.on) rpRender(); else if (typeof priceData !== 'undefined' && priceData.length && !document.getElementById('splash').offsetParent) redraw(true); } catch (e) { console.warn(e); }
   try { if (typeof intradayMode !== 'undefined' && intradayMode && idChartObj) idChartObj.applyOptions({ layout: { textColor: cssv('--c-text') }, grid: { vertLines: { color: cssv('--c-grid') }, horzLines: { color: cssv('--c-grid') } }, rightPriceScale: { borderColor: cssv('--c-border') }, timeScale: { borderColor: cssv('--c-border') } }); } catch (e) {}
   try { hsRender(); } catch (e) {}
 };
