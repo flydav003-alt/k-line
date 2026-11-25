@@ -556,6 +556,33 @@ body.no-stock #splash{justify-content:flex-start;align-items:stretch;}
 .hs-edit textarea{width:100%;font-family:var(--mono);line-height:1.6;resize:vertical;}
 .hs-msg{font-size:.68rem;color:var(--muted);margin-left:auto;}
 @media(max-width:700px){.hs-grid{grid-template-columns:repeat(2,1fr);}}
+/* 今日待處理 */
+#todoBox{width:100%;max-width:920px;margin:18px auto 0;color:var(--text);}
+#todoBox .td-sub{font-size:.68rem;color:var(--muted);font-family:var(--mono);}
+.td-list{background:var(--s1);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.td-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;}
+.td-row:last-child{border-bottom:none;}
+.td-row:hover{background:var(--s2);}
+.td-nm{flex:none;min-width:96px;font-size:.8rem;font-weight:600;white-space:nowrap;}
+.td-nm small{font-family:var(--mono);font-size:.62rem;color:var(--muted);font-weight:400;margin-left:5px;}
+.td-px{flex:none;min-width:84px;text-align:right;font-family:var(--mono);font-size:.76rem;white-space:nowrap;}
+.td-tags{display:flex;flex-wrap:wrap;gap:5px;min-width:0;}
+.td-tag{font-size:.64rem;padding:2px 7px;border-radius:10px;border:1px solid var(--border2,var(--border));color:var(--muted2);white-space:nowrap;}
+.td-tag.bear{color:#ff9f40;border-color:rgba(255,159,64,.55);background:rgba(255,159,64,.08);}
+.td-tag.warn{color:var(--gold);border-color:rgba(232,184,75,.55);background:rgba(232,184,75,.08);}
+.td-tag.dn{color:var(--green);border-color:rgba(0,200,150,.5);background:rgba(0,200,150,.08);}
+.td-tag.up{color:var(--up);border-color:rgba(255,77,109,.5);background:rgba(255,77,109,.08);}
+.td-empty{padding:14px 12px;font-size:.74rem;color:var(--muted);}
+@media(max-width:700px){.td-row{flex-wrap:wrap;gap:4px 10px;}.td-nm{min-width:0;}}
+/* 設定備份 */
+#bkIO{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;}
+#bkIO.on{display:flex;}
+#bkIO .wio-box{width:min(480px,100%);background:var(--s1);border:1px solid var(--border2);border-radius:12px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);}
+#bkIO .wio-t{font-weight:700;color:var(--gold);margin-bottom:4px;}
+#bkIO .wio-h{font-size:.7rem;color:var(--muted);margin-bottom:8px;line-height:1.5;}
+#bkIO textarea{width:100%;height:200px;resize:vertical;box-sizing:border-box;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-family:var(--mono);font-size:.7rem;line-height:1.5;}
+#bkIO .wio-b{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;justify-content:flex-end;align-items:center;}
+#bkIO .wio-msg{font-size:.7rem;color:var(--muted);margin-right:auto;}
 #splash p{font-size:.85rem;line-height:1.8;text-align:center;max-width:480px;}
 .splash-feat{
   display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px;
@@ -947,7 +974,7 @@ body.sub-collapsed .sub-charts{display:none;}
   <div id="homeStrip">
     <div class="hs-head">
       <span class="hs-title">市場總覽</span><span class="hs-time" id="hsTime"></span>
-      <span class="hs-btns"><button class="wl-add-btn" onclick="hsRefresh(true)" title="更新行情">⟳</button><button class="wl-add-btn" id="hsEditBtn" onclick="hsToggleEdit()">編輯</button></span>
+      <span class="hs-btns"><button class="wl-add-btn" onclick="hsRefresh(true)" title="更新行情">⟳</button><button class="wl-add-btn" onclick="openBackup()" title="匯出／匯入全部設定（自選、繪圖、首頁方格、主題…）">💾 備份</button><button class="wl-add-btn" id="hsEditBtn" onclick="hsToggleEdit()">編輯</button></span>
     </div>
     <div class="hs-grid" id="hsGrid"></div>
     <div class="hs-edit" id="hsEdit" style="display:none">
@@ -964,6 +991,13 @@ body.sub-collapsed .sub-charts{display:none;}
         <span class="hs-msg" id="hsMsg">拖曳方格可排序，✕ 移除，最多 12 格</span>
       </div>
     </div>
+  </div>
+  <div id="todoBox">
+    <div class="hs-head">
+      <span class="hs-title">今日待處理</span><span class="td-sub" id="todoSub"></span>
+      <span class="hs-btns"><button class="wl-add-btn" onclick="todoRescan()" title="重新掃描自選（爆量／跌破MA20／空方形態／接近停損）">⟳</button></span>
+    </div>
+    <div class="td-list" id="todoList"><div class="td-empty">載入中…</div></div>
   </div>
 </div>
 
@@ -998,6 +1032,7 @@ body.sub-collapsed .sub-charts{display:none;}
         <div class="ma-chip-btn" id="vwapChip" data-off="0" style="background:rgba(255,200,50,.12);border-color:rgba(255,200,50,.6);color:rgba(255,200,50,.9);margin-left:4px;" onclick="toggleVWAP()" title="VWAP：由目前顯示區間第一根K棒起算的成交量加權均價（點擊開關）">VWAP</div>
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
+        <div class="ma-chip-btn" id="rsChip" data-off="0" style="background:rgba(34,211,238,.12);border-color:#22d3ee;color:#22d3ee;margin-left:2px;" onclick="toggleRS()" title="相對強弱線：個股÷大盤（台股＝加權、美股＝S&P500），疊在RSI圖，區間起點＝100；指數／匯率／期貨／加密貨幣不適用">RS</div>
         <span class="tg-sp"></span>
         <div class="ma-chip-btn" id="rpChip" onclick="rpStart()" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-right:6px;" title="逐根播放：一根一根看走勢（先猜再看）。空白鍵播放／暫停，← → 前後一根，Esc 結束">▶ 回放</div>
         <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" title="趨勢通道：斜線趨勢線、水平支撐壓力、圖形型態（M頭／W底／頭肩／三角形）（T）" style="cursor:pointer;user-select:none;">
@@ -1058,6 +1093,7 @@ body.sub-collapsed .sub-charts{display:none;}
             <span id="rsiValLabel" style="color:#a78bfa;font-size:.65rem;margin-left:4px;"></span>
             <span class="cl-item" id="kdLabelItem" style="display:none"><span class="cl-dot" style="background:#ff9f40"></span><span>K</span></span>
             <span class="cl-item" id="kdDLabelItem" style="display:none"><span class="cl-dot" style="background:#e8b84b"></span><span>D</span></span>
+            <span class="cl-item" id="rsLabelItem" style="display:none"><span class="cl-dot" style="background:#22d3ee"></span><span id="rsLabelTxt">RS</span></span>
           </div>
           <div id="rsiChart"></div>
         </div>
@@ -1092,7 +1128,7 @@ body.sub-collapsed .sub-charts{display:none;}
       <div class="rp-pane on" id="rpWatch">
         <div class="wl-head">
           <span id="wlAlertSum" style="font-size:.68rem;color:#ff9f40;font-weight:600;"></span>
-          <span style="display:flex;gap:6px;"><button class="wl-add-btn" onclick="wlRefreshAll()" title="更新自選報價">⟳</button><button class="wl-add-btn" onclick="openWlIO()" title="匯出／匯入自選（純文字）">⇅ 匯出入</button><button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入目前代號</button></span>
+          <span style="display:flex;gap:6px;"><button class="wl-add-btn" onclick="wlRefreshAll()" title="更新自選報價">⟳</button><button class="wl-add-btn" onclick="openWlIO()" title="匯出／匯入自選（純文字）">⇅ 匯出入</button><button class="wl-add-btn" onclick="openBackup()" title="匯出／匯入全部設定（自選、繪圖、首頁方格、主題…）">💾 備份</button><button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入目前代號</button></span>
         </div>
         <div id="wlItems"><span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（輸入代號後按「＋ 加入目前代號」，列可拖曳排序）</span></div>
         <div id="recentBar" class="recent-bar" style="display:none;">
@@ -1493,6 +1529,9 @@ let vwapSeries = null;
 let showPatterns = false;   // K線型態標記，預設關閉
 let _markerArgs = null;
 let kdVisible = true;
+let rsVisible = (() => { try { return localStorage.getItem('kline_rs_on') !== '0'; } catch { return true; } })();
+let rsSeries = null;
+const benchMem = {};   // 大盤日K記憶體快取：sym -> { t, bars }
 let maVisibility = { 5:false, 10:false, 20:true, 60:true, 120:false, 240:false };
 let wlQuotes = {};      // 追蹤清單報價：id -> { price, chg }
 let wlDate   = '';      // MIS 回傳的交易日，用來判斷休市日就不必輪詢
@@ -1738,6 +1777,82 @@ function toggleKDline() {
   if(dlEl) dlEl.style.display = kdVisible ? 'flex' : 'none';
 }
 
+// ── 相對強弱線（RS）──
+// 個股收盤 ÷ 大盤收盤（台股＝加權指數，美股＝S&P 500），以目前顯示區間第一根為 100，疊在 RSI 副圖（獨立刻度、無軸）。
+// 線在 100 之上＝這段期間跑贏大盤，之下＝落後；標籤顯示區間相對報酬 = (1+個股報酬)/(1+大盤報酬)−1。
+// 指數、匯率、期貨、加密貨幣沒有合適的比較基準，不顯示。純事實，不是買賣訊號。
+function rsBench() {
+  const id = currentStockId;
+  if (!id || isHTF()) return null;
+  if (currentMarket === 'TW') return id === 'TWII' ? null : { sym: '^TWII', name: '加權' };
+  if (isCrypto(id) || isYahooSym(id)) return null;
+  return { sym: '^GSPC', name: 'S&P500' };
+}
+async function rsFetchBench(sym) {
+  const m = benchMem[sym];
+  if (m && Date.now() - m.t < 6 * 3600 * 1000) return m.bars;
+  let bars = [];
+  for (const node of ['query1', 'query2']) {
+    try {
+      const d = await tryYahooUrl(`https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=10y&includePrePost=false`);
+      if (d && d.length > 20) { bars = cleanBars(d); break; }
+    } catch {}
+  }
+  if (bars.length) benchMem[sym] = { t: Date.now(), bars };
+  return bars;
+}
+// 對齊：每根K棒取「日期 ≤ 該根」最近一根大盤收盤（週／月K、兩邊休市日不同時沿用前值；落差超過 7 天就略過），只看不超過該根的日期，無前視
+function rsCompute(data, bench) {
+  const out = []; let j = -1, base = null;
+  for (const d of data) {
+    while (j + 1 < bench.length && bench[j + 1].date <= d.date) j++;
+    if (j < 0) continue;
+    const b = bench[j];
+    if ((Date.parse(d.date) - Date.parse(b.date)) / 864e5 > 7) continue;
+    const ratio = d.close / b.close;
+    if (!Number.isFinite(ratio) || ratio <= 0) continue;
+    if (base == null) base = ratio;
+    out.push({ time: d.date, value: ratio / base * 100 });
+  }
+  return out;
+}
+function rsUpdateUI(bn) {
+  const chip = document.getElementById('rsChip'), item = document.getElementById('rsLabelItem');
+  if (chip) { chip.dataset.off = (bn && rsVisible) ? '0' : '1'; chip.style.opacity = bn ? '' : '.4'; }
+  if (item) item.style.display = (bn && rsVisible) ? 'flex' : 'none';
+}
+function rsSetup(data) {
+  rsSeries = null;
+  const bn = rsBench();
+  rsUpdateUI(bn);
+  if (!bn || !rsiChart || !data.length) return;
+  const txt = document.getElementById('rsLabelTxt');
+  if (txt) { txt.textContent = `RS 相對${bn.name} …`; txt.style.color = ''; }
+  rsSeries = rsiChart.addLineSeries({ color: '#22d3ee', lineWidth: 1.5, priceScaleId: 'rs', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: rsVisible });
+  try { rsiChart.priceScale('rs').applyOptions({ scaleMargins: { top: .12, bottom: .12 } }); } catch {}
+  try { rsSeries.createPriceLine({ price: 100, color: 'rgba(34,211,238,.4)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false, title: '' }); } catch {}
+  const myChart = rsiChart, mySeries = rsSeries;
+  rsFetchBench(bn.sym).then(bars => {
+    if (rsiChart !== myChart || rsSeries !== mySeries) return;   // 已換股／重畫，丟棄過期結果
+    if (!bars.length) { if (txt) txt.textContent = `RS（${bn.name}資料取不到）`; return; }
+    const pts = rsCompute(data, bars);
+    if (pts.length < 2) { if (txt) txt.textContent = 'RS（區間資料不足）'; return; }
+    mySeries.setData(pts);
+    const rel = pts[pts.length - 1].value / 100 - 1;
+    if (txt) {
+      txt.textContent = `RS 相對${bn.name} ${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%`;
+      txt.style.color = rel > 0 ? 'var(--up)' : rel < 0 ? 'var(--green)' : '';
+      txt.title = `個股 ÷ ${bn.name}，區間起點＝100；在 100 之上＝這段期間比大盤強，之下＝落後。資料日 ${pts[pts.length - 1].time}`;
+    }
+  }).catch(() => { if (txt && rsSeries === mySeries) txt.textContent = 'RS（載入失敗）'; });
+}
+function toggleRS() {
+  rsVisible = !rsVisible;
+  try { localStorage.setItem('kline_rs_on', rsVisible ? '1' : '0'); } catch {}
+  if (rsSeries) try { rsSeries.applyOptions({ visible: rsVisible }); } catch {}
+  rsUpdateUI(rsBench());
+}
+
 // ── RECENT HISTORY ──
 function addToRecent(stockId) {
   recentHistory = recentHistory.filter(x => x !== stockId);
@@ -1772,7 +1887,7 @@ let wlAlerts = {};   // code -> { d:最後一根K棒日期, list:[警示], close
 try { wlAlerts = JSON.parse(localStorage.getItem('kline_wl_alerts') || '{}') || {}; } catch { wlAlerts = {}; }
 let wlLast = {};   // code -> {close, prev, d}：最近一次掃描到的收盤價，沒有即時報價時顯示（美股／加密也適用）
 try { wlLast = JSON.parse(localStorage.getItem('kline_wl_last') || '{}') || {}; } catch { wlLast = {}; }
-let wlScanBusy = false, wlScanAt = 0;
+let wlScanBusy = false, wlScanAt = 0, wlScanProg = { i: 0, n: 0, fail: 0 };
 function scanBearAlerts(bars) {
   const a = bars.slice(-600), n = a.length;
   if (n < 120) return null;
@@ -1797,22 +1912,31 @@ function scanBearAlerts(bars) {
   const close = a[n - 1].close; let hiC = -Infinity;
   for (let j = Math.max(0, n - 22); j < n; j++) if (a[j].close > hiC) hiC = a[j].close;
   const atrStop = hiC - 3 * (atr[n - 1] || 0);                    // 多單 3×ATR 移動停損（近 22 日最高收盤往下 3 倍 ATR）
-  return { d: a[n - 1].date, list, close, atrStop, atrDist: atrStop > 0 ? close / atrStop - 1 : null };
+  // 「今日待處理」用：最後一根的量比（對前 20 日均量，不含當根）與 MA20 跌破（最近 3 根內由上往下穿越且仍在 MA20 下方）
+  let vr = null;
+  { let s = 0, c = 0; for (let j = n - 21; j < n - 1; j++) { const v = a[j].Trading_Volume || 0; if (v > 0) { s += v; c++; } }
+    const lv = a[n - 1].Trading_Volume || 0; if (c >= 15 && lv > 0) vr = lv / (s / c); }
+  const m20 = ma(a, 20); let brk = null;
+  if (m20[n - 1] != null && a[n - 1].close < m20[n - 1]) {
+    for (let k = 0; k < 3; k++) { const i = n - 1 - k; if (i >= 1 && m20[i] != null && m20[i - 1] != null && a[i].close < m20[i] && a[i - 1].close >= m20[i - 1]) { brk = k; break; } }
+  }
+  return { d: a[n - 1].date, list, close, atrStop, atrDist: atrStop > 0 ? close / atrStop - 1 : null, vr, up: a[n - 1].close >= a[n - 1].open, brk, ma20: m20[n - 1] };
 }
 async function scanWatchlistAlerts(force) {
   if (wlScanBusy) return;
   if (!force && wlScanAt && Date.now() - wlScanAt < 30 * 60 * 1000) return;
   const codes = watchlist.slice(0, 30);
   if (!codes.length) return;
-  wlScanBusy = true; wlScanAt = Date.now();
+  wlScanBusy = true; wlScanAt = Date.now(); wlScanProg = { i: 0, n: codes.length, fail: 0 };
   const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
   try {
     for (const code of codes) {
+      wlScanProg.i++;
       let bars = null;
       try {
         if (isCrypto(code) || isYahooSym(code) || !/^\d/.test(code)) bars = cleanBars(await fetchUSPrice(code));
         else { try { bars = cleanBars(await fetchPrice(code, token)); } catch { bars = cleanBars(await fetchYahooPrice(code)); } }
-      } catch (e) { console.warn('[追蹤清單警示]', code, e.message); continue; }   // 抓不到就保留舊結果，不誤報
+      } catch (e) { console.warn('[追蹤清單警示]', code, e.message); wlScanProg.fail++; if (!_wlDragCode) renderWatchlist(); continue; }   // 抓不到就保留舊結果，不誤報
       if (bars && bars.length > 1) { const b1 = bars[bars.length - 1], b0 = bars[bars.length - 2]; wlLast[code] = { close: b1.close, prev: b0.close, d: b1.date }; }
       const r = bars && bars.length ? scanBearAlerts(bars) : null;
       if (r) wlAlerts[code] = r;
@@ -1840,6 +1964,69 @@ function renderWlAlertSum() {
   el.textContent = n ? `⚠ ${n} 檔出現空方形態` : '';
   const tb = document.getElementById('wlTabBadge'); if (tb) { tb.textContent = n || ''; tb.style.display = n ? '' : 'none'; }
 }
+// ── 首頁「今日待處理」：把自選掃描結果整理成一行一檔（爆量／跌破MA20／空方形態／接近停損）──
+// 純事實整理，不是買賣訊號；資料全部來自上面的自選掃描（日K收盤後的最後一根）。
+const TODO_VOL_X = 2;        // 量比 ≥ 此值視為爆量（對前 20 日均量，與個股頁「🔥爆量」同門檻）
+const TODO_STOP_NEAR = 0.03; // 距 3×ATR 移動停損 ≤ 現價 3% 視為接近
+function todoItems() {
+  const out = [];
+  watchlist.forEach((code, idx) => {
+    const r = wlAlerts[code];
+    if (!r || r.vr === undefined) return;   // 舊版掃描結果沒有量比／MA20 欄位，等重掃後才會出現
+    const tags = []; let score = 0;
+    if (r.list && r.list.length) {
+      const x = r.list[0];
+      tags.push({ c: 'bear', t: `⚠${x.name}${x.status === 'reached' ? '·已達' + x.farR : ''}`, tip: `突破日 ${x.date}（${x.ago} 根前）` });
+      score += 3;
+    }
+    if (r.atrDist != null && r.atrStop > 0) {
+      const dist = r.atrDist / (1 + r.atrDist);   // 現價距停損線（占現價 %）
+      if (r.atrDist < 0) { tags.push({ c: 'warn', t: '已跌破 3×ATR 停損線', tip: `停損線 ${r.atrStop.toFixed(2)}` }); score += 4; }
+      else if (dist <= TODO_STOP_NEAR) { tags.push({ c: 'warn', t: `距停損線 ${(dist * 100).toFixed(1)}%`, tip: `3×ATR 停損線 ${r.atrStop.toFixed(2)}` }); score += 2; }
+    }
+    if (r.brk != null) {
+      tags.push({ c: 'dn', t: r.brk === 0 ? '跌破 MA20' : `跌破 MA20（${r.brk} 根前）`, tip: `MA20 ${r.ma20 != null ? r.ma20.toFixed(2) : ''}` });
+      score += 2;
+    }
+    if (r.vr != null && r.vr >= TODO_VOL_X) {
+      tags.push({ c: r.up ? 'up' : 'dn', t: `爆量×${r.vr.toFixed(1)}${r.up ? ' 紅K' : ' 黑K'}`, tip: '最後一根量 ÷ 前 20 日均量' });
+      score += r.up ? 1 : 2;
+    }
+    if (tags.length) out.push({ code, r, tags, score, idx });
+  });
+  out.sort((a, b) => b.score - a.score || a.idx - b.idx);
+  return out;
+}
+function renderTodo() {
+  const box = document.getElementById('todoList'); if (!box) return;
+  const sub = document.getElementById('todoSub');
+  try {
+    if (!watchlist.length) { box.innerHTML = '<div class="td-empty">自選清單是空的。加入幾檔之後，這裡會自動列出爆量、跌破 MA20、空方形態、接近停損線的標的。</div>'; if (sub) sub.textContent = ''; return; }
+    const items = todoItems();
+    const have = watchlist.filter(c => wlAlerts[c] && wlAlerts[c].vr !== undefined);
+    const maxD = have.reduce((m, c) => wlAlerts[c].d > m ? wlAlerts[c].d : m, '');
+    const stale = have.filter(c => wlAlerts[c].d < maxD).length;
+    const missing = Math.min(watchlist.length, 30) - have.length;
+    let s = wlScanBusy ? `掃描中 ${wlScanProg.i}/${wlScanProg.n}` : '';
+    if (maxD) s += (s ? '｜' : '') + `資料日 ${maxD}`;
+    if (!wlScanBusy && stale) s += `｜${stale} 檔資料較舊`;
+    if (!wlScanBusy && missing > 0 && have.length) s += `｜${missing} 檔未掃到`;
+    if (sub) sub.textContent = s;
+    if (!items.length) {
+      box.innerHTML = `<div class="td-empty">${wlScanBusy || !have.length ? (wlScanBusy ? '掃描自選中，請稍候…' : '尚無掃描結果，按右上 ⟳ 重新掃描。') : `目前自選 ${have.length} 檔都沒有觸發項目 ✓`}</div>`;
+      return;
+    }
+    box.innerHTML = items.map(({ code, r, tags }) => {
+      const nm = nameOf(code);
+      return `<div class="td-row" onclick="loadFromWatchlist('${escHtml(code)}')" title="點擊開圖（資料日 ${escHtml(r.d)}）">
+        <span class="td-nm">${escHtml(nm || code)}${nm ? `<small>${escHtml(code)}</small>` : ''}</span>
+        <span class="td-px">${Number.isFinite(r.close) ? r.close.toFixed(2) : ''}</span>
+        <span class="td-tags">${tags.map(t => `<span class="td-tag ${t.c}" title="${escHtml(t.tip || '')}">${escHtml(t.t)}</span>`).join('')}</span>
+      </div>`;
+    }).join('');
+  } catch (e) { console.warn('[今日待處理]', e); }
+}
+function todoRescan() { scanWatchlistAlerts(true); renderTodo(); }
 function renderWatchlist() {
   const items = document.getElementById('wlItems');
   if (!items) return;
@@ -1856,6 +2043,7 @@ function renderWatchlist() {
   }).join('') : '<span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（輸入代號後按「＋ 加入目前代號」，列可拖曳排序）</span>';
   initWatchlistDrag();
   renderWlAlertSum();
+  renderTodo();
 }
 
 // ── 追蹤清單拖曳排序（滑鼠拖拉調整順序）──
@@ -1957,6 +2145,74 @@ function openWlIO() {
   document.getElementById('wlIO').classList.add('on');
 }
 function closeWlIO() { document.getElementById('wlIO').classList.remove('on'); }
+
+// ── 全部設定 匯出／匯入 ──
+// 範圍：localStorage 中 kline_ 開頭的設定（自選、名稱、K線繪圖、首頁方格、主題、面板高度…）。
+// 可重新抓取的快取（股名清單、首頁行情快取、掃描結果）不匯出，還原後會自動重建。
+const BK_SKIP = /^(kline_stocklist_v1|kline_home_cache|kline_wl_alerts|kline_wl_last)$/;
+const BK_KEY_OK = /^kline_[^\s]{1,80}$/;
+function bkCollect() {
+  const data = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith('kline_') || BK_SKIP.test(k)) continue;
+      const v = localStorage.getItem(k);
+      if (v != null) data[k] = v;
+    }
+  } catch {}
+  return { app: 'kline-backup', v: 1, at: new Date().toISOString(), data };
+}
+function bkStats(data) {
+  let wl = 0, dw = 0;
+  try { const w = JSON.parse(data.kline_watchlist || '[]'); if (Array.isArray(w)) wl = w.length; } catch {}
+  Object.keys(data).forEach(k => { if (k.startsWith('kline_dw:')) dw++; });
+  return `共 ${Object.keys(data).length} 項設定（自選 ${wl} 檔、有繪圖的標的 ${dw} 檔）`;
+}
+function bkMsg(t) { const el = document.getElementById('bkMsg'); if (el) el.textContent = t; }
+function openBackup() {
+  const o = bkCollect();
+  document.getElementById('bkText').value = JSON.stringify(o);
+  bkMsg(bkStats(o.data));
+  document.getElementById('bkIO').classList.add('on');
+}
+function closeBackup() { document.getElementById('bkIO').classList.remove('on'); }
+async function bkCopy() {
+  const ta = document.getElementById('bkText');
+  try { await navigator.clipboard.writeText(ta.value); bkMsg('已複製'); }
+  catch { ta.select(); document.execCommand('copy'); bkMsg('已複製'); }
+}
+function bkDownload() {
+  const o = bkCollect(), d = new Date(), p = n => String(n).padStart(2, '0');
+  const blob = new Blob([JSON.stringify(o)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `kline-backup-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  bkMsg('已下載備份檔；' + bkStats(o.data));
+}
+function bkLoadFile(inp) {
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { document.getElementById('bkText').value = String(r.result || ''); bkMsg(`已讀入「${f.name}」，確認內容後按「還原」`); inp.value = ''; };
+  r.onerror = () => bkMsg('讀檔失敗');
+  r.readAsText(f);
+}
+function bkRestore() {
+  let o;
+  try { o = JSON.parse(document.getElementById('bkText').value.trim()); } catch { bkMsg('格式錯誤：不是有效的備份內容'); return; }
+  if (!o || o.app !== 'kline-backup' || !o.data || typeof o.data !== 'object') { bkMsg('格式錯誤：這不是本頁匯出的備份'); return; }
+  const keys = Object.keys(o.data).filter(k => BK_KEY_OK.test(k) && !BK_SKIP.test(k) && typeof o.data[k] === 'string' && o.data[k].length < 2e6);
+  if (!keys.length) { bkMsg('備份裡沒有可還原的設定'); return; }
+  const sub = {}; keys.forEach(k => sub[k] = o.data[k]);
+  if (!confirm(`將還原 ${bkStats(sub)}${o.at ? '\n備份時間：' + o.at.replace('T', ' ').slice(0, 16) : ''}\n\n同名設定會被覆蓋（備份裡沒有的項目保留），完成後會重新載入頁面。確定？`)) return;
+  let fail = 0;
+  keys.forEach(k => { try { localStorage.setItem(k, sub[k]); } catch { fail++; } });
+  if (fail) { bkMsg(`有 ${fail} 項寫入失敗（瀏覽器空間不足？）`); return; }
+  bkMsg('已還原，重新載入中…');
+  setTimeout(() => location.reload(), 400);
+}
 async function wlIOCopy() {
   const ta = document.getElementById('wlIOText'), msg = document.getElementById('wlIOMsg');
   try { await navigator.clipboard.writeText(ta.value); msg.textContent = '已複製'; }
@@ -3683,6 +3939,7 @@ function buildCharts(data, keepRange = false) {
       if(dlEl) dlEl.style.display = kdVisible ? 'flex' : 'none';
       document.getElementById('kdChip')?.setAttribute('data-off', kdVisible ? '0' : '1');
     }
+    try { rsSetup(data); } catch (e) { console.warn('[RS]', e); }   // 相對強弱線（疊在 RSI 圖，獨立刻度）
   }
 
   // 同步十字線 & 時間軸
@@ -6857,6 +7114,22 @@ document.addEventListener('click', e => { const w = document.getElementById('mor
   window.addEventListener('resize', () => { const h = parseFloat(sub.style.getPropertyValue('--subH')); if (h > maxH()) set(maxH()); });
 })();
 </script>
+<div id="bkIO" onclick="if(event.target===this)closeBackup()">
+  <div class="wio-box">
+    <div class="wio-t">備份／還原全部設定</div>
+    <div class="wio-h">包含自選清單、股票名稱、K線繪圖、首頁方格、主題與面板設定（行情與掃描快取不含，會自動重抓）。設定只存在這個瀏覽器裡，換電腦、清快取或換網址前請先備份。還原：貼上備份文字或選擇備份檔，再按「還原」。</div>
+    <textarea id="bkText" spellcheck="false" placeholder="備份內容（JSON）"></textarea>
+    <div class="wio-b">
+      <span class="wio-msg" id="bkMsg"></span>
+      <button class="wl-add-btn" onclick="bkCopy()">複製</button>
+      <button class="wl-add-btn" onclick="bkDownload()">下載檔案</button>
+      <button class="wl-add-btn" onclick="document.getElementById('bkFile').click()">選擇檔案</button>
+      <button class="wl-add-btn" onclick="bkRestore()">還原</button>
+      <button class="wl-add-btn" onclick="closeBackup()">關閉</button>
+    </div>
+    <input type="file" id="bkFile" accept=".json,application/json,text/plain" style="display:none" onchange="bkLoadFile(this)">
+  </div>
+</div>
 <div id="wlIO" onclick="if(event.target===this)closeWlIO()">
   <div class="wio-box">
     <div class="wio-t">自選清單 匯出／匯入</div>
