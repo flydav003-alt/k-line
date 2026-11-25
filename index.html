@@ -476,6 +476,38 @@ body.us-mode #stockInput{ width:110px; }
   color:var(--muted);
 }
 #splash h2{font-size:1.3rem;color:var(--text);font-weight:700;}
+body.no-stock #splash{justify-content:flex-start;align-items:stretch;}
+#homeStrip{width:100%;max-width:920px;margin:0 auto;color:var(--text);}
+.hs-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.hs-title{font-size:1.05rem;font-weight:700;}
+.hs-time{font-size:.68rem;color:var(--muted);font-family:var(--mono);}
+.hs-btns{margin-left:auto;display:flex;gap:6px;}
+.hs-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.hs-tile{position:relative;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:11px 12px 8px;cursor:pointer;min-width:0;transition:border-color .15s,transform .15s;}
+.hs-tile:hover{border-color:var(--gold);transform:translateY(-1px);}
+.hs-tile.cached{opacity:.65;}
+.hs-tile.dragging{opacity:.35;}
+.hs-tile.over{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold);}
+.hs-top{display:flex;align-items:center;gap:6px;font-size:.74rem;color:var(--muted2);font-weight:600;}
+.hs-code{font-family:var(--mono);font-size:.6rem;color:var(--muted);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.hs-dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none;}
+.hs-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);}
+.hs-px{font-family:var(--mono);font-size:1.25rem;font-weight:600;margin-top:5px;white-space:nowrap;}
+.hs-chg{font-family:var(--mono);font-size:.74rem;margin-top:1px;white-space:nowrap;}
+.hs-sp{display:block;width:100%;height:28px;margin-top:6px;}
+.hs-x{display:none;position:absolute;top:5px;right:6px;width:16px;height:16px;line-height:16px;text-align:center;border-radius:50%;font-size:.62rem;color:var(--muted);background:var(--s2);}
+.hs-x:hover{background:var(--red);color:#fff;}
+.hs-editing .hs-x{display:block;}
+.hs-editing .hs-dot{display:none;}
+.hs-editing .hs-tile{cursor:grab;}
+.hs-edit{margin-top:12px;background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:10px;}
+.hs-erow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;}
+.hs-erow:last-child{margin-bottom:0;margin-top:8px;}
+.hs-edit select,.hs-edit input,.hs-edit textarea{background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:.78rem;font-family:var(--font);}
+.hs-edit input{flex:1;min-width:140px;}
+.hs-edit textarea{width:100%;font-family:var(--mono);line-height:1.6;resize:vertical;}
+.hs-msg{font-size:.68rem;color:var(--muted);margin-left:auto;}
+@media(max-width:700px){.hs-grid{grid-template-columns:repeat(2,1fr);}}
 #splash p{font-size:.85rem;line-height:1.8;text-align:center;max-width:480px;}
 .splash-feat{
   display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px;
@@ -864,18 +896,26 @@ body.sub-collapsed .sub-charts{display:none;}
     <div class="charts-col" id="chartsCol">
 <!-- SPLASH -->
 <div id="splash">
-  <div style="font-size:3rem">📊</div>
-  <h2>台股 & 美股 K線技術分析系統 V3</h2>
-  <p>支援台股（2330、0050…）、美股（AAPL、NVDA…）與加密貨幣（BTC、ETH、SOL，歸在美股），即時抓取K線資料，整合蠟燭圖、技術指標、籌碼/機構持股、財報，四種策略模式，輸出白話操作建議。</p>
-  <div class="splash-feat">
-    <div class="sf"><span class="sf-icon">🇹🇼</span>台股支援</div>
-    <div class="sf"><span class="sf-icon">🇺🇸</span>美股支援</div>
-    <div class="sf"><span class="sf-icon">₿</span>BTC / ETH / SOL</div>
-    <div class="sf"><span class="sf-icon">🕯️</span>TradingView蠟燭圖</div>
-    <div class="sf"><span class="sf-icon">📈</span>MACD / RSI / KD</div>
-    <div class="sf"><span class="sf-icon">🏦</span>機構持股分析</div>
-    <div class="sf"><span class="sf-icon">📐</span>趨勢通道</div>
-    <div class="sf"><span class="sf-icon">💰</span>季度財報 EPS</div>
+  <div id="homeStrip">
+    <div class="hs-head">
+      <span class="hs-title">市場總覽</span><span class="hs-time" id="hsTime"></span>
+      <span class="hs-btns"><button class="wl-add-btn" onclick="hsRefresh(true)" title="更新行情">⟳</button><button class="wl-add-btn" id="hsEditBtn" onclick="hsToggleEdit()">編輯</button></span>
+    </div>
+    <div class="hs-grid" id="hsGrid"></div>
+    <div class="hs-edit" id="hsEdit" style="display:none">
+      <div class="hs-erow">
+        <select id="hsPreset" onchange="hsAddPreset(this)"></select>
+        <input id="hsAddIn" placeholder="或輸入代號／股名，如 2330、^IXIC" onkeydown="if(event.key==='Enter')hsAddInput()">
+        <button class="wl-add-btn" onclick="hsAddInput()">加入</button>
+      </div>
+      <textarea id="hsText" spellcheck="false" rows="4"></textarea>
+      <div class="hs-erow">
+        <button class="wl-add-btn" onclick="hsCopy()">複製</button>
+        <button class="wl-add-btn" onclick="hsApplyText()">套用文字</button>
+        <button class="wl-add-btn" onclick="hsReset()">還原預設</button>
+        <span class="hs-msg" id="hsMsg">拖曳方格可排序，✕ 移除，最多 12 格</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1144,6 +1184,7 @@ function switchMarket(mkt) {
 function autoDetectMarket(raw) {
   const val = raw.trim().toUpperCase();
   if (val === 'TWII') return 'TW';   // 加權指數
+  if (/^\^|=[XF]$|^\d{6}\.[A-Z]{2}$/.test(val)) return 'US';   // 國際指數／匯率／期貨走 Yahoo 美股流程
   // 台股：純數字 4-6 碼，或 ETF（如 0050）
   if (/^\d{4,6}[A-Z]?$/.test(val)) return 'TW';
   // 美股：純英文字母 1-5 碼
@@ -1511,6 +1552,7 @@ function resolveStockInput(raw) {
   if (['TWII', '^TWII', '加權', '加權指數', '大盤', '台股大盤', '台灣加權'].includes(up) || ['加權', '加權指數', '大盤', '台股大盤', '台灣加權'].includes(v)) return 'TWII';
   for (const [id, c] of Object.entries(CRYPTO)) if (c.alias.some(a => a.toUpperCase() === up)) return id;
   if (/^\d{4,6}[A-Z]?$/.test(up) || /^[A-Z]{1,5}$/.test(up)) return up;
+  if (/^(\^[A-Z0-9.]+|[A-Z0-9.]+=[XF]|\d{6}\.[A-Z]{2})$/.test(up)) return up;   // Yahoo 指數／匯率／期貨代號
   if (stockNameIndex[v]) return stockNameIndex[v];
   const hit = searchStocks(v, 1)[0];
   return hit ? hit.id : '';
@@ -1879,15 +1921,153 @@ function loadFromWatchlist(code) {
 }
 renderWatchlist();
 
+
+// ── 首頁行情帶（與自選共用 wlQuotes / fetchYahooQuote 報價來源）──
+const HS_DEFAULT = ['TWII', '^N225', '^KS11', 'TWD=X', '^DJI', '^SOX', 'NVDA', 'BTC'];
+const HS_NAMES = {
+  'TWII':['加權','加權指數'], '^N225':['日經','日經225'], '^KS11':['韓股','韓國綜合'], 'TWD=X':['美元/台幣','美元兌台幣'],
+  '^DJI':['道瓊','道瓊工業'], '^SOX':['費半','費城半導體'], 'NVDA':['NVDA','NVIDIA'], 'BTC':['BTC','比特幣'],
+  '^IXIC':['那斯達克','那斯達克綜合'], '^GSPC':['標普500','S&P 500'], '^TWOII':['櫃買','櫃買指數'], '^HSI':['恆生','恆生指數'],
+  '000001.SS':['上證','上證綜指'], 'GC=F':['黃金','黃金期貨'], 'CL=F':['原油','WTI原油'], '^TNX':['美債10年','美國10年殖利率'],
+  'JPY=X':['美元/日圓','美元兌日圓'], '^VIX':['VIX','恐慌指數'], 'ETH':['ETH','以太幣'], '2330':['台積電','台積電'], 'TSM':['TSM','台積電ADR']
+};
+const hsShort = c => (HS_NAMES[c] && HS_NAMES[c][0]) || nameOf(c) || c;
+const hsFull  = c => (HS_NAMES[c] && HS_NAMES[c][1]) || nameOf(c) || '';
+let hsTiles = HS_DEFAULT.slice(), hsEditing = false, hsDrag = null, hsBusy = false;
+try { const t = JSON.parse(localStorage.getItem('kline_home_tiles') || 'null'); if (Array.isArray(t) && t.length) hsTiles = t.filter(x => typeof x === 'string').slice(0, 12); } catch {}
+let wlSpark = {}, hsCache = {};
+try { hsCache = JSON.parse(localStorage.getItem('kline_home_cache') || '{}') || {}; } catch {}
+const hsSave = () => localStorage.setItem('kline_home_tiles', JSON.stringify(hsTiles));
+function hsFmt(v, ref) { const d = Math.abs(ref != null ? ref : v) >= 100 ? 2 : 3; return v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function hsSpark(a, color) {
+  if (!a || a.length < 2) return '<svg class="hs-sp"></svg>';
+  const mn = Math.min(...a), mx = Math.max(...a), r = mx - mn || 1;
+  const pts = a.map((v, i) => `${(i / (a.length - 1) * 100).toFixed(1)},${(26 - (v - mn) / r * 24).toFixed(1)}`).join(' ');
+  return `<svg class="hs-sp" viewBox="0 0 100 28" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function hsRender() {
+  const g = document.getElementById('hsGrid'); if (!g) return;
+  const now = Date.now();
+  g.className = 'hs-grid' + (hsEditing ? ' hs-editing' : '');
+  g.innerHTML = hsTiles.map(c => {
+    const q = wlQuotes[c], live = q && q.price != null;
+    const d = live ? { price: q.price, diff: q.diff, chg: q.chg, spark: wlSpark[c] } : hsCache[c];
+    const isLive = live && (q.live != null ? q.live : (q.src !== 'yahoo' && q.t && now - q.t < 60000));
+    let body = '<div class="hs-px" style="color:var(--muted)">—</div>', tint = '', col = 'var(--muted2)';
+    if (d && d.price != null) {
+      const up = d.chg > 0, dn = d.chg < 0;
+      col = up ? 'var(--up)' : dn ? 'var(--green)' : 'var(--muted2)';
+      const al = Math.min(.24, .05 + Math.abs(d.chg || 0) * .03);
+      tint = up ? `background:linear-gradient(160deg,rgba(255,77,109,${al}),var(--s1) 70%);` : dn ? `background:linear-gradient(160deg,rgba(0,200,150,${al}),var(--s1) 70%);` : '';
+      const arrow = up ? '▲' : dn ? '▼' : '';
+      body = `<div class="hs-px">${hsFmt(d.price)}</div><div class="hs-chg" style="color:${col}">${d.diff != null ? arrow + hsFmt(Math.abs(d.diff), d.price) + ' ' : ''}${d.chg != null ? Math.abs(d.chg).toFixed(2) + '%' : ''}</div>${hsSpark(d.spark, col)}`;
+    }
+    return `<div class="hs-tile${live ? '' : ' cached'}" style="${tint}" data-code="${escHtml(c)}" draggable="${hsEditing}" title="${escHtml(hsFull(c))}">
+      <div class="hs-top"><span>${escHtml(hsShort(c))}</span><span class="hs-code">${escHtml(c)}</span><span class="hs-dot${isLive ? ' live' : ''}" title="${isLive ? '盤中／即時' : '已收盤或延遲'}"></span></div>
+      ${body}<span class="hs-x" data-x="${escHtml(c)}">✕</span></div>`;
+  }).join('');
+}
+async function hsRefresh(force) {
+  if (hsBusy) return; hsBusy = true;
+  try {
+    const now = Date.now(), todo = hsTiles.filter(c => { const q = wlQuotes[c]; return force || !(q && q.price != null && q.t && now - q.t < 25000 && wlSpark[c]); });
+    let k = 0;
+    const worker = async () => { while (k < todo.length) { const c = todo[k++]; const r = await fetchYahooQuote(c).catch(() => null); if (!r) continue;
+      wlSpark[c] = r.spark;
+      const q = wlQuotes[c];
+      if (!(q && q.src !== 'yahoo' && q.price != null && !q.approx && q.t && Date.now() - q.t < 25000))   // 證交所即時價較新時沿用，只借走勢線
+        wlQuotes[c] = { price: r.price, diff: r.prev ? r.price - r.prev : null, chg: r.prev ? (r.price - r.prev) / r.prev * 100 : null, approx: false, t: Date.now(), src: 'yahoo', live: !!r.t && Date.now() / 1000 - r.t < 1800 };
+      const w = wlQuotes[c]; hsCache[c] = { price: w.price, diff: w.diff, chg: w.chg, spark: wlSpark[c] };
+      hsRender(); } };
+    await Promise.all([worker(), worker(), worker()]);
+    try { localStorage.setItem('kline_home_cache', JSON.stringify(hsCache)); } catch {}
+    const d = new Date(), p = n => String(n).padStart(2, '0'), el = document.getElementById('hsTime');
+    if (el) el.textContent = `更新 ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  } finally { hsBusy = false; hsRender(); }
+}
+function hsOpen(code) { loadFromWatchlist(code); }
+function hsToggleEdit() {
+  hsEditing = !hsEditing;
+  document.getElementById('hsEdit').style.display = hsEditing ? 'block' : 'none';
+  document.getElementById('hsEditBtn').textContent = hsEditing ? '完成' : '編輯';
+  if (hsEditing) { hsFillPreset(); hsFillText(); }
+  hsRender();
+}
+function hsFillPreset() {
+  const sel = document.getElementById('hsPreset');
+  const opts = ['^IXIC', '^GSPC', '^TWOII', '^HSI', '000001.SS', 'GC=F', 'CL=F', '^TNX', 'JPY=X', '^VIX', 'ETH', 'TSM'].filter(c => !hsTiles.includes(c));
+  sel.innerHTML = '<option value="">＋ 從常用清單加入…</option>' + opts.map(c => `<option value="${escHtml(c)}">${escHtml(hsShort(c))}（${escHtml(c)}）</option>`).join('');
+}
+const hsLine = c => { const nm = hsFull(c); return nm ? nm + (/[A-Za-z0-9]$/.test(nm) ? ' ' : '') + c : c; };
+function hsFillText() { document.getElementById('hsText').value = hsTiles.map(hsLine).join('\n'); }
+function hsMsg(t) { document.getElementById('hsMsg').textContent = t; }
+function hsAdd(code) {
+  if (!code) return false;
+  if (hsTiles.includes(code)) { hsMsg('已經有這格了'); return false; }
+  if (hsTiles.length >= 12) { hsMsg('最多 12 格'); return false; }
+  hsTiles.push(code); hsSave(); hsRender(); hsFillPreset(); hsFillText(); hsRefresh(); return true;
+}
+function hsAddPreset(sel) { const v = sel.value; sel.value = ''; if (v) hsAdd(v); }
+function hsAddInput() {
+  const inp = document.getElementById('hsAddIn'), v = normInput(inp.value).trim(); if (!v) return;
+  const id = resolveStockInput(v); if (!id) { hsMsg('找不到這個代號'); return; }
+  if (hsAdd(id)) inp.value = '';
+}
+function hsParse(text) {
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(raw => {
+    const line = normInput(raw).trim(); if (!line || line[0] === '#') return;
+    const tok = line.split(/[\s,，、;；]+/).filter(Boolean).pop().toUpperCase();
+    const m = tok.match(/(\^[A-Z0-9.]+|[A-Z0-9.]+=[XF]|\d{6}\.[A-Z]{2}|\d{4,6}[A-Z]?|[A-Z]{1,5})$/);
+    let c = m ? m[1] : ''; if (c === 'T00') c = 'TWII';
+    if (c && !out.includes(c)) out.push(c);
+  });
+  return out.slice(0, 12);
+}
+function hsApplyText() {
+  const l = hsParse(document.getElementById('hsText').value);
+  if (!l.length) { hsMsg('沒有讀到有效代號'); return; }
+  hsTiles = l; hsSave(); hsRender(); hsFillPreset(); hsMsg(`已套用，共 ${l.length} 格`); hsRefresh();
+}
+async function hsCopy() {
+  const ta = document.getElementById('hsText');
+  try { await navigator.clipboard.writeText(ta.value); } catch { ta.select(); document.execCommand('copy'); }
+  hsMsg('已複製');
+}
+function hsReset() { hsTiles = HS_DEFAULT.slice(); hsSave(); hsRender(); hsFillPreset(); hsFillText(); hsMsg('已還原預設'); hsRefresh(); }
+(function hsInit() {
+  const g = document.getElementById('hsGrid'); if (!g) return;
+  g.addEventListener('click', e => {
+    const x = e.target.closest('.hs-x');
+    if (x) { hsTiles = hsTiles.filter(c => c !== x.dataset.x); hsSave(); hsRender(); hsFillPreset(); hsFillText(); return; }
+    const t = e.target.closest('.hs-tile'); if (t && !hsEditing) hsOpen(t.dataset.code);
+  });
+  g.addEventListener('dragstart', e => { const t = e.target.closest('.hs-tile'); if (!t || !hsEditing) return; hsDrag = t.dataset.code; t.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', hsDrag); } catch {} });
+  g.addEventListener('dragover', e => { if (!hsDrag) return; e.preventDefault(); g.querySelectorAll('.over').forEach(x => x.classList.remove('over')); const t = e.target.closest('.hs-tile'); if (t && t.dataset.code !== hsDrag) t.classList.add('over'); });
+  g.addEventListener('drop', e => {
+    if (!hsDrag) return; e.preventDefault();
+    const t = e.target.closest('.hs-tile'), to = t && t.dataset.code;
+    if (to && to !== hsDrag) { hsTiles = hsTiles.filter(c => c !== hsDrag); hsTiles.splice(hsTiles.indexOf(to), 0, hsDrag); hsSave(); hsFillText(); }
+    hsDrag = null; hsRender();
+  });
+  g.addEventListener('dragend', () => { hsDrag = null; hsRender(); });
+})();
+{ const _rw = renderWatchlist; renderWatchlist = function () { _rw.apply(this, arguments); if (!hsDrag) { try { hsRender(); } catch {} } }; }
+hsRender();
+setTimeout(() => { hsRefresh(true); setInterval(() => { if (document.body.classList.contains('no-stock') && !document.hidden && !hsEditing) hsRefresh(); }, 30000); }, 0);
+
 // ── 追蹤清單即時報價（證交所 MIS，一次查全部；需設定 TWSE_WORKER）──
 // ── 自選報價：證交所 MIS 抓不到的標的（含美股／加密），改用 Yahoo 補；按「即時」或 ⟳ 時全部更新 ──
 async function fetchYahooQuote(code) {
   const parse = raw => {
     const j = unwrapProxy(raw), m = j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta;
     if (!m || !(m.regularMarketPrice > 0)) throw new Error('no meta');
-    return { price: m.regularMarketPrice, prev: m.chartPreviousClose != null ? m.chartPreviousClose : m.previousClose };
+    const q0 = j.chart.result[0].indicators && j.chart.result[0].indicators.quote && j.chart.result[0].indicators.quote[0];
+    const cl = ((q0 && q0.close) || []).filter(v => v != null), st = Math.max(1, Math.ceil(cl.length / 60));
+    const spark = cl.filter((_, i) => i % st === 0 || i === cl.length - 1);
+    return { price: m.regularMarketPrice, prev: m.chartPreviousClose != null ? m.chartPreviousClose : m.previousClose, spark, t: m.regularMarketTime };
   };
-  const syms = code === 'TWII' ? ['^TWII'] : isCrypto(code) ? [CRYPTO[String(code).toUpperCase()].sym] : /^\d/.test(code) ? [code + '.TW', code + '.TWO'] : [code];
+  const syms = /^\^|=[XF]$|\.[A-Z]{2}$/.test(code) ? [code] : code === 'TWII' ? ['^TWII'] : isCrypto(code) ? [CRYPTO[String(code).toUpperCase()].sym] : /^\d/.test(code) ? [code + '.TW', code + '.TWO'] : [code];
   for (const sym of syms) {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&_=${Date.now()}`;
     const r = await fetchViaProxies(url, parse, 'WLquote');
@@ -1903,7 +2083,7 @@ async function refreshWlYahoo() {
     const todo = watchlist.filter(c => { const q = wlQuotes[c]; return !(q && q.price != null && !q.approx && q.t && now - q.t < 25000); }).slice(0, 20);
     let k = 0;
     const worker = async () => { while (k < todo.length) { const c = todo[k++]; const r = await fetchYahooQuote(c).catch(() => null);
-      if (r) wlQuotes[c] = { price: r.price, diff: r.prev ? r.price - r.prev : null, chg: r.prev ? (r.price - r.prev) / r.prev * 100 : null, approx: false, t: Date.now(), src: 'yahoo' }; } };
+      if (r) { wlSpark[c] = r.spark; wlQuotes[c] = { price: r.price, diff: r.prev ? r.price - r.prev : null, chg: r.prev ? (r.price - r.prev) / r.prev * 100 : null, approx: false, t: Date.now(), src: 'yahoo', live: !!r.t && Date.now() / 1000 - r.t < 1800 }; } } };
     await Promise.all([worker(), worker(), worker()]);
     renderWatchlist();
   } finally { wlYBusy = false; }
