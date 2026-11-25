@@ -1498,7 +1498,7 @@ let wlQuotes = {};      // 追蹤清單報價：id -> { price, chg }
 let wlDate   = '';      // MIS 回傳的交易日，用來判斷休市日就不必輪詢
 let wlBusy   = false;
 let wlTried  = false;   // 已嘗試抓過報價：抓不到時顯示「—」而不是整個消失（需在 renderWatchlist() 首次執行前宣告）
-let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c));
+let watchlist   = JSON.parse(localStorage.getItem('kline_watchlist')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5}|\^[A-Z0-9.]+|[A-Z0-9.]+=[XF]|\d{6}\.[A-Z]{2})$/.test(c));
 let recentHistory = JSON.parse(localStorage.getItem('kline_recent')||'[]').filter(c => /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c));
 let currentStockId = '';
 let revenueData = [];
@@ -1526,8 +1526,18 @@ let stockNameCache = (() => {
   } catch { return {}; }
 })();
 const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-const isValidCode = c => typeof c === 'string' && /^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c);
+const isYahooSym = c => typeof c === 'string' && /^(\^[A-Z0-9.]+|[A-Z0-9.]+=[XF]|\d{6}\.[A-Z]{2})$/.test(c);   // 指數／匯率／期貨／陸股等 Yahoo 代號
+const isValidCode = c => typeof c === 'string' && (/^(\d{4,6}[A-Z]?|[A-Z]{1,5})$/.test(c) || isYahooSym(c));
 
+(function fixBadGold() {   // 舊版匯入把「黃金GC=F」誤讀成 F（福特）：自動改回 GC=F
+  try {
+    if (stockNameCache.F && /GC=/.test(stockNameCache.F)) {
+      delete stockNameCache.F; localStorage.setItem('kline_names', JSON.stringify(stockNameCache));
+      const i = watchlist.indexOf('F');
+      if (i >= 0) { if (watchlist.includes('GC=F')) watchlist.splice(i, 1); else watchlist[i] = 'GC=F'; localStorage.setItem('kline_watchlist', JSON.stringify(watchlist)); }
+    }
+  } catch {}
+})();
 function rememberName(id, name) {
   if (!id || !name || stockNameCache[id] === name) return;
   stockNameCache[id] = name;
@@ -1575,7 +1585,8 @@ async function loadStockList() {
     }
   } catch (e) { console.warn('[股票清單]', e.message); }
 }
-function nameOf(id) { return stockNameCache[id] || (stockMap[id] && stockMap[id].name) || ''; }
+function nameOf(id) { return stockNameCache[id] || (stockMap[id] && stockMap[id].name) || hsNameSafe(id); }
+function hsNameSafe(id) { try { return (HS_NAMES[id] && HS_NAMES[id][1]) || ''; } catch { return ''; } }   // HS_NAMES 在檔案後面才宣告，載入初期呼叫會碰到 TDZ
 
 function searchCrypto(q) {
   q = normInput(q).trim().toUpperCase();
@@ -1799,7 +1810,7 @@ async function scanWatchlistAlerts(force) {
     for (const code of codes) {
       let bars = null;
       try {
-        if (isCrypto(code) || !/^\d/.test(code)) bars = cleanBars(await fetchUSPrice(code));
+        if (isCrypto(code) || isYahooSym(code) || !/^\d/.test(code)) bars = cleanBars(await fetchUSPrice(code));
         else { try { bars = cleanBars(await fetchPrice(code, token)); } catch { bars = cleanBars(await fetchYahooPrice(code)); } }
       } catch (e) { console.warn('[追蹤清單警示]', code, e.message); continue; }   // 抓不到就保留舊結果，不誤報
       if (bars && bars.length > 1) { const b1 = bars[bars.length - 1], b0 = bars[bars.length - 2]; wlLast[code] = { close: b1.close, prev: b0.close, d: b1.date }; }
@@ -1931,7 +1942,7 @@ function wlParseText(text) {
     let line = normInput(raw).trim();
     if (!line || line[0] === '#') return;
     const tok = line.split(/[\s,，、;；\t]+/).filter(Boolean).pop().toUpperCase();
-    let code = isValidCode(tok) ? tok : ((tok.match(/(\d{4,6}[A-Z]?|[A-Z]{1,5})$/) || [])[1] || '');
+    let code = isValidCode(tok) ? tok : ((tok.match(/(\^[A-Z0-9.]+|[A-Z0-9.]+=[XF]|\d{6}\.[A-Z]{2}|\d{4,6}[A-Z]?|[A-Z]{1,5})$/) || [])[1] || '');
     if (code === 'T00') code = 'TWII';
     if (!isValidCode(code) || seen.has(code)) return;
     seen.add(code);
@@ -6429,12 +6440,35 @@ function parseYahooIntraday(raw) {
   return { bars, prev, tz: r.meta?.exchangeTimezoneName || '' };
 }
 const idCache = new Map();   // key -> { data, ts }
+// 台股：Yahoo 的 1 分線有延遲、指數的 chartPreviousClose 也常常是舊的 → 用證交所 MIS 校正昨收，並補上最新一筆
+async function idFixTW(d) {
+  if (!d || currentMarket !== 'TW' || document.getElementById('dateTo')?.value) return d;
+  const dayOf = t => new Date(t * 1000).toISOString().slice(0, 10);
+  const lastBar = d.bars[d.bars.length - 1], day = dayOf(lastBar.time);
+  let prev = null;
+  try {
+    const r = await withTimeout(fetchTWSERealtime(currentStockId), 6000);
+    if (r && r.prevClose > 0) prev = r.prevClose;
+    const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(r && r.time || '');
+    if (r && m && r.date === day && r.close > 0) {
+      let ts = Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), +m[1], +m[2], +(m[3] || 0)) / 1000;
+      ts -= ts % 60;
+      if (ts > lastBar.time) d.bars.push({ time: ts, close: r.close, vol: 0, open: r.close, high: r.close, low: r.close });
+      else if (ts === lastBar.time) lastBar.close = r.close;
+    }
+  } catch (e) { console.warn('[當日走勢 MIS 校正]', e.message); }
+  if (!(prev > 0) && typeof priceData !== 'undefined' && priceData.length) {      // MIS 失敗 → 用日K的前一個交易日收盤
+    for (let i = priceData.length - 1; i >= 0; i--) { if (priceData[i].date < day) { prev = priceData[i].close; break; } }
+  }
+  if (prev > 0) d.prev = prev;
+  return d;
+}
 async function fetchIntraday() {
   const cands = idSymbolCandidates();
   const tryOne = async sym => {
     const urls = ['query1', 'query2'].map(n => `https://${n}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1m&range=1d&includePrePost=false`);
     const d = await Promise.any(urls.map(u => fetchViaProxies(u, parseYahooIntraday, 'YahooIntraday').then(x => { if (!x) throw new Error('empty'); return x; })));
-    idSymbol = sym; return d;
+    idSymbol = sym; return await idFixTW(d);
   };
   for (const sym of cands) { try { return await tryOne(sym); } catch {} }
   return null;
