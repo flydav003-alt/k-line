@@ -815,6 +815,7 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 /* 自選：列表 */
 .wl-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--s1);z-index:5;}
 #wlItems{display:block;}
+.wl-pnl{display:block;font-size:.68rem;font-family:var(--mono);text-align:right;margin-top:1px;}
 .wl-flag{cursor:pointer;opacity:.35;font-size:.85rem;}.wl-flag.on{opacity:1;color:var(--warn,#e8a317);}.wl-flag:hover{opacity:1}
 .wl-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;align-items:center;gap:4px 8px;padding:9px 12px;border:none;border-bottom:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;transform:none;color:var(--text);font-size:.8rem;}
 .wl-item:hover{background:var(--s2);border-color:var(--border);color:var(--text);box-shadow:none;transform:none;}
@@ -940,6 +941,10 @@ body.sub-collapsed .sub-charts{display:none;}
 .wk-cpx{margin-left:auto;font-family:var(--mono);font-size:1rem;font-weight:600;white-space:nowrap;}
 .wk-cchg{font-family:var(--mono);font-size:.74rem;white-space:nowrap;}
 .wk-ctm{font-family:var(--mono);font-size:.6rem;color:var(--muted);white-space:nowrap;}
+.wk-al{font-size:.7rem;font-weight:700;color:#000;background:#ff9f40;border-radius:5px;padding:0 6px;display:none;}
+.wk-al.on{display:inline-block}
+.wk-cell.flash{animation:wkflash 1s ease-in-out 4}
+@keyframes wkflash{0%,100%{box-shadow:none}50%{box-shadow:inset 0 0 0 2px #ff9f40}}
 .wk-cmd{background:var(--s2);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:1px 7px;font-size:.72rem;cursor:pointer;}.wk-cmd.t{background:var(--gold);color:#000;font-weight:700;border-color:var(--gold);}
 .wk-cgo,.wk-crf{background:var(--s2);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:1px 7px;font-size:.72rem;cursor:pointer;}
 .wk-cgo:hover,.wk-crf:hover{border-color:var(--gold);color:var(--gold);}
@@ -2171,6 +2176,13 @@ function todoRescan() { scanWatchlistAlerts(true); renderTodo(); }
 let stopsMap = {};
 try { stopsMap = JSON.parse(localStorage.getItem('kline_stops') || '{}') || {}; } catch (e) {}
 function stopOf(code) { const v = stopsMap[code]; return v && (v.cost > 0 || v.stop > 0) ? v : null; }
+function pnlBadge(code) {
+  const v = stopOf(code); if (!v || !(v.cost > 0)) return '';
+  const q = wlQuotes[code], px = q && q.price > 0 ? q.price : (wlLast[code] && wlLast[code].close > 0 ? wlLast[code].close : (wlAlerts[code] && wlAlerts[code].close > 0 ? wlAlerts[code].close : 0));
+  if (!(px > 0)) return '';
+  const p = (px / v.cost - 1) * 100, col = p > 0 ? 'var(--up)' : p < 0 ? 'var(--green)' : 'var(--muted2)';
+  return `<span class="wl-pnl" style="color:${col}" title="成本 ${v.cost}，現價 ${px.toFixed(2)}">損益 ${p > 0 ? '+' : ''}${p.toFixed(2)}%</span>`;
+}
 function stopTip(code) { const v = stopOf(code); return v ? `成本 ${v.cost || '—'}｜停損 ${v.stop || '—'}（點擊修改）` : '設定成本價／停損價（未填則不提醒）'; }
 function editStop(ev, code) {
   ev.stopPropagation();
@@ -2191,7 +2203,7 @@ function renderWatchlist() {
     <div class="wl-item${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="拖曳可調整順序，點擊查看 ${code}">
       <span class="wl-grip" onmousedown="event.stopPropagation()">⠿</span>
       <span class="wl-main">${displayLabel(code)}</span>
-      <span class="wl-right">${quoteBadge(code)}</span>
+      <span class="wl-right">${quoteBadge(code)}${pnlBadge(code)}</span>
       <span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span>
       <span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span>
       ${al ? `<span class="wl-sub">${al}</span>` : ''}
@@ -7347,9 +7359,9 @@ function wallRender() {
 function wallMakeCell(i) {
   const code = wall.codes[i];
   const el = document.createElement('div'); el.className = 'wk-cell';
-  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><button class="wk-cmd" title="切換：日K ／ 當日分時（1分K）；連動開啟時全部格子一起切換">日K</button><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
+  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><span class="wk-al"></span><button class="wk-cmd" title="切換：日K ／ 當日分時（1分K）；連動開啟時全部格子一起切換">日K</button><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
   const q = s => el.querySelector(s);
-  const c = { i, code, el, inp: q('.wk-cin'), sel: q('.wk-csel'), nm: q('.wk-cnm'), px: q('.wk-cpx'), chg: q('.wk-cchg'), tm: q('.wk-ctm'), leg: q('.wk-leg'), cc: q('.wk-cc'), msg: q('.wk-msg'),
+  const c = { i, code, el, inp: q('.wk-cin'), sel: q('.wk-csel'), nm: q('.wk-cnm'), px: q('.wk-cpx'), chg: q('.wk-cchg'), tm: q('.wk-ctm'), al: q('.wk-al'), alKey: '', leg: q('.wk-leg'), cc: q('.wk-cc'), msg: q('.wk-msg'),
     mode: wall.modes[i] === 'T' ? 'T' : 'D', pl: null, chart: null, candle: null, m20: null, m60: null, vol: null, bars: [], idx: new Map(), seq: 0, loading: false, loadedAt: 0, qAt: 0, quote: null };
   c.sel.innerHTML = '<option value="">自選</option>' + watchlist.map(w => `<option value="${escHtml(w)}">${escHtml(w)} ${escHtml(wallName(w))}</option>`).join('');
   c.sel.onchange = () => { const v = c.sel.value; c.sel.value = ''; if (v) wallSetCode(c, v); };
@@ -7365,7 +7377,7 @@ function wallMakeCell(i) {
 function wallModeUi(c) { if (!c.md) return; c.md.textContent = c.mode === 'T' ? '分時' : '日K'; c.md.classList.toggle('t', c.mode === 'T'); }
 function wallSetMode(c, m) {
   if (c.mode === m) return;
-  c.mode = m; wall.modes[c.i] = m; wallSave(); wallModeUi(c);
+  c.mode = m; wall.modes[c.i] = m; wallSave(); wallModeUi(c); c.alKey = ''; wallShowAlerts(c);
   c.bars = []; c.quote = null; wallClearSeries(c);
   try { c.chart.applyOptions({ timeScale: { timeVisible: m === 'T', secondsVisible: false } }); } catch {}
   wallLoadCell(c, true);
@@ -7431,6 +7443,29 @@ function wallMsg(c, t) { if (c.msg) c.msg.textContent = t || ''; }
 function wallReindex(c) { c.idx = new Map(); c.bars.forEach((d, i) => c.idx.set(d.date, i)); }
 function wallClearSeries(c) { try { c.candle.setData([]); c.m20.setData([]); c.m60.setData([]); c.vol.setData([]); } catch {} c.idx = new Map(); wallLeg(c, null); }
 const wallVolCol = d => d.close >= d.open ? 'rgba(255,77,109,0.5)' : 'rgba(0,200,150,0.5)';
+// 盤中異動：近 5 分鐘漲跌 ≥1%、近 3 分鐘內創當日新高／新低、跌破自設停損價
+function wallIntraAlerts(c) {
+  const b = c.bars, n = b.length, out = [];
+  if (n >= 20) {
+    const last = b[n - 1], ref = b[n - 6].close;
+    if (ref > 0) { const p = (last.close / ref - 1) * 100; if (Math.abs(p) >= 1) out.push(p > 0 ? `急拉 +${p.toFixed(1)}%/5分` : `急殺 ${p.toFixed(1)}%/5分`); }
+    let hi = -Infinity, lo = Infinity;
+    for (let i = 0; i < n - 3; i++) { if (b[i].max > hi) hi = b[i].max; if (b[i].min < lo) lo = b[i].min; }
+    const rh = Math.max(...b.slice(n - 3).map(d => d.max)), rl = Math.min(...b.slice(n - 3).map(d => d.min));
+    if (rh > hi) out.push('創日高'); else if (rl < lo) out.push('創日低');
+  }
+  const sp = stopOf(c.code);
+  if (n && sp && sp.stop > 0 && b[n - 1].close < sp.stop) out.push(`跌破停損 ${sp.stop}`);
+  return out;
+}
+function wallShowAlerts(c) {
+  if (!c.al) return;
+  const a = c.mode === 'T' ? wallIntraAlerts(c) : [], key = a.join('|');
+  c.al.textContent = a.length ? '⚡' + a.join('　') : ''; c.al.classList.toggle('on', !!a.length);
+  if (key && key !== c.alKey) { c.el.classList.remove('flash'); void c.el.offsetWidth; c.el.classList.add('flash'); }
+  if (!key) c.el.classList.remove('flash');
+  c.alKey = key;
+}
 function wallTLabel(t) { const d = new Date(t * 1000), p = n => String(n).padStart(2, '0'); return `${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; }
 function wallDraw(c) {
   const b = c.bars, n = b.length; if (!c.chart || !n) return;
@@ -7520,7 +7555,7 @@ async function wallLoadIntra(c, seq) {
   if (!r) { wallMsg(c, ''); if (!c.bars.length) { wallClearSeries(c); wallMsg(c, '取不到分時資料，按 ⟳ 重試'); wallHead(c); } return; }
   c.bars = r.bars; wallReindex(c); wallMsg(c, '');
   c.quote = { price: r.bars[r.bars.length - 1].close, prev: r.prev > 0 ? r.prev : null, live: Date.now() / 1000 - r.lastT < 600, t: Date.now() };
-  wallDraw(c); wallHead(c);
+  wallDraw(c); wallHead(c); wallShowAlerts(c);
 }
 // 報價：台股用證交所 MIS（含當日量），其他用 Yahoo；只在「昨收對得上」時才改最後一根，避免把錯的價位畫進K棒
 async function wallQuote(c) {
