@@ -7347,7 +7347,7 @@ function wallRender() {
 function wallMakeCell(i) {
   const code = wall.codes[i];
   const el = document.createElement('div'); el.className = 'wk-cell';
-  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><button class="wk-cmd" title="切換：日K ／ 當日分時（1分K）">日K</button><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
+  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><button class="wk-cmd" title="切換：日K ／ 當日分時（1分K）；連動開啟時全部格子一起切換">日K</button><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
   const q = s => el.querySelector(s);
   const c = { i, code, el, inp: q('.wk-cin'), sel: q('.wk-csel'), nm: q('.wk-cnm'), px: q('.wk-cpx'), chg: q('.wk-cchg'), tm: q('.wk-ctm'), leg: q('.wk-leg'), cc: q('.wk-cc'), msg: q('.wk-msg'),
     mode: wall.modes[i] === 'T' ? 'T' : 'D', pl: null, chart: null, candle: null, m20: null, m60: null, vol: null, bars: [], idx: new Map(), seq: 0, loading: false, loadedAt: 0, qAt: 0, quote: null };
@@ -7356,7 +7356,7 @@ function wallMakeCell(i) {
   c.inp.addEventListener('keydown', e => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); wallSetCode(c, c.inp.value); c.inp.blur(); } });
   c.inp.addEventListener('focus', () => c.inp.select());
   c.nm.onclick = q('.wk-cgo').onclick = () => wallGo(c.code);
-  c.md = q('.wk-cmd'); c.md.onclick = () => wallSetMode(c, c.mode === 'T' ? 'D' : 'T'); wallModeUi(c);
+  c.md = q('.wk-cmd'); c.md.onclick = () => { const m = c.mode === 'T' ? 'D' : 'T'; (wall.link ? wall.cells.slice() : [c]).forEach(o => wallSetMode(o, m)); }; wallModeUi(c);
   q('.wk-crf').onclick = () => wallLoadCell(c, true);
   c.cc.addEventListener('dblclick', () => wallGo(c.code));
   c.nm.textContent = wallName(code) || ''; 
