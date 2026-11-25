@@ -562,7 +562,7 @@ body.no-stock #splash{justify-content:flex-start;align-items:stretch;}
 .cmp-tag b{cursor:pointer;font-weight:400;opacity:.65;}
 .cmp-tag b:hover{opacity:1;}
 .cmp-tag.base{color:var(--muted2);border-style:dashed;}
-/* 今日待處理 */
+/* 今日注意事項 */
 #todoBox{width:100%;max-width:920px;margin:18px auto 0;color:var(--text);}
 #todoBox .td-sub{font-size:.68rem;color:var(--muted);font-family:var(--mono);}
 .td-list{background:var(--s1);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
@@ -1031,7 +1031,7 @@ body.sub-collapsed .sub-charts{display:none;}
   </div>
   <div id="todoBox">
     <div class="hs-head">
-      <span class="hs-title">今日待處理</span><span class="td-sub" id="todoSub"></span>
+      <span class="hs-title">今日注意事項</span><span class="td-sub" id="todoSub"></span>
       <span class="hs-btns"><button class="wl-add-btn" onclick="todoRescan()" title="重新掃描自選（爆量／跌破MA20／空方形態／接近停損）">⟳</button></span>
     </div>
     <div class="td-list" id="todoList"><div class="td-empty">載入中…</div></div>
@@ -1069,7 +1069,7 @@ body.sub-collapsed .sub-charts{display:none;}
         <div class="ma-chip-btn" id="vwapChip" data-off="0" style="background:rgba(255,200,50,.12);border-color:rgba(255,200,50,.6);color:rgba(255,200,50,.9);margin-left:4px;" onclick="toggleVWAP()" title="VWAP：由目前顯示區間第一根K棒起算的成交量加權均價（點擊開關）">VWAP</div>
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
-        <div class="ma-chip-btn" id="rsChip" data-off="0" style="background:rgba(34,211,238,.12);border-color:#22d3ee;color:#22d3ee;margin-left:2px;" onclick="toggleRS()" title="相對強弱線：個股÷大盤（台股＝加權、美股＝S&P500），疊在主圖下方，區間起點＝100；指數／匯率／期貨／加密貨幣不適用">RS</div>
+        <div class="ma-chip-btn" id="rsChip" data-off="0" style="background:rgba(34,211,238,.12);border-color:#22d3ee;color:#22d3ee;margin-left:2px;" onclick="toggleRS()" title="相對強弱線：個股÷大盤（台股＝加權、美股＝S&P500），青線＝基準換算到本檔起點同價位，與K線同一價格軸，K線在青線上方＝強於基準（台股＝加權、美股＝S&P500、其他加密幣＝BTC）；指數／匯率／期貨／BTC 不適用">RS</div>
         <div class="ma-chip-btn" id="cmpAddBtn" style="background:rgba(56,189,248,.12);border-color:#38bdf8;color:#38bdf8;" onclick="cmpToggleInput()" title="比較疊圖：輸入另一檔代號或股名，以區間起點對齊疊在主圖上（最多 3 檔）">＋比較</div>
         <input class="cmp-in" id="cmpIn" placeholder="代號／股名" style="display:none" onkeydown="if(event.key==='Enter')cmpAddInput();else if(event.key==='Escape')cmpToggleInput(false)">
         <span id="cmpTags" style="display:contents"></span>
@@ -1827,7 +1827,8 @@ function rsBench() {
   const id = currentStockId;
   if (!id || isHTF()) return null;
   if (currentMarket === 'TW') return id === 'TWII' ? null : { sym: '^TWII', name: '加權' };
-  if (isCrypto(id) || isYahooSym(id)) return null;
+  if (isCrypto(id)) return id.toUpperCase() === 'BTC' ? null : { sym: 'BTC-USD', name: 'BTC' };   // 其他幣一律對齊 BTC
+  if (isYahooSym(id)) return null;
   return { sym: '^GSPC', name: 'S&P500' };
 }
 async function rsFetchBench(sym) {
@@ -1853,8 +1854,8 @@ function rsCompute(data, bench) {
     if ((Date.parse(d.date) - Date.parse(b.date)) / 864e5 > 7) continue;
     const ratio = d.close / b.close;
     if (!Number.isFinite(ratio) || ratio <= 0) continue;
-    if (base == null) base = ratio;
-    out.push({ time: d.date, value: ratio / base * 100 });
+    if (base == null) base = { ratio, p0: d.close, b0: b.close };
+    out.push({ time: d.date, value: ratio / base.ratio * 100, ref: base.p0 * b.close / base.b0 });   // ref：基準換算到本檔起點同價位，可直接和K線同一個價格軸比較
   }
   return out;
 }
@@ -1870,9 +1871,7 @@ function rsSetup(data) {
   if (!bn || !kChart || !data.length) return;
   if (chip) { chip.textContent = 'RS …'; chip.style.color = ''; }
   // RS 線疊在主圖 K 線下方一條帶狀區（獨立刻度、不顯示軸），不影響價格軸
-  rsSeries = kChart.addLineSeries({ color: '#22d3ee', lineWidth: 1.5, priceScaleId: 'rs', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: rsVisible });
-  try { kChart.priceScale('rs').applyOptions({ scaleMargins: { top: .78, bottom: .03 }, visible: false }); } catch {}
-  try { rsSeries.createPriceLine({ price: 100, color: 'rgba(34,211,238,.4)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false, title: '' }); } catch {}
+  rsSeries = kChart.addLineSeries({ color: '#22d3ee', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: rsVisible, title: 'RS' });   // 與K線共用同一個價格軸
   const myChart = kChart, mySeries = rsSeries;
   rsFetchBench(bn.sym).then(bars => {
     if (kChart !== myChart || rsSeries !== mySeries) return;   // 已換股／重畫，丟棄過期結果
@@ -1880,10 +1879,10 @@ function rsSetup(data) {
     if (!bars.length) { chip.textContent = 'RS（取不到）'; return; }
     const pts = rsCompute(data, bars);
     if (pts.length < 2) { chip.textContent = 'RS（資料不足）'; return; }
-    mySeries.setData(pts);
+    mySeries.setData(pts.map(x => ({ time: x.time, value: x.ref })));
     const rel = pts[pts.length - 1].value / 100 - 1;
     chip.textContent = `RS ${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%`;
-    chip.title = `個股 ÷ ${bn.name}（疊在主圖下方），區間起點＝100；在 100 之上＝這段期間比${bn.name}強，之下＝落後。資料日 ${pts[pts.length - 1].time}`;
+    chip.title = `青色線＝${bn.name}換算到本檔起點同價位（與K線同一價格軸）；K線在青線之上＝這段期間比${bn.name}強，之下＝落後；數字為區間相對報酬。資料日 ${pts[pts.length - 1].time}`;
   }).catch(() => { if (chip && rsSeries === mySeries) chip.textContent = 'RS（失敗）'; });
 }
 // ── 比較疊圖 ──
@@ -2048,7 +2047,7 @@ function scanBearAlerts(bars) {
   const close = a[n - 1].close; let hiC = -Infinity;
   for (let j = Math.max(0, n - 22); j < n; j++) if (a[j].close > hiC) hiC = a[j].close;
   const atrStop = hiC - 3 * (atr[n - 1] || 0);                    // 多單 3×ATR 移動停損（近 22 日最高收盤往下 3 倍 ATR）
-  // 「今日待處理」用：最後一根的量比（對前 20 日均量，不含當根）與 MA20 跌破（最近 3 根內由上往下穿越且仍在 MA20 下方）
+  // 「今日注意事項」用：最後一根的量比（對前 20 日均量，不含當根）與 MA20 跌破（最近 3 根內由上往下穿越且仍在 MA20 下方）
   let vr = null;
   { let s = 0, c = 0; for (let j = n - 21; j < n - 1; j++) { const v = a[j].Trading_Volume || 0; if (v > 0) { s += v; c++; } }
     const lv = a[n - 1].Trading_Volume || 0; if (c >= 15 && lv > 0) vr = lv / (s / c); }
@@ -2100,7 +2099,7 @@ function renderWlAlertSum() {
   el.textContent = n ? `⚠ ${n} 檔出現空方形態` : '';
   const tb = document.getElementById('wlTabBadge'); if (tb) { tb.textContent = n || ''; tb.style.display = n ? '' : 'none'; }
 }
-// ── 首頁「今日待處理」：把自選掃描結果整理成一行一檔（爆量／跌破MA20／空方形態／接近停損）──
+// ── 首頁「今日注意事項」：把自選掃描結果整理成一行一檔（爆量／跌破MA20／空方形態／接近停損）──
 // 純事實整理，不是買賣訊號；資料全部來自上面的自選掃描（日K收盤後的最後一根）。
 const TODO_VOL_X = 2;        // 量比 ≥ 此值視為爆量（對前 20 日均量，與個股頁「🔥爆量」同門檻）
 const TODO_STOP_NEAR = 0.03; // 距 3×ATR 移動停損 ≤ 現價 3% 視為接近
@@ -2160,7 +2159,7 @@ function renderTodo() {
         <span class="td-tags">${tags.map(t => `<span class="td-tag ${t.c}" title="${escHtml(t.tip || '')}">${escHtml(t.t)}</span>`).join('')}</span>
       </div>`;
     }).join('');
-  } catch (e) { console.warn('[今日待處理]', e); }
+  } catch (e) { console.warn('[今日注意事項]', e); }
 }
 function todoRescan() { scanWatchlistAlerts(true); renderTodo(); }
 function renderWatchlist() {
