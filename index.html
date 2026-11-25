@@ -2095,6 +2095,7 @@ async function fetchUSPrice(ticker) {
   const nodes  = ['query1', 'query2'];
   const ranges = ['10y', '5y', '2y'];
   const symbol = isCrypto(ticker) ? CRYPTO[ticker.toUpperCase()].sym : ticker.toUpperCase();
+  let best = null, lastErr = '';
   for (const rng of ranges) {
     for (const node of nodes) {
       const url = `https://${node}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${rng}&includePrePost=false`;
@@ -2104,10 +2105,12 @@ async function fetchUSPrice(ticker) {
           currentSuffix = '';
           return data;
         }
-      } catch(e) {}
+        if (data && data.length && (!best || data.length > best.length)) best = data;   // 新上市：先記下，不直接丟掉
+      } catch(e) { lastErr = e && e.message || String(e); }
     }
   }
-  throw new Error(`無法取得 ${ticker} 美股價格資料`);
+  if (best) { currentSuffix = ''; return best; }   // 新上市股票（日K不足10根）仍照常顯示
+  throw new Error(`無法取得 ${ticker} 美股價格資料` + (lastErr ? `（${lastErr}）` : ''));
 }
 
 // 美股核心財務資料（只抓能用的模組）
