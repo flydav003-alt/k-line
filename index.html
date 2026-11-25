@@ -556,6 +556,12 @@ body.no-stock #splash{justify-content:flex-start;align-items:stretch;}
 .hs-edit textarea{width:100%;font-family:var(--mono);line-height:1.6;resize:vertical;}
 .hs-msg{font-size:.68rem;color:var(--muted);margin-left:auto;}
 @media(max-width:700px){.hs-grid{grid-template-columns:repeat(2,1fr);}}
+/* 座標切換／比較疊圖 */
+.cmp-in{width:96px;background:var(--s2);color:var(--text);border:1px solid var(--border2);border-radius:10px;padding:2px 8px;font-size:.65rem;font-family:var(--mono);}
+.cmp-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--border2);border-radius:10px;font-size:.65rem;font-family:var(--mono);white-space:nowrap;}
+.cmp-tag b{cursor:pointer;font-weight:400;opacity:.65;}
+.cmp-tag b:hover{opacity:1;}
+.cmp-tag.base{color:var(--muted2);border-style:dashed;}
 /* 今日待處理 */
 #todoBox{width:100%;max-width:920px;margin:18px auto 0;color:var(--text);}
 #todoBox .td-sub{font-size:.68rem;color:var(--muted);font-family:var(--mono);}
@@ -1033,6 +1039,10 @@ body.sub-collapsed .sub-charts{display:none;}
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
         <div class="ma-chip-btn" id="rsChip" data-off="0" style="background:rgba(34,211,238,.12);border-color:#22d3ee;color:#22d3ee;margin-left:2px;" onclick="toggleRS()" title="相對強弱線：個股÷大盤（台股＝加權、美股＝S&P500），疊在RSI圖，區間起點＝100；指數／匯率／期貨／加密貨幣不適用">RS</div>
+        <div class="ma-chip-btn" id="scaleChip" style="background:rgba(148,163,184,.12);border-color:#94a3b8;color:#94a3b8;margin-left:6px;" onclick="cycleScale()" title="價格軸座標：線性 → 對數 → 百分比（點擊切換）。看多年走勢用對數，比較多檔用百分比">線性</div>
+        <div class="ma-chip-btn" id="cmpAddBtn" style="background:rgba(56,189,248,.12);border-color:#38bdf8;color:#38bdf8;" onclick="cmpToggleInput()" title="比較疊圖：輸入另一檔代號或股名，以區間起點對齊疊在主圖上（最多 3 檔）">＋比較</div>
+        <input class="cmp-in" id="cmpIn" placeholder="代號／股名" style="display:none" onkeydown="if(event.key==='Enter')cmpAddInput();else if(event.key==='Escape')cmpToggleInput(false)">
+        <span id="cmpTags" style="display:contents"></span>
         <span class="tg-sp"></span>
         <div class="ma-chip-btn" id="rpChip" onclick="rpStart()" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-right:6px;" title="逐根播放：一根一根看走勢（先猜再看）。空白鍵播放／暫停，← → 前後一根，Esc 結束">▶ 回放</div>
         <div class="chart-tab" id="trendToggleBtn" onclick="toggleTrendChannel()" title="趨勢通道：斜線趨勢線、水平支撐壓力、圖形型態（M頭／W底／頭肩／三角形）（T）" style="cursor:pointer;user-select:none;">
@@ -1531,6 +1541,11 @@ let _markerArgs = null;
 let kdVisible = true;
 let rsVisible = (() => { try { return localStorage.getItem('kline_rs_on') !== '0'; } catch { return true; } })();
 let rsSeries = null;
+let scaleMode = (() => { try { const v = +localStorage.getItem('kline_scale'); return v === 1 || v === 2 ? v : 0; } catch { return 0; } })();   // 0 線性／1 對數／2 百分比
+let scaleAutoPct = false;                 // 加入第一檔比較時自動切百分比（不寫入儲存，移除最後一檔時還原）
+let cmpList = [], cmpCol = {}, cmpSeries = {}, cmpData = null;   // 比較疊圖：代號清單、顏色、序列、目前主圖K棒
+const cmpMem = {};
+const CMP_COLORS = ['#38bdf8', '#f0abfc', '#bef264'];
 const benchMem = {};   // 大盤日K記憶體快取：sym -> { t, bars }
 let maVisibility = { 5:false, 10:false, 20:true, 60:true, 120:false, 240:false };
 let wlQuotes = {};      // 追蹤清單報價：id -> { price, chg }
@@ -1845,6 +1860,116 @@ function rsSetup(data) {
       txt.title = `個股 ÷ ${bn.name}，區間起點＝100；在 100 之上＝這段期間比大盤強，之下＝落後。資料日 ${pts[pts.length - 1].time}`;
     }
   }).catch(() => { if (txt && rsSeries === mySeries) txt.textContent = 'RS（載入失敗）'; });
+}
+// ── 價格軸座標：線性／對數／百分比 ──
+const SCALE_NAME = ['線性', '對數', '百分比'];
+function applyScaleMode() {
+  if (kChart) { try { kChart.priceScale('right').applyOptions({ mode: scaleMode }); } catch {} }
+  const c = document.getElementById('scaleChip');
+  if (c) c.textContent = SCALE_NAME[scaleMode] + (scaleAutoPct ? '（比較中）' : '');
+}
+function cycleScale() {
+  scaleMode = (scaleMode + 1) % 3; scaleAutoPct = false;
+  try { localStorage.setItem('kline_scale', String(scaleMode)); } catch {}
+  applyScaleMode();
+}
+
+// ── 比較疊圖 ──
+// 把另一檔收盤價「換算到主圖起點同一價位」後疊成一條線（起點對齊，只看相對漲跌），在百分比座標下最好讀；
+// 標籤顯示各檔在目前區間的漲跌幅。日期以「≤ 該根」最近一筆對齊（無前視；回測／逐根播放也只用到當根為止）。
+// 小時線不提供。主圖本身（K 線、均線）不受影響。
+const cmpName = id => id === 'TWII' ? '加權' : (nameOf(id) || id);
+async function cmpFetch(id) {
+  const m = cmpMem[id];
+  if (m && Date.now() - m.t < 6 * 3600 * 1000) return m.bars;
+  const sv = currentSuffix;   // fetchYahooPrice／fetchUSPrice 會改 currentSuffix，抓完還原，避免影響主圖那檔
+  let bars = [];
+  try {
+    if (id === 'TWII') bars = await fetchUSPrice('^TWII');
+    else if (/^\d/.test(id)) {
+      const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
+      try { bars = await fetchPrice(id, token); } catch { bars = await fetchYahooPrice(id); }
+    } else bars = await fetchUSPrice(id);
+  } finally { currentSuffix = sv; }
+  bars = cleanBars(bars);
+  if (bars.length) cmpMem[id] = { t: Date.now(), bars };
+  return bars;
+}
+function cmpAlign(data, bars) {
+  const out = []; let j = -1;
+  data.forEach((d, i) => {
+    while (j + 1 < bars.length && bars[j + 1].date <= d.date) j++;
+    if (j < 0) return;
+    if ((Date.parse(d.date) - Date.parse(bars[j].date)) / 864e5 > 7) return;
+    out.push({ i, time: d.date, v: bars[j].close });
+  });
+  return out;
+}
+function cmpSetup(data) { cmpSeries = {}; cmpData = data; cmpSync(); }
+function cmpSync() {
+  Object.keys(cmpSeries).forEach(id => {
+    if (!cmpList.includes(id) || id === currentStockId || !kChart) { try { kChart && kChart.removeSeries(cmpSeries[id].s); } catch {} delete cmpSeries[id]; }
+  });
+  if (kChart && cmpData && cmpData.length && !isHTF()) {
+    const myChart = kChart, data = cmpData;
+    cmpList.forEach(id => {
+      if (id === currentStockId || cmpSeries[id]) return;
+      const s = kChart.addLineSeries({ color: cmpCol[id], lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const e = cmpSeries[id] = { s, ret: null, mainRet: null, state: 'loading' };
+      cmpFetch(id).then(bars => {
+        if (kChart !== myChart || cmpSeries[id] !== e) return;   // 已換股／重畫／已移除
+        const al = bars.length ? cmpAlign(data, bars) : [];
+        if (al.length < 2) { e.state = bars.length ? 'short' : 'fail'; cmpRender(); return; }
+        const p0 = al[0].v, m0 = data[al[0].i].close;
+        s.setData(al.map(x => ({ time: x.time, value: x.v / p0 * m0 })));
+        e.ret = al[al.length - 1].v / p0 - 1;
+        e.mainRet = data[data.length - 1].close / m0 - 1;
+        e.state = 'ok'; cmpRender();
+      }).catch(() => { if (cmpSeries[id] === e) { e.state = 'fail'; cmpRender(); } });
+    });
+  }
+  cmpRender(); applyScaleMode();
+}
+function cmpRender() {
+  const box = document.getElementById('cmpTags'); if (!box) return;
+  const pct = v => (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+  const col = v => v > 0 ? 'var(--up)' : v < 0 ? 'var(--green)' : 'var(--muted2)';
+  const ok = cmpList.map(id => cmpSeries[id]).find(e => e && e.state === 'ok');
+  let h = ok ? `<span class="cmp-tag base" title="主圖這檔在同一段區間的漲跌幅">本檔 <span style="color:${col(ok.mainRet)}">${pct(ok.mainRet)}</span></span>` : '';
+  cmpList.forEach(id => {
+    const e = cmpSeries[id];
+    let st = '';
+    if (isHTF()) st = '小時線不適用';
+    else if (id === currentStockId) st = '同本檔';
+    else if (!e || e.state === 'loading') st = '載入中…';
+    else if (e.state === 'fail') st = '取不到資料';
+    else if (e.state === 'short') st = '區間資料不足';
+    else st = `<span style="color:${col(e.ret)}">${pct(e.ret)}</span>`;
+    h += `<span class="cmp-tag" style="color:${cmpCol[id]};border-color:${cmpCol[id]}"><span>${escHtml(cmpName(id))}</span> ${st} <b onclick="cmpRemove('${escHtml(id)}')" title="移除">✕</b></span>`;
+  });
+  box.innerHTML = h;
+}
+function cmpToggleInput(force) {
+  const inp = document.getElementById('cmpIn'); if (!inp) return;
+  const on = force === undefined ? inp.style.display === 'none' : force;
+  inp.style.display = on ? '' : 'none';
+  if (on) { inp.value = ''; inp.focus(); }
+}
+function cmpAddInput() {
+  const inp = document.getElementById('cmpIn'), v = normInput(inp.value).trim(); if (!v) return;
+  const id = resolveStockInput(v);
+  const bad = !id || !isValidCode(id) ? '找不到這個代號' : id === currentStockId ? '就是目前這檔' : cmpList.includes(id) ? '已經在比較中' : cmpList.length >= 3 ? '最多比較 3 檔，請先移除一檔' : '';
+  if (bad) { inp.value = ''; inp.placeholder = bad; setTimeout(() => { inp.placeholder = '代號／股名'; }, 2500); return; }
+  if (!cmpList.length && scaleMode === 0) { scaleMode = 2; scaleAutoPct = true; }   // 第一檔比較：自動切百分比，較好讀
+  cmpCol[id] = CMP_COLORS.find(c => !cmpList.some(x => cmpCol[x] === c)) || CMP_COLORS[0];
+  cmpList.push(id);
+  inp.value = ''; cmpToggleInput(false);
+  cmpSync();
+}
+function cmpRemove(id) {
+  cmpList = cmpList.filter(x => x !== id); delete cmpCol[id];
+  if (!cmpList.length && scaleAutoPct) { scaleMode = 0; scaleAutoPct = false; }
+  cmpSync();
 }
 function toggleRS() {
   rsVisible = !rsVisible;
@@ -3941,6 +4066,9 @@ function buildCharts(data, keepRange = false) {
     }
     try { rsSetup(data); } catch (e) { console.warn('[RS]', e); }   // 相對強弱線（疊在 RSI 圖，獨立刻度）
   }
+
+  try { cmpSetup(data); } catch (e) { console.warn('[比較疊圖]', e); }   // 比較疊圖＋價格軸座標
+  applyScaleMode();
 
   // 同步十字線 & 時間軸
   const allCharts = [
