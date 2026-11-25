@@ -713,6 +713,14 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wl-right{text-align:right;white-space:nowrap;}
 .wl-px{font-size:.78rem;}
 .wl-chg{font-size:.72rem;opacity:.9;margin:0 2px 0 4px;}
+#wlIO{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;}
+#wlIO.on{display:flex;}
+#wlIO .wio-box{width:min(420px,100%);background:var(--s1);border:1px solid var(--border2);border-radius:12px;padding:14px;box-shadow:0 10px 40px rgba(0,0,0,.5);}
+#wlIO .wio-t{font-weight:700;color:var(--gold);margin-bottom:4px;}
+#wlIO .wio-h{font-size:.7rem;color:var(--muted);margin-bottom:8px;line-height:1.5;}
+#wlIO textarea{width:100%;height:240px;resize:vertical;box-sizing:border-box;background:var(--s2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-family:var(--mono);font-size:.8rem;line-height:1.6;}
+#wlIO .wio-b{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;justify-content:flex-end;align-items:center;}
+#wlIO .wio-msg{font-size:.7rem;color:var(--muted);margin-right:auto;}
 .wl-sub{grid-column:2 / -1;min-width:0;}
 .wl-sub .wl-alert{margin-left:0;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 #rpWatch .recent-bar{display:flex;border-top:1px solid var(--border);border-bottom:none;padding:10px 12px;background:transparent;}
@@ -983,7 +991,7 @@ body.sub-collapsed .sub-charts{display:none;}
       <div class="rp-pane on" id="rpWatch">
         <div class="wl-head">
           <span id="wlAlertSum" style="font-size:.68rem;color:#ff9f40;font-weight:600;"></span>
-          <span style="display:flex;gap:6px;"><button class="wl-add-btn" onclick="wlRefreshAll()" title="更新自選報價">⟳</button><button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入目前代號</button></span>
+          <span style="display:flex;gap:6px;"><button class="wl-add-btn" onclick="wlRefreshAll()" title="更新自選報價">⟳</button><button class="wl-add-btn" onclick="openWlIO()" title="匯出／匯入自選（純文字）">⇅ 匯出入</button><button class="wl-add-btn" onclick="addToWatchlist()" title="加入目前代號">＋ 加入目前代號</button></span>
         </div>
         <div id="wlItems"><span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（輸入代號後按「＋ 加入目前代號」，列可拖曳排序）</span></div>
         <div id="recentBar" class="recent-bar" style="display:none;">
@@ -1805,6 +1813,57 @@ function addToWatchlist() {
   renderWatchlist();
   refreshWatchlistQuotes();
   scanWatchlistAlerts(true);
+}
+// ── 自選匯出／匯入（純文字，一行一檔：名稱+代號）──
+function wlExportText() {
+  return watchlist.map(c => {
+    const nm = c === 'TWII' ? '加權指數' : nameOf(c);
+    if (!nm) return c;
+    return nm + (/[A-Za-z0-9]$/.test(nm) ? ' ' : '') + c;   // 名稱結尾是英數時加空格，避免和代號黏在一起
+  }).join('\n');
+}
+function wlParseText(text) {
+  const out = [], seen = new Set();
+  String(text || '').split(/\r?\n/).forEach(raw => {
+    let line = normInput(raw).trim();
+    if (!line || line[0] === '#') return;
+    const tok = line.split(/[\s,，、;；\t]+/).filter(Boolean).pop().toUpperCase();
+    let code = isValidCode(tok) ? tok : ((tok.match(/(\d{4,6}[A-Z]?|[A-Z]{1,5})$/) || [])[1] || '');
+    if (code === 'T00') code = 'TWII';
+    if (!isValidCode(code) || seen.has(code)) return;
+    seen.add(code);
+    const name = line.slice(0, line.toUpperCase().lastIndexOf(code)).replace(/[\s,，、;；]+$/, '').trim();
+    out.push({ code, name });
+  });
+  return out;
+}
+function openWlIO() {
+  document.getElementById('wlIOText').value = wlExportText();
+  document.getElementById('wlIOMsg').textContent = `目前 ${watchlist.length} 檔`;
+  document.getElementById('wlIO').classList.add('on');
+}
+function closeWlIO() { document.getElementById('wlIO').classList.remove('on'); }
+async function wlIOCopy() {
+  const ta = document.getElementById('wlIOText'), msg = document.getElementById('wlIOMsg');
+  try { await navigator.clipboard.writeText(ta.value); msg.textContent = '已複製'; }
+  catch { ta.select(); document.execCommand('copy'); msg.textContent = '已複製'; }
+}
+function wlIOImport(mode) {
+  const list = wlParseText(document.getElementById('wlIOText').value), msg = document.getElementById('wlIOMsg');
+  if (!list.length) { msg.textContent = '沒有讀到有效代號'; return; }
+  if (mode === 'replace' && watchlist.length && !confirm(`將以這 ${list.length} 檔取代目前自選（${watchlist.length} 檔），確定？`)) return;
+  const before = watchlist.length;
+  const next = mode === 'replace' ? [] : watchlist.slice();
+  list.forEach(({ code, name }) => {
+    if (name && !nameOf(code) && code !== 'TWII') rememberName(code, name);
+    if (!next.includes(code)) next.push(code);
+  });
+  watchlist = next;
+  localStorage.setItem('kline_watchlist', JSON.stringify(watchlist));
+  renderWatchlist();
+  wlRefreshAll(); scanWatchlistAlerts(true);
+  msg.textContent = mode === 'replace' ? `已覆蓋，共 ${watchlist.length} 檔` : `已加入 ${watchlist.length - before} 檔，共 ${watchlist.length} 檔`;
+  document.getElementById('wlIOText').value = wlExportText();
 }
 function removeFromWatchlist(e, code) {
   e.stopPropagation();
@@ -6428,5 +6487,19 @@ document.addEventListener('click', e => { const w = document.getElementById('mor
   window.addEventListener('resize', () => { const h = parseFloat(sub.style.getPropertyValue('--subH')); if (h > maxH()) set(maxH()); });
 })();
 </script>
+<div id="wlIO" onclick="if(event.target===this)closeWlIO()">
+  <div class="wio-box">
+    <div class="wio-t">自選清單 匯出／匯入</div>
+    <div class="wio-h">一行一檔，例如「台積電2330」。匯入時只認每行最後的代號，名稱可有可無（直接貼 2330 也行）。</div>
+    <textarea id="wlIOText" spellcheck="false" placeholder="加權指數TWII&#10;台積電2330&#10;NVDA"></textarea>
+    <div class="wio-b">
+      <span class="wio-msg" id="wlIOMsg"></span>
+      <button class="wl-add-btn" onclick="wlIOCopy()">複製</button>
+      <button class="wl-add-btn" onclick="wlIOImport('merge')">加入（合併）</button>
+      <button class="wl-add-btn" onclick="wlIOImport('replace')">覆蓋</button>
+      <button class="wl-add-btn" onclick="closeWlIO()">關閉</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
