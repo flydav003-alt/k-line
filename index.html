@@ -914,6 +914,36 @@ body.sub-collapsed .sub-charts{display:none;}
   .sub-split,.sub-charts{margin-left:40px;}
   .scroll-strip{display:none;}   /* 桌機不需要手機用的上下滑動條 */
 }
+
+/* ── 看盤牆 ── */
+#wallWrap{display:none;position:fixed;left:0;right:0;top:48px;bottom:0;z-index:190;background:var(--bg);flex-direction:column;}
+#wallWrap.on{display:flex;}
+.wk-bar{flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 12px;border-bottom:1px solid var(--border);background:var(--s1);font-size:.74rem;color:var(--muted2);}
+.wk-t{font-weight:700;color:var(--gold);}
+.wk-seg{display:inline-flex;border:1px solid var(--border2);border-radius:8px;overflow:hidden;}
+.wk-seg button{background:var(--s2);color:var(--muted2);border:none;padding:4px 14px;cursor:pointer;font-family:var(--mono);font-size:.74rem;}
+.wk-seg button.on{background:var(--gold);color:#000;font-weight:700;}
+.wk-info{font-size:.62rem;color:var(--muted);font-family:var(--mono);}
+.wk-grid{flex:1 1 auto;min-height:0;display:grid;gap:6px;padding:6px;}
+.wk-grid.n1{grid-template-columns:1fr;grid-template-rows:1fr;}
+.wk-grid.n2{grid-template-columns:1fr 1fr;grid-template-rows:1fr;}
+.wk-grid.n4{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;}
+@media(max-width:700px){.wk-grid.n2{grid-template-columns:1fr;grid-template-rows:1fr 1fr;}.wk-info{display:none;}}
+.wk-cell{position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.wk-ch{flex:none;display:flex;align-items:center;gap:6px;padding:5px 8px 2px;flex-wrap:wrap;}
+.wk-cin{width:78px;background:var(--bg);border:1px solid var(--border2);color:var(--text);border-radius:6px;padding:3px 6px;font-family:var(--mono);font-size:.78rem;letter-spacing:1px;}
+.wk-cin:focus{border-color:var(--gold);outline:none;}
+.wk-csel{background:var(--s2);color:var(--muted2);border:1px solid var(--border);border-radius:6px;font-size:.66rem;padding:2px;max-width:58px;}
+.wk-cnm{font-size:.8rem;font-weight:600;color:var(--gold2);cursor:pointer;white-space:nowrap;}
+.wk-cnm:hover{text-decoration:underline;}
+.wk-cpx{margin-left:auto;font-family:var(--mono);font-size:1rem;font-weight:600;white-space:nowrap;}
+.wk-cchg{font-family:var(--mono);font-size:.74rem;white-space:nowrap;}
+.wk-ctm{font-family:var(--mono);font-size:.6rem;color:var(--muted);white-space:nowrap;}
+.wk-cgo,.wk-crf{background:var(--s2);border:1px solid var(--border2);color:var(--muted2);border-radius:6px;padding:1px 7px;font-size:.72rem;cursor:pointer;}
+.wk-cgo:hover,.wk-crf:hover{border-color:var(--gold);color:var(--gold);}
+.wk-leg{flex:none;min-height:16px;padding:0 8px 2px;font-family:var(--mono);font-size:.64rem;color:var(--muted2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.wk-cc{flex:1 1 auto;min-height:0;position:relative;overflow:hidden;}
+.wk-msg{position:absolute;left:0;right:0;top:55%;text-align:center;font-size:.74rem;color:var(--muted2);pointer-events:none;padding:0 12px;}
 </style>
 </head>
 <body class="no-stock">
@@ -929,6 +959,7 @@ body.sub-collapsed .sub-charts{display:none;}
 
     <button class="btn-analyze" onclick="analyze()">▶ 分析</button>
     <button class="btn-realtime" id="btnRealtime" onclick="analyzeRealtime()" title="盤中即時：補入證交所官方即時K棒，並每15秒自動更新（再按一次停止）">📡 即時</button>
+    <button class="btn-realtime" id="btnWall" onclick="wallToggle()" title="看盤牆：1／2／4 格同時看多檔日K，十字線可連動">▦ 看盤牆</button>
   </div>
 
   <div class="more-wrap" id="moreWrap">
@@ -1038,8 +1069,7 @@ body.sub-collapsed .sub-charts{display:none;}
         <div class="ma-chip-btn" id="vwapChip" data-off="0" style="background:rgba(255,200,50,.12);border-color:rgba(255,200,50,.6);color:rgba(255,200,50,.9);margin-left:4px;" onclick="toggleVWAP()" title="VWAP：由目前顯示區間第一根K棒起算的成交量加權均價（點擊開關）">VWAP</div>
         <div class="ma-chip-btn" id="bbChip" data-bb="1" data-off="1" style="background:rgba(41,197,197,.12);border-color:#29c5c5;color:#29c5c5;margin-left:4px;" onclick="toggleBB()" title="布林通道（Bollinger Bands，20日±2σ）">BB</div>
         <div class="ma-chip-btn" id="kdChip" data-kd="1" style="background:rgba(255,159,64,.12);border-color:#ff9f40;color:#ff9f40;margin-left:2px;" onclick="toggleKDline()" title="KD線疊加在RSI圖（K線橘色/D線黃色）">KD</div>
-        <div class="ma-chip-btn" id="rsChip" data-off="0" style="background:rgba(34,211,238,.12);border-color:#22d3ee;color:#22d3ee;margin-left:2px;" onclick="toggleRS()" title="相對強弱線：個股÷大盤（台股＝加權、美股＝S&P500），疊在RSI圖，區間起點＝100；指數／匯率／期貨／加密貨幣不適用">RS</div>
-        <div class="ma-chip-btn" id="scaleChip" style="background:rgba(148,163,184,.12);border-color:#94a3b8;color:#94a3b8;margin-left:6px;" onclick="cycleScale()" title="價格軸座標：線性 → 對數 → 百分比（點擊切換）。看多年走勢用對數，比較多檔用百分比">線性</div>
+        <div class="ma-chip-btn" id="rsChip" data-off="0" style="background:rgba(34,211,238,.12);border-color:#22d3ee;color:#22d3ee;margin-left:2px;" onclick="toggleRS()" title="相對強弱線：個股÷大盤（台股＝加權、美股＝S&P500），疊在主圖下方，區間起點＝100；指數／匯率／期貨／加密貨幣不適用">RS</div>
         <div class="ma-chip-btn" id="cmpAddBtn" style="background:rgba(56,189,248,.12);border-color:#38bdf8;color:#38bdf8;" onclick="cmpToggleInput()" title="比較疊圖：輸入另一檔代號或股名，以區間起點對齊疊在主圖上（最多 3 檔）">＋比較</div>
         <input class="cmp-in" id="cmpIn" placeholder="代號／股名" style="display:none" onkeydown="if(event.key==='Enter')cmpAddInput();else if(event.key==='Escape')cmpToggleInput(false)">
         <span id="cmpTags" style="display:contents"></span>
@@ -1103,7 +1133,6 @@ body.sub-collapsed .sub-charts{display:none;}
             <span id="rsiValLabel" style="color:#a78bfa;font-size:.65rem;margin-left:4px;"></span>
             <span class="cl-item" id="kdLabelItem" style="display:none"><span class="cl-dot" style="background:#ff9f40"></span><span>K</span></span>
             <span class="cl-item" id="kdDLabelItem" style="display:none"><span class="cl-dot" style="background:#e8b84b"></span><span>D</span></span>
-            <span class="cl-item" id="rsLabelItem" style="display:none"><span class="cl-dot" style="background:#22d3ee"></span><span id="rsLabelTxt">RS</span></span>
           </div>
           <div id="rsiChart"></div>
         </div>
@@ -1541,8 +1570,6 @@ let _markerArgs = null;
 let kdVisible = true;
 let rsVisible = (() => { try { return localStorage.getItem('kline_rs_on') !== '0'; } catch { return true; } })();
 let rsSeries = null;
-let scaleMode = (() => { try { const v = +localStorage.getItem('kline_scale'); return v === 1 || v === 2 ? v : 0; } catch { return 0; } })();   // 0 線性／1 對數／2 百分比
-let scaleAutoPct = false;                 // 加入第一檔比較時自動切百分比（不寫入儲存，移除最後一檔時還原）
 let cmpList = [], cmpCol = {}, cmpSeries = {}, cmpData = null;   // 比較疊圖：代號清單、顏色、序列、目前主圖K棒
 const cmpMem = {};
 const CMP_COLORS = ['#38bdf8', '#f0abfc', '#bef264'];
@@ -1832,50 +1859,35 @@ function rsCompute(data, bench) {
   return out;
 }
 function rsUpdateUI(bn) {
-  const chip = document.getElementById('rsChip'), item = document.getElementById('rsLabelItem');
-  if (chip) { chip.dataset.off = (bn && rsVisible) ? '0' : '1'; chip.style.opacity = bn ? '' : '.4'; }
-  if (item) item.style.display = (bn && rsVisible) ? 'flex' : 'none';
+  const chip = document.getElementById('rsChip');
+  if (chip) { chip.dataset.off = (bn && rsVisible) ? '0' : '1'; chip.style.opacity = bn ? '' : '.4'; if (!bn) chip.textContent = 'RS'; }
 }
 function rsSetup(data) {
   rsSeries = null;
   const bn = rsBench();
   rsUpdateUI(bn);
-  if (!bn || !rsiChart || !data.length) return;
-  const txt = document.getElementById('rsLabelTxt');
-  if (txt) { txt.textContent = `RS 相對${bn.name} …`; txt.style.color = ''; }
-  rsSeries = rsiChart.addLineSeries({ color: '#22d3ee', lineWidth: 1.5, priceScaleId: 'rs', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: rsVisible });
-  try { rsiChart.priceScale('rs').applyOptions({ scaleMargins: { top: .12, bottom: .12 } }); } catch {}
+  const chip = document.getElementById('rsChip');
+  if (!bn || !kChart || !data.length) return;
+  if (chip) { chip.textContent = 'RS …'; chip.style.color = ''; }
+  // RS 線疊在主圖 K 線下方一條帶狀區（獨立刻度、不顯示軸），不影響價格軸
+  rsSeries = kChart.addLineSeries({ color: '#22d3ee', lineWidth: 1.5, priceScaleId: 'rs', priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, visible: rsVisible });
+  try { kChart.priceScale('rs').applyOptions({ scaleMargins: { top: .78, bottom: .03 }, visible: false }); } catch {}
   try { rsSeries.createPriceLine({ price: 100, color: 'rgba(34,211,238,.4)', lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false, title: '' }); } catch {}
-  const myChart = rsiChart, mySeries = rsSeries;
+  const myChart = kChart, mySeries = rsSeries;
   rsFetchBench(bn.sym).then(bars => {
-    if (rsiChart !== myChart || rsSeries !== mySeries) return;   // 已換股／重畫，丟棄過期結果
-    if (!bars.length) { if (txt) txt.textContent = `RS（${bn.name}資料取不到）`; return; }
+    if (kChart !== myChart || rsSeries !== mySeries) return;   // 已換股／重畫，丟棄過期結果
+    if (!chip) return;
+    if (!bars.length) { chip.textContent = 'RS（取不到）'; return; }
     const pts = rsCompute(data, bars);
-    if (pts.length < 2) { if (txt) txt.textContent = 'RS（區間資料不足）'; return; }
+    if (pts.length < 2) { chip.textContent = 'RS（資料不足）'; return; }
     mySeries.setData(pts);
     const rel = pts[pts.length - 1].value / 100 - 1;
-    if (txt) {
-      txt.textContent = `RS 相對${bn.name} ${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%`;
-      txt.style.color = rel > 0 ? 'var(--up)' : rel < 0 ? 'var(--green)' : '';
-      txt.title = `個股 ÷ ${bn.name}，區間起點＝100；在 100 之上＝這段期間比大盤強，之下＝落後。資料日 ${pts[pts.length - 1].time}`;
-    }
-  }).catch(() => { if (txt && rsSeries === mySeries) txt.textContent = 'RS（載入失敗）'; });
+    chip.textContent = `RS ${rel >= 0 ? '+' : ''}${(rel * 100).toFixed(1)}%`;
+    chip.title = `個股 ÷ ${bn.name}（疊在主圖下方），區間起點＝100；在 100 之上＝這段期間比${bn.name}強，之下＝落後。資料日 ${pts[pts.length - 1].time}`;
+  }).catch(() => { if (chip && rsSeries === mySeries) chip.textContent = 'RS（失敗）'; });
 }
-// ── 價格軸座標：線性／對數／百分比 ──
-const SCALE_NAME = ['線性', '對數', '百分比'];
-function applyScaleMode() {
-  if (kChart) { try { kChart.priceScale('right').applyOptions({ mode: scaleMode }); } catch {} }
-  const c = document.getElementById('scaleChip');
-  if (c) c.textContent = SCALE_NAME[scaleMode] + (scaleAutoPct ? '（比較中）' : '');
-}
-function cycleScale() {
-  scaleMode = (scaleMode + 1) % 3; scaleAutoPct = false;
-  try { localStorage.setItem('kline_scale', String(scaleMode)); } catch {}
-  applyScaleMode();
-}
-
 // ── 比較疊圖 ──
-// 把另一檔收盤價「換算到主圖起點同一價位」後疊成一條線（起點對齊，只看相對漲跌），在百分比座標下最好讀；
+// 把另一檔收盤價「換算到主圖起點同一價位」後疊成一條線（起點對齊，只看相對漲跌），
 // 標籤顯示各檔在目前區間的漲跌幅。日期以「≤ 該根」最近一筆對齊（無前視；回測／逐根播放也只用到當根為止）。
 // 小時線不提供。主圖本身（K 線、均線）不受影響。
 const cmpName = id => id === 'TWII' ? '加權' : (nameOf(id) || id);
@@ -1886,6 +1898,7 @@ async function cmpFetch(id) {
   let bars = [];
   try {
     if (id === 'TWII') bars = await fetchUSPrice('^TWII');
+    else if (isYahooSym(id)) bars = await fetchUSPrice(id);
     else if (/^\d/.test(id)) {
       const token = FINMIND_TOKEN !== 'YOUR_TOKEN_HERE' ? FINMIND_TOKEN : '';
       try { bars = await fetchPrice(id, token); } catch { bars = await fetchYahooPrice(id); }
@@ -1928,7 +1941,7 @@ function cmpSync() {
       }).catch(() => { if (cmpSeries[id] === e) { e.state = 'fail'; cmpRender(); } });
     });
   }
-  cmpRender(); applyScaleMode();
+  cmpRender();
 }
 function cmpRender() {
   const box = document.getElementById('cmpTags'); if (!box) return;
@@ -1960,7 +1973,6 @@ function cmpAddInput() {
   const id = resolveStockInput(v);
   const bad = !id || !isValidCode(id) ? '找不到這個代號' : id === currentStockId ? '就是目前這檔' : cmpList.includes(id) ? '已經在比較中' : cmpList.length >= 3 ? '最多比較 3 檔，請先移除一檔' : '';
   if (bad) { inp.value = ''; inp.placeholder = bad; setTimeout(() => { inp.placeholder = '代號／股名'; }, 2500); return; }
-  if (!cmpList.length && scaleMode === 0) { scaleMode = 2; scaleAutoPct = true; }   // 第一檔比較：自動切百分比，較好讀
   cmpCol[id] = CMP_COLORS.find(c => !cmpList.some(x => cmpCol[x] === c)) || CMP_COLORS[0];
   cmpList.push(id);
   inp.value = ''; cmpToggleInput(false);
@@ -1968,7 +1980,6 @@ function cmpAddInput() {
 }
 function cmpRemove(id) {
   cmpList = cmpList.filter(x => x !== id); delete cmpCol[id];
-  if (!cmpList.length && scaleAutoPct) { scaleMode = 0; scaleAutoPct = false; }
   cmpSync();
 }
 function toggleRS() {
@@ -4064,11 +4075,10 @@ function buildCharts(data, keepRange = false) {
       if(dlEl) dlEl.style.display = kdVisible ? 'flex' : 'none';
       document.getElementById('kdChip')?.setAttribute('data-off', kdVisible ? '0' : '1');
     }
-    try { rsSetup(data); } catch (e) { console.warn('[RS]', e); }   // 相對強弱線（疊在 RSI 圖，獨立刻度）
   }
 
-  try { cmpSetup(data); } catch (e) { console.warn('[比較疊圖]', e); }   // 比較疊圖＋價格軸座標
-  applyScaleMode();
+  try { rsSetup(data); } catch (e) { console.warn('[RS]', e); }   // 相對強弱線（疊在主圖下方，獨立刻度）
+  try { cmpSetup(data); } catch (e) { console.warn('[比較疊圖]', e); }   // 比較疊圖
 
   // 同步十字線 & 時間軸
   const allCharts = [
@@ -6679,6 +6689,7 @@ const DL = (() => {
 // ═══════════════════════════════════════
 document.addEventListener('keydown', e => {
   if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) return;
+  if (wall.open) { if (e.key === 'Escape') wallClose(); return; }
   if (rp.on && !e.ctrlKey && !e.metaKey && !e.altKey) {
     if (e.key === ' ') { e.preventDefault(); rpToggle(); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); rpStep(1); return; }
@@ -7157,6 +7168,7 @@ function rpStop(sync) {
 }
 
 window.__onTheme = function () {
+  try { wallOnTheme(); } catch (e) {}
   try { if (rp.on) rpRender(); else if (typeof priceData !== 'undefined' && priceData.length && !document.getElementById('splash').offsetParent) redraw(true); } catch (e) { console.warn(e); }
   try { if (typeof intradayMode !== 'undefined' && intradayMode && idChartObj) idChartObj.applyOptions({ layout: { textColor: cssv('--c-text') }, grid: { vertLines: { color: cssv('--c-grid') }, horzLines: { color: cssv('--c-grid') } }, rightPriceScale: { borderColor: cssv('--c-border') }, timeScale: { borderColor: cssv('--c-border') } }); } catch (e) {}
   try { hsRender(); } catch (e) {}
@@ -7241,7 +7253,268 @@ document.addEventListener('click', e => { const w = document.getElementById('mor
   window.toggleSubCharts = e => { e && e.stopPropagation(); const c = document.body.classList.toggle('sub-collapsed'); label(); try { localStorage.setItem(KEY2, c ? '1' : '0'); } catch {} setTimeout(fire, 30); };
   window.addEventListener('resize', () => { const h = parseFloat(sub.style.getPropertyValue('--subH')); if (h > maxH()) set(maxH()); });
 })();
+
+// ═══════════════════════════════════════
+//  看盤牆（輕量版）：1／2／4 格同時看多檔日K（含 MA20／MA60／量），十字線與時間軸可連動
+//  每格獨立的小圖表，不碰主圖的全域狀態；日線資料共用 cmpFetch 的快取，報價盤中自動刷新
+// ═══════════════════════════════════════
+const WALL_KEY = 'kline_wall', WALL_DEF = ['TWII', '2330', 'NVDA', 'BTC'];
+const wall = { open: false, n: 4, codes: [], link: true, cells: [], syncing: false, rsync: false, lastSync: 0, timer: null, busy: false };
+(function wallLoadCfg() {
+  let c = null; try { c = JSON.parse(localStorage.getItem(WALL_KEY) || 'null'); } catch {}
+  if (c && typeof c === 'object') {
+    if (Array.isArray(c.codes)) wall.codes = c.codes.filter(x => typeof x === 'string' && isValidCode(x)).slice(0, 4);
+    if (c.n === 1 || c.n === 2 || c.n === 4) wall.n = c.n;
+    if (c.link === false) wall.link = false;
+  }
+})();
+function wallSave() { try { localStorage.setItem(WALL_KEY, JSON.stringify({ n: wall.n, codes: wall.codes, link: wall.link })); } catch {} }
+function wallFill() {   // 補滿 4 個代號：先用自選前幾檔，再用預設
+  const used = new Set(wall.codes);
+  for (const c of watchlist.concat(WALL_DEF)) {
+    if (wall.codes.length >= 4) break;
+    if (isValidCode(c) && !used.has(c)) { wall.codes.push(c); used.add(c); }
+  }
+}
+const wallIsTw = code => code === 'TWII' || /^\d{4,6}[A-Z]?$/.test(code);
+const wallName = code => code === 'TWII' ? '加權指數' : (isCrypto(code) ? CRYPTO[String(code).toUpperCase()].name : (nameOf(code) || ''));
+const wallFmt = v => v == null || !isFinite(v) ? '-' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: Math.abs(v) >= 1 ? 2 : 4 });
+const wallPct = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+const wallColor = v => v > 0 ? 'var(--up)' : v < 0 ? 'var(--green)' : 'var(--muted2)';
+const wallHms = d => { const p = n => String(n).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+
+function wallToggle() { wall.open ? wallClose() : wallOpen(); }
+function wallOpen() {
+  wall.open = true; wallFill();
+  document.getElementById('wallWrap').classList.add('on');
+  document.getElementById('btnWall').classList.add('rt-active');
+  wallRender();
+  clearInterval(wall.timer); wall.timer = setInterval(wallTick, 5000);
+}
+function wallClose() {
+  wall.open = false; clearInterval(wall.timer); wall.timer = null;
+  wallDestroy();
+  document.getElementById('wallWrap').classList.remove('on');
+  document.getElementById('btnWall').classList.remove('rt-active');
+}
+function wallGo(code) { wallClose(); loadFromWatchlist(code); }
+function wallSetN(n) { if (wall.n === n && wall.cells.length === n) return; wall.n = n; wallSave(); wallRender(); }
+function wallToggleLink() {
+  wall.link = !wall.link; wallSave(); wallUpdateBar();
+  if (wall.link && wall.cells[0]) wallSyncRange(wall.cells[0]);
+}
+function wallRefresh() { wall.cells.forEach(c => { c.qAt = 0; }); wall.cells.forEach(c => wallLoadCell(c, true)); }
+function wallUpdateBar() {
+  document.querySelectorAll('#wallWrap .wk-seg button').forEach(b => b.classList.toggle('on', +b.dataset.n === wall.n));
+  const lb = document.getElementById('wallLinkBtn'); if (lb) lb.textContent = '十字線／時間軸連動：' + (wall.link ? '開' : '關');
+}
+function wallInfo() {
+  const el = document.getElementById('wallInfo'); if (!el) return;
+  el.textContent = `台股盤中每 15 秒、其他每 30 秒自動更新｜最後檢查 ${wallHms(new Date())}`;
+}
+function wallDestroy() {
+  wall.cells.forEach(c => { c.seq++; try { c.chart && c.chart.remove(); } catch {} c.chart = null; });
+  wall.cells = [];
+}
+function wallRender() {
+  wallDestroy(); wallFill();
+  const g = document.getElementById('wallGrid'); g.className = 'wk-grid n' + wall.n; g.innerHTML = '';
+  for (let i = 0; i < wall.n; i++) { const c = wallMakeCell(i); wall.cells.push(c); g.appendChild(c.el); wallInitChart(c); }
+  wallUpdateBar(); wallInfo();
+  (async () => { for (const c of wall.cells.slice()) { if (!wall.open) return; await wallLoadCell(c, false); } })();
+}
+function wallMakeCell(i) {
+  const code = wall.codes[i];
+  const el = document.createElement('div'); el.className = 'wk-cell';
+  el.innerHTML = `<div class="wk-ch"><input class="wk-cin" value="${escHtml(code)}" spellcheck="false" autocomplete="off" title="輸入代號或股名後按 Enter"><select class="wk-csel" title="從自選清單挑選"></select><span class="wk-cnm" title="點擊回主圖看完整分析"></span><span class="wk-cpx"></span><span class="wk-cchg"></span><span class="wk-ctm"></span><button class="wk-cgo" title="回主圖看完整分析">↗</button><button class="wk-crf" title="重新載入這格">⟳</button></div><div class="wk-leg"></div><div class="wk-cc"></div><div class="wk-msg"></div>`;
+  const q = s => el.querySelector(s);
+  const c = { i, code, el, inp: q('.wk-cin'), sel: q('.wk-csel'), nm: q('.wk-cnm'), px: q('.wk-cpx'), chg: q('.wk-cchg'), tm: q('.wk-ctm'), leg: q('.wk-leg'), cc: q('.wk-cc'), msg: q('.wk-msg'),
+    chart: null, candle: null, m20: null, m60: null, vol: null, bars: [], idx: new Map(), seq: 0, loading: false, loadedAt: 0, qAt: 0, quote: null };
+  c.sel.innerHTML = '<option value="">自選</option>' + watchlist.map(w => `<option value="${escHtml(w)}">${escHtml(w)} ${escHtml(wallName(w))}</option>`).join('');
+  c.sel.onchange = () => { const v = c.sel.value; c.sel.value = ''; if (v) wallSetCode(c, v); };
+  c.inp.addEventListener('keydown', e => { if (e.isComposing || e.keyCode === 229) return; if (e.key === 'Enter') { e.preventDefault(); wallSetCode(c, c.inp.value); c.inp.blur(); } });
+  c.inp.addEventListener('focus', () => c.inp.select());
+  c.nm.onclick = q('.wk-cgo').onclick = () => wallGo(c.code);
+  q('.wk-crf').onclick = () => wallLoadCell(c, true);
+  c.cc.addEventListener('dblclick', () => wallGo(c.code));
+  c.nm.textContent = wallName(code) || ''; 
+  return c;
+}
+function wallSetCode(c, raw) {
+  const id = resolveStockInput(raw);
+  if (!id || !isValidCode(id)) { c.inp.value = c.code; c.inp.placeholder = '找不到'; return; }
+  c.code = id; wall.codes[c.i] = id; c.inp.value = id; wallSave();
+  c.bars = []; c.quote = null; wallClearSeries(c); wallLoadCell(c, false);
+}
+function wallInitChart(c) {
+  const th = document.documentElement.getAttribute('data-theme'), mc = THEME_MA[th] || THEME_MA.dark;
+  const cross = { color: cssv('--c-cross'), width: 1, style: LightweightCharts.LineStyle.Dashed, labelBackgroundColor: cssv('--c-label') };
+  c.chart = LightweightCharts.createChart(c.cc, {
+    autoSize: true,
+    layout: { background: { type: 'Solid', color: 'transparent' }, textColor: cssv('--c-text') },
+    grid: { vertLines: { color: cssv('--c-grid') }, horzLines: { color: cssv('--c-grid') } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: cross, horzLine: cross },
+    rightPriceScale: { borderColor: cssv('--c-border'), scaleMargins: { top: .08, bottom: .24 } },
+    timeScale: { borderColor: cssv('--c-border'), timeVisible: false, rightOffset: 3 },
+    handleScroll: { mouseWheel: true, pressedMouseMove: true }, handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
+  });
+  c.candle = c.chart.addCandlestickSeries({ upColor: cssv('--up'), downColor: cssv('--dn'), borderUpColor: cssv('--up'), borderDownColor: cssv('--dn'), wickUpColor: cssv('--up'), wickDownColor: cssv('--dn'), priceLineVisible: true, lastValueVisible: true });
+  c.m20 = c.chart.addLineSeries({ color: mc[20], lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  c.m60 = c.chart.addLineSeries({ color: mc[60], lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  c.vol = c.chart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'v', priceLineVisible: false, lastValueVisible: false });
+  c.chart.priceScale('v').applyOptions({ scaleMargins: { top: .82, bottom: 0 } });
+  c.chart.subscribeCrosshairMove(p => {
+    wallLeg(c, p && p.time ? p.time : null);
+    if (!wall.link || wall.syncing) return;
+    wall.syncing = true;
+    try {
+      wall.cells.forEach(o => {
+        if (o === c || !o.chart) return;
+        const i = p && p.time ? o.idx.get(p.time) : undefined;
+        if (i != null) { try { o.chart.setCrosshairPosition(o.bars[i].close, p.time, o.candle); } catch {} wallLeg(o, p.time); }
+        else { try { o.chart.clearCrosshairPosition(); } catch {} wallLeg(o, null); }
+      });
+    } finally { wall.syncing = false; }
+  });
+  c.chart.timeScale().subscribeVisibleTimeRangeChange(r => { if (r && wall.link && !wall.rsync && Date.now() - wall.lastSync > 80) wallSyncRange(c, r); });
+}
+function wallSyncRange(c, r) {
+  if (!c.chart) return;
+  try { r = r || c.chart.timeScale().getVisibleRange(); } catch { r = null; }
+  if (!r) return;
+  wall.rsync = true;
+  try {
+    wall.cells.forEach(o => {
+      if (o === c || !o.chart || !o.bars.length) return;
+      try { const cur = o.chart.timeScale().getVisibleRange(); if (cur && cur.from === r.from && cur.to === r.to) return; o.chart.timeScale().setVisibleRange({ from: r.from, to: r.to }); } catch {}
+    });
+  } finally { wall.rsync = false; wall.lastSync = Date.now(); }
+}
+function wallLeg(c, time) {
+  if (!c.leg) return;
+  const i = time ? c.idx.get(time) : undefined;
+  if (i == null) { c.leg.textContent = ''; return; }
+  const d = c.bars[i], pv = i > 0 ? c.bars[i - 1].close : null, ch = pv ? (d.close / pv - 1) * 100 : null;
+  c.leg.innerHTML = `${escHtml(String(d.date).slice(5))}　開 ${wallFmt(d.open)}　高 ${wallFmt(d.max)}　低 ${wallFmt(d.min)}　收 <b style="color:${wallColor(ch)}">${wallFmt(d.close)}</b>${ch == null ? '' : ` <span style="color:${wallColor(ch)}">${wallPct(ch)}</span>`}`;
+}
+function wallMsg(c, t) { if (c.msg) c.msg.textContent = t || ''; }
+function wallReindex(c) { c.idx = new Map(); c.bars.forEach((d, i) => c.idx.set(d.date, i)); }
+function wallClearSeries(c) { try { c.candle.setData([]); c.m20.setData([]); c.m60.setData([]); c.vol.setData([]); } catch {} c.idx = new Map(); wallLeg(c, null); }
+const wallVolCol = d => d.close >= d.open ? 'rgba(255,77,109,0.5)' : 'rgba(0,200,150,0.5)';
+function wallDraw(c) {
+  const b = c.bars, n = b.length; if (!c.chart || !n) return;
+  c.candle.setData(b.map(d => ({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close })));
+  const a20 = ma(b, 20), a60 = ma(b, 60);
+  c.m20.setData(b.map((d, i) => a20[i] == null ? null : { time: d.date, value: a20[i] }).filter(Boolean));
+  c.m60.setData(b.map((d, i) => a60[i] == null ? null : { time: d.date, value: a60[i] }).filter(Boolean));
+  c.vol.setData(b.map(d => ({ time: d.date, value: d.Trading_Volume || 0, color: wallVolCol(d) })));
+  c.chart.timeScale().setVisibleLogicalRange({ from: Math.max(-3, n - 120), to: n + 3 });
+}
+function wallMaAt(b, p) { const n = b.length; if (n < p) return null; let s = 0; for (let i = n - p; i < n; i++) s += b[i].close; return s / p; }
+function wallPatchLast(c) {   // 即時更新最後一根（或新增今日那根），不重畫整張圖
+  const b = c.bars, n = b.length; if (!c.chart || !n) return;
+  const d = b[n - 1];
+  c.candle.update({ time: d.date, open: d.open, high: d.max, low: d.min, close: d.close });
+  c.vol.update({ time: d.date, value: d.Trading_Volume || 0, color: wallVolCol(d) });
+  const m20 = wallMaAt(b, 20), m60 = wallMaAt(b, 60);
+  if (m20 != null) c.m20.update({ time: d.date, value: m20 });
+  if (m60 != null) c.m60.update({ time: d.date, value: m60 });
+  c.idx.set(d.date, n - 1);
+}
+function wallHead(c) {
+  const b = c.bars, n = b.length;
+  c.inp.value = c.code; c.nm.textContent = wallName(c.code) ? wallName(c.code) + ' ↗' : '↗';
+  if (!n) { c.px.textContent = ''; c.chg.textContent = ''; c.tm.textContent = ''; return; }
+  let px = b[n - 1].close, prev = n > 1 ? b[n - 2].close : null, tag = '', warn = false;
+  const q = c.quote;
+  if (q && q.price > 0) {
+    px = q.price; if (q.prev > 0) prev = q.prev;
+    const age = Date.now() - q.t;
+    tag = (q.live ? '即時 ' : '收盤 ') + wallHms(new Date(q.t));
+    if (q.live && age > 90000) { tag = '延遲 ' + wallHms(new Date(q.t)); warn = true; }
+  } else {
+    tag = '收盤 ' + String(b[n - 1].date).slice(5);
+    if (wallIsTw(c.code) && b[n - 1].date < expectedLastTradingDate()) { tag = '資料停在 ' + String(b[n - 1].date).slice(5); warn = true; }
+  }
+  const ch = prev > 0 ? px - prev : null, pc = prev > 0 ? ch / prev * 100 : null;
+  c.px.textContent = wallFmt(px); c.px.style.color = wallColor(ch);
+  c.chg.textContent = ch == null ? '' : `${ch > 0 ? '▲' : ch < 0 ? '▼' : ''}${wallFmt(Math.abs(ch))} (${wallPct(pc)})`; c.chg.style.color = wallColor(ch);
+  c.tm.textContent = tag; c.tm.style.color = warn ? '#ff9f40' : '';
+}
+async function wallLoadCell(c, force) {
+  if (!c.chart) return;
+  const seq = ++c.seq; c.loading = true; wallMsg(c, '載入中…');
+  let bars = [];
+  try { if (force) delete cmpMem[c.code]; bars = await cmpFetch(c.code); } catch (e) { console.warn('[看盤牆]', c.code, e && e.message); }
+  if (c.seq !== seq || !wall.open) return;
+  c.loading = false;
+  if (!bars || !bars.length) { c.bars = []; wallClearSeries(c); wallMsg(c, '取不到資料（來源暫時無回應），按 ⟳ 重試'); wallHead(c); return; }
+  c.bars = bars.slice(-700).map(d => ({ ...d }));   // 複製，之後即時補價不會改到共用快取
+  c.loadedAt = Date.now(); c.quote = null; wallReindex(c); wallMsg(c, ''); wallDraw(c); wallHead(c);
+  await wallQuote(c);
+}
+// 報價：台股用證交所 MIS（含當日量），其他用 Yahoo；只在「昨收對得上」時才改最後一根，避免把錯的價位畫進K棒
+async function wallQuote(c) {
+  const code = c.code, b = c.bars; if (!b.length || !c.chart) return;
+  const seq = c.seq;
+  try {
+    if (wallIsTw(code)) {
+      if (!(isTWWeekday() && taipeiMinutes() >= 540)) { c.qAt = Date.now(); wallHead(c); return; }
+      const r = await withTimeout(fetchTWSERealtime(code), 9000).catch(() => null);
+      if (c.seq !== seq || !c.chart) return;
+      const last = b[b.length - 1];
+      if (r && r.close > 0 && r.date >= last.date) {
+        const vol = code === 'TWII' ? (last.Trading_Volume || 0) : r.Trading_Volume;
+        const nb = { date: r.date, open: r.open, max: r.max, min: r.min, close: r.close, Trading_Volume: vol };
+        if (r.date === last.date) b[b.length - 1] = { ...last, ...nb }; else b.push(nb);
+        c.quote = { price: r.close, prev: r.prevClose > 0 ? r.prevClose : null, live: isTWMarketOpen(), t: Date.now() };
+        wallPatchLast(c);
+      }
+    } else {
+      const r = await withTimeout(fetchYahooQuote(code), 12000).catch(() => null);
+      if (c.seq !== seq || !c.chart) return;
+      if (r && r.price > 0) {
+        c.quote = { price: r.price, prev: r.prev > 0 ? r.prev : null, live: !!r.t && Date.now() / 1000 - r.t < 1800, t: Date.now() };
+        const n = b.length, near = (x, y) => x > 0 && y > 0 && Math.abs(x / y - 1) < 0.003;
+        if (r.prev > 0 && n >= 2 && near(r.prev, b[n - 2].close)) {   // 最後一根就是今天：用現價更新收盤與高低
+          const d = b[n - 1]; d.close = r.price; d.max = Math.max(d.max, r.price); d.min = Math.min(d.min, r.price); wallPatchLast(c);
+        }
+      }
+    }
+  } catch (e) { console.warn('[看盤牆報價]', code, e && e.message); }
+  c.qAt = Date.now(); wallHead(c);
+}
+async function wallTick() {
+  if (!wall.open || document.hidden || wall.busy) return;
+  wall.busy = true;
+  try {
+    const twLive = isTWWeekday() && taipeiMinutes() >= 540 && taipeiMinutes() <= 13 * 60 + 40;
+    for (const c of wall.cells.slice()) {
+      if (!wall.open) return;
+      if (c.loading) continue;
+      if (!c.bars.length) { if (Date.now() - c.loadedAt > 60000) { c.loadedAt = Date.now(); wallLoadCell(c, false); } continue; }
+      if (Date.now() - c.loadedAt > 6 * 3600 * 1000) { await wallLoadCell(c, false); continue; }
+      const tw = wallIsTw(c.code);
+      if (tw && !twLive) { wallHead(c); continue; }
+      if (Date.now() - c.qAt < (tw ? 14000 : 29000)) continue;
+      await wallQuote(c);
+    }
+    wallInfo();
+  } finally { wall.busy = false; }
+}
+function wallOnTheme() { if (wall.open) wallRender(); }
 </script>
+<div id="wallWrap">
+  <div class="wk-bar">
+    <span class="wk-t">看盤牆</span>
+    <span class="wk-seg"><button data-n="1" onclick="wallSetN(1)">1</button><button data-n="2" onclick="wallSetN(2)">2</button><button data-n="4" onclick="wallSetN(4)">4</button></span>
+    <button class="wl-add-btn" id="wallLinkBtn" onclick="wallToggleLink()" title="開：滑鼠移到某格，其他格的十字線與日期同步；拖曳／縮放時間軸時各格一起動">十字線／時間軸連動：開</button>
+    <button class="wl-add-btn" onclick="wallRefresh()" title="重新載入全部格子">⟳ 全部更新</button>
+    <span class="wk-info" id="wallInfo"></span>
+    <button class="wl-add-btn" style="margin-left:auto" onclick="wallClose()">✕ 關閉</button>
+  </div>
+  <div class="wk-grid n4" id="wallGrid"></div>
+</div>
 <div id="bkIO" onclick="if(event.target===this)closeBackup()">
   <div class="wio-box">
     <div class="wio-t">備份／還原全部設定</div>
