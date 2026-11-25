@@ -815,7 +815,8 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 /* 自選：列表 */
 .wl-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--s1);z-index:5;}
 #wlItems{display:block;}
-.wl-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:4px 8px;padding:9px 12px;border:none;border-bottom:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;transform:none;color:var(--text);font-size:.8rem;}
+.wl-flag{cursor:pointer;opacity:.35;font-size:.85rem;}.wl-flag.on{opacity:1;color:var(--warn,#e8a317);}.wl-flag:hover{opacity:1}
+.wl-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;align-items:center;gap:4px 8px;padding:9px 12px;border:none;border-bottom:1px solid var(--border);border-radius:0;background:transparent;box-shadow:none;transform:none;color:var(--text);font-size:.8rem;}
 .wl-item:hover{background:var(--s2);border-color:var(--border);color:var(--text);box-shadow:none;transform:none;}
 .wl-item.active{background:rgba(232,184,75,.08);box-shadow:inset 2px 0 0 var(--gold);}
 .wl-item.dragging{opacity:.4;transform:none;}
@@ -2089,7 +2090,6 @@ function alertBadge(code) {
   const more = r.list.length > 1 ? ` +${r.list.length - 1}` : '';
   const tip = r.list.map(y => `${y.name}｜突破日 ${y.date}（${y.ago} 根前）\n頸線 ${f2(y.neck)}｜停損（右${y.name === 'M頭' ? '峰' : '肩'}）${f2(y.stop)}\n目標 ` +
     y.targets.map(t => `${t.r}→${f2(t.price)}（${t.hit}%）${t.reached ? '✓' : ''}`).join('｜')).join('\n\n')
-    + (r.atrDist != null ? `\n\n若持有多單：3×ATR 移動停損 ${f2(r.atrStop)}，${r.atrDist >= 0 ? '距現價 −' + (r.atrDist / (1 + r.atrDist) * 100).toFixed(1) + '%' : '現價已跌破'}` : '')
     + `\n\n持股警示，不是進場訊號；括號＝台股約450檔10年回測先到價率（✓＝已到價）\n資料日 ${r.d}`;
   return `<span class="wl-alert" title="${escHtml(tip)}">${escHtml(tag + more)}</span>`;
 }
@@ -2114,10 +2114,15 @@ function todoItems() {
       tags.push({ c: 'bear', t: `⚠${x.name}${x.status === 'reached' ? '·已達' + x.farR : ''}`, tip: `突破日 ${x.date}（${x.ago} 根前）` });
       score += 3;
     }
-    if (r.atrDist != null && r.atrStop > 0) {
-      const dist = r.atrDist / (1 + r.atrDist);   // 現價距停損線（占現價 %）
-      if (r.atrDist < 0) { tags.push({ c: 'warn', t: '已跌破 3×ATR 停損線', tip: `停損線 ${r.atrStop.toFixed(2)}` }); score += 4; }
-      else if (dist <= TODO_STOP_NEAR) { tags.push({ c: 'warn', t: `距停損線 ${(dist * 100).toFixed(1)}%`, tip: `3×ATR 停損線 ${r.atrStop.toFixed(2)}` }); score += 2; }
+    const sp = stopOf(code);
+    if (sp && r.close > 0) {
+      if (sp.stop > 0) {
+        const dist = (r.close - sp.stop) / r.close;
+        if (r.close < sp.stop) { tags.push({ c: 'warn', t: `已跌破停損價 ${sp.stop}`, tip: `收盤 ${r.close.toFixed(2)} < 停損 ${sp.stop}` }); score += 4; }
+        else if (dist <= TODO_STOP_NEAR) { tags.push({ c: 'warn', t: `距停損價 ${(dist * 100).toFixed(1)}%`, tip: `停損 ${sp.stop}` }); score += 2; }
+      } else if (sp.cost > 0 && r.close < sp.cost) {
+        tags.push({ c: 'warn', t: `低於成本 −${((1 - r.close / sp.cost) * 100).toFixed(1)}%`, tip: `成本 ${sp.cost}，收盤 ${r.close.toFixed(2)}` }); score += 2;
+      }
     }
     if (r.brk != null) {
       tags.push({ c: 'dn', t: r.brk === 0 ? '跌破 MA20' : `跌破 MA20（${r.brk} 根前）`, tip: `MA20 ${r.ma20 != null ? r.ma20.toFixed(2) : ''}` });
@@ -2162,6 +2167,20 @@ function renderTodo() {
   } catch (e) { console.warn('[今日注意事項]', e); }
 }
 function todoRescan() { scanWatchlistAlerts(true); renderTodo(); }
+let stopsMap = {};
+try { stopsMap = JSON.parse(localStorage.getItem('kline_stops') || '{}') || {}; } catch (e) {}
+function stopOf(code) { const v = stopsMap[code]; return v && (v.cost > 0 || v.stop > 0) ? v : null; }
+function stopTip(code) { const v = stopOf(code); return v ? `成本 ${v.cost || '—'}｜停損 ${v.stop || '—'}（點擊修改）` : '設定成本價／停損價（未填則不提醒）'; }
+function editStop(ev, code) {
+  ev.stopPropagation();
+  const v = stopsMap[code] || {};
+  const a = prompt(`${code} 成本價（留空＝不設定）`, v.cost || ''); if (a === null) return;
+  const b = prompt(`${code} 停損價（留空＝不設定）`, v.stop || ''); if (b === null) return;
+  const cost = parseFloat(a), stop = parseFloat(b);
+  if (cost > 0 || stop > 0) stopsMap[code] = { cost: cost > 0 ? cost : 0, stop: stop > 0 ? stop : 0 }; else delete stopsMap[code];
+  try { localStorage.setItem('kline_stops', JSON.stringify(stopsMap)); } catch (e) {}
+  renderWatchlist();
+}
 function renderWatchlist() {
   const items = document.getElementById('wlItems');
   if (!items) return;
@@ -2172,6 +2191,7 @@ function renderWatchlist() {
       <span class="wl-grip" onmousedown="event.stopPropagation()">⠿</span>
       <span class="wl-main">${displayLabel(code)}</span>
       <span class="wl-right">${quoteBadge(code)}</span>
+      <span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span>
       <span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span>
       ${al ? `<span class="wl-sub">${al}</span>` : ''}
     </div>`;
