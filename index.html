@@ -4856,7 +4856,7 @@ function renderCurrentPatterns(cp){
   }).join('');
   return `<div style="background:var(--s2);border:1px solid var(--gold);border-radius:8px;padding:8px 12px;margin-bottom:8px;">
     <div style="font-size:.82rem;font-weight:700;color:var(--gold);margin-bottom:2px;">💡 目前可能的K線型態（日／週／月）</div>${rows}
-    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;">列出最新及前2根K棒出現的型態（含長紅黑、跳空、突破20K高低點）；週K、月K最新一根尚未收定，之後可能改變。M頭／頭肩頂／頭肩底的目標括號＝台股約450檔、10年回測「先到該目標、後碰停損（右峰／右肩／右谷）」的比例，是目標價參考而不是進場訊號；空方形態建議當持股警示。W底回測無額外優勢。</div></div>`;
+    <div style="font-size:.64rem;color:var(--muted);margin-top:4px;"></div></div>`;
 }
 function renderPatternStats(cp){
   const st=patternStats(5); if(!st.length) return '';
@@ -4873,7 +4873,7 @@ function renderPatternStats(cp){
   return `<div style="margin-top:10px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;">
     <div style="font-size:.78rem;font-weight:600;color:var(--gold2);margin-bottom:4px;">此股歷史型態後5根K表現（${{D:'日',W:'週',M:'月'}[currentTF]}K，共${vd().length}根）</div>
     <table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${baseRow}${litRows}</table>${litRows?'':'<div style="font-size:.72rem;color:var(--muted);padding:4px 6px;">目前日／週／月K沒有出現列表中的型態</div>'}${otherL.length?`<details style="margin-top:6px;"><summary style="cursor:pointer;font-size:.72rem;color:var(--muted2);padding:3px 0;">其他型態的歷史表現（${otherL.length}）</summary><table style="width:100%;font-size:.72rem;border-collapse:collapse;"><tr style="color:var(--muted2);"><td style="padding:3px 6px;">型態</td><td style="text-align:right">次數</td><td style="text-align:right">方向勝率</td><td style="text-align:right">較基準</td><td style="text-align:right">平均報酬(依方向)</td><td style="text-align:right">趨勢線 強／弱勝率</td><td style="text-align:right">20根勝率</td><td style="text-align:right">放量／量縮勝率</td><td style="text-align:right">10根內失敗率</td></tr>${otherL.map(rowOf).join('')}</table></details>`:''}
-    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;">💡</div></div>`;
+    <div style="font-size:.66rem;color:var(--muted);margin-top:4px;"></div></div>`;
 }
 
 // ═══════════════════════════════════════
