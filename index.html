@@ -911,6 +911,17 @@ body.sub-collapsed .sub-charts{display:none;}
 .dw-tx{height:20px;padding:0 7px;background:transparent;border:1px solid var(--border2);border-radius:4px;color:var(--muted2);cursor:pointer;font-family:var(--font);font-size:.68rem;white-space:nowrap;}
 .dw-tx:hover{color:var(--text);}
 .dw-tx.on{border-color:var(--gold);color:var(--gold);}
+#rpChip,#trendToggleBtn,#patternToggleBtn{display:none !important;}   /* 已收進左側工具列 */
+.dw-grp{position:relative;width:40px;height:32px;flex:none;display:flex;justify-content:center;}
+.dw-arr{position:absolute;right:0;top:0;bottom:0;width:10px;display:flex;align-items:center;justify-content:center;font-size:.5rem;color:var(--muted);cursor:pointer;border-radius:3px;}
+.dw-arr:hover{color:var(--gold);background:var(--s2);}
+#dwFly{display:none;position:fixed;z-index:400;min-width:240px;background:var(--s2);border:1px solid var(--border2);border-radius:8px;padding:4px 0;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+#dwFly.show{display:block;}
+.dwf-h{font-size:.64rem;letter-spacing:1px;color:var(--muted);padding:6px 14px 4px;}
+.dwf-item{display:flex;align-items:center;gap:14px;width:100%;padding:8px 14px;background:transparent;border:none;color:var(--text);font-family:var(--font);font-size:.84rem;cursor:pointer;text-align:left;}
+.dwf-item:hover{background:var(--s1);}
+.dwf-item.on{color:var(--gold);}
+.dwf-ic svg{width:22px;height:22px;display:block;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;}
 #klineChart.dw-hover *{cursor:pointer !important;}
 #klineChart.dw-tool *{cursor:crosshair !important;}
 @media(max-width:960px){
@@ -920,6 +931,7 @@ body.sub-collapsed .sub-charts{display:none;}
   .dw-tools{display:none;flex-direction:row;flex-wrap:wrap;gap:2px;padding:3px;width:auto;margin-left:4px;background:var(--panel-a);border:1px solid var(--border2);border-radius:8px;max-width:calc(100vw - 72px);}
   .draw-bar.open .dw-tools{display:flex;}
   .dw-sep{width:1px;height:22px;margin:0 4px;}
+  .dw-grp{width:40px;}
   .dw-props{top:auto;bottom:34px;left:6px;transform:none;max-width:calc(100% - 12px);}
   .dw-btn{width:30px;height:30px;}
   .dw-pn{display:none;}
@@ -1124,16 +1136,16 @@ body.sub-collapsed .sub-charts{display:none;}
           <button class="dw-toggle" onclick="DL.togglePanel()" title="繪圖工具">✎</button>
           <div class="dw-tools">
             <button class="dw-btn on" data-tool="cursor" onclick="DL.setTool('cursor')" title="游標（Esc）"><svg viewBox="0 0 24 24"><path d="M5 3l13 7-5.5 1.8L10 18z"/></svg></button>
-            <button class="dw-btn" data-tool="hline" onclick="DL.setTool('hline')" title="水平線（點一下放置）"><svg viewBox="0 0 24 24"><path d="M3 12h18"/><circle cx="12" cy="12" r="2.3"/></svg></button>
-            <button class="dw-btn" data-tool="trend" onclick="DL.setTool('trend')" title="趨勢線（點兩下，或按住拖曳）"><svg viewBox="0 0 24 24"><path d="M5 19L19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/></svg></button>
-            <button class="dw-btn" data-tool="fib" onclick="DL.setTool('fib')" title="費波那契回撤（點兩下）"><svg viewBox="0 0 24 24"><path d="M3 4h18M3 9h18M3 14h18M3 20h18"/><path d="M6 20L18 4" stroke-dasharray="2 2.5"/></svg></button>
-            <button class="dw-btn" data-tool="prange" onclick="DL.setTool('prange')" title="價格範圍：價差、%、K棒數"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M12 8v8M9.8 10.2L12 8l2.2 2.2M9.8 13.8L12 16l2.2-2.2"/></svg></button>
-            <button class="dw-btn" data-tool="drange" onclick="DL.setTool('drange')" title="日期範圍：K棒數、天數"><svg viewBox="0 0 24 24"><path d="M4 5v14M20 5v14M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg></button>
+            <div id="dwGroups" style="display:contents"></div>
             <i class="dw-sep"></i>
             <button class="dw-btn" id="dwMagnet" onclick="DL.toggleMagnet()" title="磁鐵：吸附到最近K棒的開高低收"><svg viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3z"/><path d="M6 7h4M14 7h4"/></svg></button>
             <button class="dw-btn" id="dwVis" onclick="DL.toggleVis()" title="顯示／隱藏全部繪圖"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
             <button class="dw-btn" id="dwPaste" onclick="DL.paste()" title="貼上已複製的圖形（Ctrl+V；可貼到別的代號，滑鼠在圖上時貼在游標位置）" disabled><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h6"/></svg></button>
             <button class="dw-btn" onclick="DL.clearAll()" title="刪除這檔的全部繪圖"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
+            <i class="dw-sep"></i>
+            <button class="dw-btn" id="dwTrend" onclick="toggleTrendChannel()" title="自動趨勢通道：斜線趨勢線、支撐壓力、圖形型態（T）"><svg viewBox="0 0 24 24"><path d="M3 17L21 9"/><path d="M3 11L21 3" stroke-dasharray="2 2.5"/><path d="M3 21L21 13" stroke-dasharray="2 2.5"/></svg></button>
+            <button class="dw-btn" id="dwPat" onclick="togglePatterns()" title="K線型態標記（P）"><svg viewBox="0 0 24 24"><path d="M4 18l4-7 4 4 4-9 4 6"/><circle cx="8" cy="11" r="1.3"/><circle cx="16" cy="6" r="1.3"/></svg></button>
+            <button class="dw-btn" id="dwRp" onclick="rpStart()" title="逐根回放：一根一根看走勢（空白鍵播放／暫停）"><svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg></button>
           </div>
         </div>
         <div class="kline-wrap" id="klineWrap">
@@ -6083,10 +6095,11 @@ const DL = (() => {
   const LS_PREFIX = 'kline_dw:';
   const LS_MAGNET = 'kline_dw_magnet', LS_VIS = 'kline_dw_vis', LS_COLORS = 'kline_dw_colors';
   const PALETTE = ['#d9a021', '#4a9eff', '#29c5c5', '#ff6b9d', '#a78bfa', '#8a9bb8'];
-  const DEF_COLOR = { hline: '#d9a021', trend: '#4a9eff', fib: '#a78bfa', prange: '#29c5c5', drange: '#ff6b9d' };
-  const TYPE_NAME = { hline: '水平線', trend: '趨勢線', fib: '費波那契', prange: '價格範圍', drange: '日期範圍' };
+  const DEF_COLOR = { hline: '#d9a021', trend: '#4a9eff', fib: '#a78bfa', prange: '#29c5c5', drange: '#ff6b9d', rect: '#fb923c', text: '#d9a021', channel: '#4a9eff', long: '#8a9bb8', short: '#8a9bb8' };
+  const TYPE_NAME = { hline: '水平線', trend: '趨勢線', fib: '費波那契', prange: '價格範圍', drange: '日期範圍', rect: '矩形區塊', text: '文字註記', channel: '平行通道', long: '多單部位', short: '空單部位' };
+  const POS_UP = '#ff4d6d', POS_DN = '#00c896';   // 部位工具：獲利區＝紅（台股漲色）、虧損區＝綠
   const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
-  const NEED = { hline: 1, trend: 2, fib: 2, prange: 2, drange: 2 };
+  const NEED = { hline: 1, trend: 2, fib: 2, prange: 2, drange: 2, rect: 2, text: 1, channel: 3, long: 3, short: 3 };
   const DAY = 86400000;
   const FONT = '11px "IBM Plex Mono","Noto Sans TC",monospace';
 
@@ -6103,7 +6116,7 @@ const DL = (() => {
   const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   const lsDel = k => { try { localStorage.removeItem(k); } catch {} };
-  const validItem = d => d && NEED[d.type] && Array.isArray(d.p) && d.p.length >= NEED[d.type] &&
+  const validItem = d => d && NEED[d.type] && Array.isArray(d.p) && d.p.length >= NEED[d.type] && (d.type !== 'text' || typeof d.txt === 'string') &&
     d.p.every(p => p && Number.isFinite(p.v) && (d.type === 'hline' || (d.g === 'h' ? Number.isFinite(p.t) : /^\d{4}-\d{2}-\d{2}$/.test(p.d || ''))));
   function parseList(raw) {
     try { const a = JSON.parse(raw); return Array.isArray(a) ? a.filter(validItem) : []; } catch { return []; }
@@ -6255,6 +6268,73 @@ const DL = (() => {
     ctx.lineTo(x1 - s * Math.cos(a + 0.45), y1 - s * Math.sin(a + 0.45));
     ctx.stroke();
   }
+  // ── 新工具：矩形區塊／文字註記／平行通道／多空部位 ──
+  const NEWT = { rect: 1, text: 1, channel: 1, long: 1, short: 1 };
+  const isPos = t => t === 'long' || t === 'short';
+  const _mc = document.createElement('canvas').getContext('2d');
+  const txtPx = it => 12 + ((it.w || 1) - 1) * 3;
+  const txtFont = it => `${txtPx(it)}px "IBM Plex Mono","Noto Sans TC",monospace`;
+  function textBox(it, P) {
+    _mc.font = txtFont(it);
+    const h = txtPx(it) + 12;
+    return { x: P[0].x, y: P[0].y - h / 2, w: _mc.measureText(it.txt || '').width + 16, h };
+  }
+  function chOff(P) {   // 平行通道：第三點相對基準線的垂直位移（像素）
+    const [a, b, d] = P, dx = b.x - a.x;
+    const yAt = Math.abs(dx) < 1 ? a.y : a.y + (b.y - a.y) * (d.x - a.x) / dx;
+    return d.y - yAt;
+  }
+  // 多空部位：第三點（停損）的時間跟著目標點；auto＝建立中依「停損＝反向一半」自動算
+  function posFix(it, auto) {
+    const e = it.p[0], t = it.p[1];
+    const v = auto ? e.v - (t.v - e.v) / 2 : it.p[2].v;
+    it.p[2] = t.t != null ? { t: t.t, v } : { d: t.d, v };
+  }
+  function drawNew(ctx, it, P, W, H, c, lw) {
+    const [a, b, d] = P;
+    if (it.type === 'rect') {
+      const x0 = Math.min(a.x, b.x), x1 = it.ext ? Math.max(W, x0 + 1) : Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+      ctx.fillStyle = rgba(c, 0.16); ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+      ctx.strokeStyle = c; ctx.lineWidth = lw; ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+      if (y1 - y0 > 18) {
+        const hi = Math.max(it.p[0].v, it.p[1].v), lo = Math.min(it.p[0].v, it.p[1].v);
+        ctx.font = FONT; ctx.fillStyle = c; ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+        ctx.fillText(`${fmtPx(hi)} ~ ${fmtPx(lo)}  (${lo ? ((hi - lo) / lo * 100).toFixed(2) : '0.00'}%)`, Math.max(x0, 0) + 5, y0 + 4);
+      }
+    } else if (it.type === 'text') {
+      const bx = textBox(it, P);
+      ctx.font = txtFont(it);
+      ctx.fillStyle = rgba(cssv('--s1'), .88); ctx.fillRect(bx.x, bx.y, bx.w, bx.h);
+      ctx.fillStyle = c; ctx.fillRect(bx.x, bx.y, 3, bx.h);
+      ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(it.txt || '', bx.x + 10, bx.y + bx.h / 2 + 1);
+      ctx.beginPath(); ctx.arc(a.x, a.y, 2.5, 0, Math.PI * 2); ctx.fill();
+    } else if (it.type === 'channel') {
+      const dx = b.x - a.x, dy = b.y - a.y, off = chOff(P);
+      let ex = b.x, ey = b.y;
+      if (it.ext && Math.abs(dx) >= 1) { const l = Math.hypot(dx, dy) || 1; ex = b.x + dx / l * 6000; ey = b.y + dy / l * 6000; }
+      ctx.fillStyle = rgba(c, 0.08);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.lineTo(ex, ey + off); ctx.lineTo(a.x, a.y + off); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = c; ctx.lineWidth = lw;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.moveTo(a.x, a.y + off); ctx.lineTo(ex, ey + off); ctx.stroke();
+      ctx.strokeStyle = rgba(c, 0.55); ctx.lineWidth = 1; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y + off / 2); ctx.lineTo(ex, ey + off / 2); ctx.stroke(); ctx.setLineDash([]);
+    } else if (isPos(it.type)) {
+      const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), ye = a.y, yt = b.y, ys = d.y;
+      const E = it.p[0].v, T = it.p[1].v, SL = it.p[2].v;
+      ctx.fillStyle = rgba(POS_UP, 0.18); ctx.fillRect(x0, Math.min(ye, yt), x1 - x0, Math.abs(yt - ye));
+      ctx.fillStyle = rgba(POS_DN, 0.18); ctx.fillRect(x0, Math.min(ye, ys), x1 - x0, Math.abs(ys - ye));
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = POS_UP; ctx.beginPath(); ctx.moveTo(x0, yt); ctx.lineTo(x1, yt); ctx.stroke();
+      ctx.strokeStyle = POS_DN; ctx.beginPath(); ctx.moveTo(x0, ys); ctx.lineTo(x1, ys); ctx.stroke();
+      ctx.strokeStyle = c; ctx.lineWidth = lw + 0.5; ctx.beginPath(); ctx.moveTo(x0, ye); ctx.lineTo(x1, ye); ctx.stroke();
+      ctx.font = FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      const tag = (txt, y, up, col) => { ctx.fillStyle = col; ctx.fillText(txt, x0 + 6, up ? y + 3 : y - 16); };   // 文字放在區塊內側
+      tag(`目標 ${fmtPx(T)} (${fmtPct(T - E, E)})`, yt, yt < ye, POS_UP);
+      tag(`停損 ${fmtPx(SL)} (${fmtPct(SL - E, E)})`, ys, ys < ye, POS_DN);
+      const risk = Math.abs(E - SL), rr = risk > 0 ? Math.abs(T - E) / risk : 0;
+      label(ctx, [`${it.type === 'long' ? '多' : '空'}單  風報比 1 : ${rr.toFixed(2)}`, `進場 ${fmtPx(E)}`], x1 + 8, ye - 18, c, W, H);
+    }
+  }
   function drawItem(ctx, it, W, H) {
     const sel = it.id === S.sel, c = it.c || DEF_COLOR[it.type], lw = (it.w || 1) + (sel ? 0.5 : 0);
     const P = pxPts(it);
@@ -6267,6 +6347,7 @@ const DL = (() => {
       if (sel) [0.2, 0.5, 0.8].forEach(k => { ctx.fillStyle = cssv('--s1'); ctx.fillRect(W * k - 4, y - 4, 8, 8); ctx.strokeRect(W * k - 4, y - 4, 8, 8); });
       return;
     }
+    if (NEWT[it.type]) { drawNew(ctx, it, P, W, H, c, lw); if (sel) P.forEach(p => handle(ctx, p.x, p.y, c)); return; }
     const [a, b] = P;
     if (it.type === 'trend') {
       let ex = b.x, ey = b.y;
@@ -6357,6 +6438,19 @@ const DL = (() => {
     const P = pxPts(it);
     if (P.some(p => isNaN(p.y) || isNaN(p.x))) return false;
     if (it.type === 'hline') return Math.abs(y - P[0].y) <= tol;
+    if (it.type === 'rect') {
+      const x1 = it.ext ? 1e9 : Math.max(P[0].x, P[1].x);
+      return x >= Math.min(P[0].x, P[1].x) - tol && x <= x1 + tol && y >= Math.min(P[0].y, P[1].y) - tol && y <= Math.max(P[0].y, P[1].y) + tol;
+    }
+    if (it.type === 'text') { const bx = textBox(it, P); return x >= bx.x - tol && x <= bx.x + bx.w + tol && y >= bx.y - tol && y <= bx.y + bx.h + tol; }
+    if (it.type === 'channel') {
+      const off = chOff(P), [a1, b1] = P;
+      return dseg(x, y, a1.x, a1.y, b1.x, b1.y, !!it.ext) <= tol || dseg(x, y, a1.x, a1.y + off, b1.x, b1.y + off, !!it.ext) <= tol || dseg(x, y, a1.x, a1.y + off / 2, b1.x, b1.y + off / 2, !!it.ext) <= tol;
+    }
+    if (isPos(it.type)) {
+      const xs = [P[0].x, P[1].x], ys = [P[0].y, P[1].y, P[2].y];
+      return x >= Math.min(...xs) - tol && x <= Math.max(...xs) + tol && y >= Math.min(...ys) - tol && y <= Math.max(...ys) + tol;
+    }
     const [a, b] = P;
     if (it.type === 'trend') return dseg(x, y, a.x, a.y, b.x, b.y, !!it.ext) <= tol;
     if (it.type === 'fib') {
@@ -6398,7 +6492,7 @@ const DL = (() => {
   }
   function copySel() {
     const it = S.items.find(i => i.id === S.sel && !i.tmp && inGrp(i)); if (!it) return false;
-    S.clip = JSON.parse(JSON.stringify({ type: it.type, c: it.c, w: it.w || 1, ext: !!it.ext, g: it.g === 'h' ? 'h' : undefined, p: it.p, sym: S.sym }));
+    S.clip = JSON.parse(JSON.stringify({ type: it.type, c: it.c, w: it.w || 1, ext: !!it.ext, g: it.g === 'h' ? 'h' : undefined, p: it.p, sym: S.sym, txt: it.type === 'text' ? it.txt : undefined }));
     lsSet(LS_CLIP, JSON.stringify(S.clip)); refreshUI(); return true;
   }
   // 以第一個端點為基準重新定位：滑鼠在圖上→貼在游標；同代號同組→偏移 +4 根、價格 +1.2%；換代號→放在畫面中央並依價格比例縮放
@@ -6417,6 +6511,7 @@ const DL = (() => {
     const mapV = v => hl ? AV : (sameSym ? v + (AV - v0) : v * (AV / v0));
     const it = { id: newId(), type: c.type, c: c.c, w: c.w || 1, p: [] };
     if (c.ext) it.ext = true;
+    if (c.txt != null) it.txt = c.txt;
     if (S.htf && !hl) it.g = 'h';
     it.p = hl ? [{ v: mapV(v0) }] : c.p.map((q, i) => mkPt({ L: AL + rel[i], v: mapV(q.v) }));
     return it;
@@ -6440,7 +6535,13 @@ const DL = (() => {
     if (type === 'hline') {
       it.p = [{ v: r.v }]; S.items.push(it); S.tool = 'cursor'; S.sel = it.id; save(); refreshUI(); req(); return;
     }
-    it.p = [mkPt(r), mkPt(r)]; it.tmp = true; S.items.push(it); S.sel = it.id;
+    if (type === 'text') {
+      S.tool = 'cursor';
+      const txt = prompt('文字註記內容：', '');
+      if (txt && txt.trim()) { it.txt = txt.trim().slice(0, 60); it.p = [mkPt(r)]; S.items.push(it); S.sel = it.id; save(); }
+      refreshUI(); req(); return;
+    }
+    it.p = Array.from({ length: NEED[type] }, () => mkPt(r)); it.tmp = true; S.items.push(it); S.sel = it.id;
     S.op = { kind: 'create', it, stage: 'drag', down: p, moved: false };
     renderProps(); req();
   }
@@ -6459,12 +6560,16 @@ const DL = (() => {
     const op = S.op; if (!op) return;
     if (op.kind === 'create') {
       if (Math.hypot(p.x - op.down.x, p.y - op.down.y) > 5) op.moved = true;
-      const r = fromXY(p.x, p.y, true); if (r) setPt(op.it, 1, r);
+      const r = fromXY(p.x, p.y, true);
+      if (r) {
+        if (op.stage === 'third') setPt(op.it, 2, r);
+        else { setPt(op.it, 1, r); if (op.it.type === 'channel') setPt(op.it, 2, r); else if (isPos(op.it.type)) posFix(op.it, true); }
+      }
     } else {
       if (Math.hypot(p.x - op.down.x, p.y - op.down.y) > 2) op.moved = true;
       if (!op.moved) return;
       const it = op.it;
-      if (op.h === 'handle') { const r = fromXY(p.x, p.y, true); if (r) setPt(it, op.idx, r); }
+      if (op.h === 'handle') { const r = fromXY(p.x, p.y, true); if (r) { setPt(it, op.idx, r); if (isPos(it.type)) posFix(it, false); } }
       else {
         const r = fromXY(p.x, p.y, false); if (!r) return;
         const dL = r.L - op.dr.L, dv = r.v - op.dr.v;
@@ -6476,7 +6581,9 @@ const DL = (() => {
   function opUp() {
     const op = S.op; if (!op) return;
     if (op.kind === 'create') {
+      if (op.stage === 'third') return;                                          // 平行通道：等第三次點擊決定寬度
       if (op.stage === 'drag' && !op.moved) { op.stage = 'pending'; return; }   // 點一下 → 等第二次點擊
+      if (op.it.type === 'channel') { op.stage = 'third'; return; }
       finishCreate();
     } else { S.op = null; if (op.moved) { save(); } req(); }
   }
@@ -6507,7 +6614,13 @@ const DL = (() => {
       if (!S.chart || noInt()) return;
       const p = evPos(e); if (!inPane(p)) return;
       if (S.op && S.op.kind === 'create' && S.op.stage === 'pending') {
-        stop(e); const r = fromXY(p.x, p.y, true); if (r) setPt(S.op.it, 1, r); finishCreate(); return;
+        stop(e); const r = fromXY(p.x, p.y, true);
+        if (r) { setPt(S.op.it, 1, r); if (S.op.it.type === 'channel') setPt(S.op.it, 2, r); else if (isPos(S.op.it.type)) posFix(S.op.it, true); }
+        if (S.op.it.type === 'channel') { S.op.stage = 'third'; return; }
+        finishCreate(); return;
+      }
+      if (S.op && S.op.kind === 'create' && S.op.stage === 'third') {
+        stop(e); const r = fromXY(p.x, p.y, true); if (r) setPt(S.op.it, 2, r); finishCreate(); return;
       }
       if (S.tool !== 'cursor') { stop(e); startCreate(p); return; }
       if (!S.visible) return;
@@ -6515,6 +6628,11 @@ const DL = (() => {
       if (h) { stop(e); select(h.it.id); startDrag(h, p); return; }
       if (S.sel) select(null);
     };
+    el.addEventListener('dblclick', e => {
+      if (S.tool !== 'cursor' || !S.visible || !S.chart) return;
+      const h = hitTest(evPos(e).x, evPos(e).y);
+      if (h && h.it.type === 'text') { select(h.it.id); api.editText(); }
+    });
     el.addEventListener('mousedown', onDown, true);
     el.addEventListener('touchstart', onDown, { capture: true, passive: false });
     document.addEventListener('mousemove', e => {
@@ -6550,14 +6668,76 @@ const DL = (() => {
     const c = it.c || DEF_COLOR[it.type];
     box.innerHTML =
       `<span class="dw-pn">${TYPE_NAME[it.type]}</span>` +
-      PALETTE.map(x => `<button class="dw-sw${x.toLowerCase() === c.toLowerCase() ? ' on' : ''}" style="background:${x}" onclick="DL.setColor('${x}')" title="顏色"></button>`).join('') +
-      (it.type === 'drange' || it.type === 'prange' ? '' : [1, 2, 3].map(w => `<button class="dw-wb${(it.w || 1) === w ? ' on' : ''}" onclick="DL.setWidth(${w})" title="線寬 ${w}"><i style="height:${w}px"></i></button>`).join('')) +
-      (it.type === 'trend' || it.type === 'fib' ? `<button class="dw-tx${it.ext ? ' on' : ''}" onclick="DL.toggleExt()" title="向右延伸">延伸→</button>` : '') +
+      (isPos(it.type) ? [] : PALETTE).map(x => `<button class="dw-sw${x.toLowerCase() === c.toLowerCase() ? ' on' : ''}" style="background:${x}" onclick="DL.setColor('${x}')" title="顏色"></button>`).join('') +
+      (it.type === 'drange' || it.type === 'prange' || isPos(it.type) ? '' : it.type === 'text'
+        ? [1, 2, 3].map(w => `<button class="dw-tx${(it.w || 1) === w ? ' on' : ''}" onclick="DL.setWidth(${w})" title="字體大小">${['小', '中', '大'][w - 1]}</button>`).join('')
+        : [1, 2, 3].map(w => `<button class="dw-wb${(it.w || 1) === w ? ' on' : ''}" onclick="DL.setWidth(${w})" title="線寬 ${w}"><i style="height:${w}px"></i></button>`).join('')) +
+      (['trend', 'fib', 'rect', 'channel'].includes(it.type) ? `<button class="dw-tx${it.ext ? ' on' : ''}" onclick="DL.toggleExt()" title="向右延伸">延伸→</button>` : '') +
+      (it.type === 'text' ? `<button class="dw-tx" onclick="DL.editText()" title="編輯文字（也可雙擊文字）">✎ 編輯</button>` : '') +
+      (isPos(it.type) ? `<span class="dw-pn" style="font-weight:400;color:var(--muted2)">拖曳 3 個點調整進場／目標／停損</span>` : '') +
       `<button class="dw-tx" onclick="DL.duplicate()" title="複製：原地複製並選取（Ctrl+D）。Ctrl+C／Ctrl+V 可貼到別的代號">⧉ 複製</button>` +
       `<button class="dw-tx" onclick="DL.removeSel()" title="刪除（Delete）">🗑</button>`;
     box.classList.add('show');
   }
+  // ── 左側分組工具列（仿 TV）：點圖示＝用該組目前工具，點小箭頭／右鍵＝展開同組其他工具 ──
+  const svgOf = inner => `<svg viewBox="0 0 24 24">${inner}</svg>`;
+  const ICON = {
+    trend: '<path d="M5 19L19 5"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/>',
+    channel: '<path d="M3 14L17 4"/><path d="M7 21L21 11"/><path d="M10 9l-3 5.5M17 4l-3 5.5" stroke-dasharray="1.5 2.5"/>',
+    hline: '<path d="M3 12h18"/><circle cx="12" cy="12" r="2.3"/>',
+    fib: '<path d="M3 4h18M3 9h18M3 14h18M3 20h18"/><path d="M6 20L18 4" stroke-dasharray="2 2.5"/>',
+    rect: '<rect x="4" y="6" width="16" height="12" rx="1"/><path d="M4 12h16" stroke-dasharray="2 2.5"/>',
+    text: '<path d="M6 6h12M12 6v13M9 19h6"/>',
+    long: '<rect x="5" y="3.5" width="14" height="9"/><rect x="5" y="12.5" width="14" height="6"/><path d="M12 8.5v-3M10.5 7l1.5-1.5L13.5 7"/>',
+    short: '<rect x="5" y="5.5" width="14" height="6"/><rect x="5" y="11.5" width="14" height="9"/><path d="M12 15.5v3M10.5 17l1.5 1.5L13.5 17"/>',
+    prange: '<rect x="4" y="5" width="16" height="14" rx="1.5"/><path d="M12 8v8M9.8 10.2L12 8l2.2 2.2M9.8 13.8L12 16l2.2-2.2"/>',
+    drange: '<path d="M4 5v14M20 5v14M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/>',
+  };
+  const TOOL_INFO = {
+    trend: ['趨勢線', '點兩下，或按住拖曳'], channel: ['平行通道', '兩點定方向，第三點定寬度'],
+    hline: ['水平線', '點一下放置'], fib: ['費波那契回撤', '點兩下'],
+    rect: ['矩形區塊（支撐壓力區）', '拖曳或點兩下；可「延伸→」到右側'], text: ['文字註記', '點一下，輸入文字（雙擊可編輯）'],
+    long: ['多單部位（風報比）', '點進場價，再點目標價；停損預設為反向一半，可拖曳調整'], short: ['空單部位（風報比）', '點進場價，再點目標價；停損預設為反向一半，可拖曳調整'],
+    prange: ['價格範圍', '價差、%、K棒數'], drange: ['日期範圍', 'K棒數、天數'],
+  };
+  const GROUPS = [
+    { id: 'g1', name: '線與斐波那契', tools: ['trend', 'channel', 'hline', 'fib'] },
+    { id: 'g2', name: '區塊與註記', tools: ['rect', 'text'] },
+    { id: 'g3', name: '預測與測量', tools: ['long', 'short', 'prange', 'drange'] },
+  ];
+  const LS_GRP = 'kline_dw_grp';
+  let grpSel = {}; try { grpSel = JSON.parse(lsGet(LS_GRP, '{}')) || {}; } catch { grpSel = {}; }
+  const grpOf = gid => GROUPS.find(g => g.id === gid);
+  const grpCur = gid => { const g = grpOf(gid); return g.tools.includes(grpSel[gid]) ? grpSel[gid] : g.tools[0]; };
+  function buildBar() {
+    const box = $('dwGroups'); if (!box) return;
+    box.innerHTML = GROUPS.map(g => `<div class="dw-grp"><button class="dw-btn dw-gb" data-grpbtn="${g.id}" onclick="DL.grpClick('${g.id}')" oncontextmenu="DL.openFly('${g.id}',event);return false;"></button><span class="dw-arr" onclick="DL.openFly('${g.id}',event)" title="展開同組其他工具">▸</span></div>`).join('');
+  }
+  function closeFly() { const f = $('dwFly'); if (f && f.classList.contains('show')) { f.classList.remove('show'); return true; } return false; }
+  function openFly(gid, ev) {
+    if (ev) { ev.stopPropagation(); if (ev.preventDefault) ev.preventDefault(); }
+    let f = $('dwFly');
+    if (!f) { f = document.createElement('div'); f.id = 'dwFly'; document.body.appendChild(f); }
+    if (f.classList.contains('show') && f.dataset.g === gid) { closeFly(); return; }
+    const g = grpOf(gid), btn = document.querySelector(`[data-grpbtn="${gid}"]`); if (!g || !btn) return;
+    f.dataset.g = gid;
+    f.innerHTML = `<div class="dwf-h">${g.name}</div>` + g.tools.map(t =>
+      `<button class="dwf-item${S.tool === t ? ' on' : ''}" title="${TOOL_INFO[t][1]}" onclick="DL.pickTool('${gid}','${t}')"><span class="dwf-ic">${svgOf(ICON[t])}</span><span>${TOOL_INFO[t][0]}</span></button>`).join('');
+    f.classList.add('show');
+    const r = btn.getBoundingClientRect();
+    f.style.left = Math.max(4, Math.min(r.right + 10, innerWidth - f.offsetWidth - 6)) + 'px';
+    f.style.top = Math.max(4, Math.min(r.top, innerHeight - f.offsetHeight - 8)) + 'px';
+  }
+  function pickTool(gid, t) { grpSel[gid] = t; lsSet(LS_GRP, JSON.stringify(grpSel)); closeFly(); S.tool = '__'; api.setTool(t); }
+  document.addEventListener('mousedown', e => { if (!e.target.closest || !e.target.closest('#dwFly,.dw-arr')) closeFly(); }, true);
   function refreshUI() {
+    GROUPS.forEach(g => {
+      if (g.tools.includes(S.tool) && grpSel[g.id] !== S.tool) { grpSel[g.id] = S.tool; lsSet(LS_GRP, JSON.stringify(grpSel)); }
+      const b = document.querySelector(`[data-grpbtn="${g.id}"]`); if (!b) return;
+      const t = grpCur(g.id);
+      b.innerHTML = svgOf(ICON[t]); b.title = `${TOOL_INFO[t][0]}：${TOOL_INFO[t][1]}（右側小箭頭／右鍵＝同組其他工具）`;
+      b.classList.toggle('on', g.tools.includes(S.tool));
+    });
     document.querySelectorAll('#drawBar [data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === S.tool));
     $('dwMagnet') && $('dwMagnet').classList.toggle('on', S.magnet);
     $('dwVis') && $('dwVis').classList.toggle('on', !S.visible);
@@ -6582,8 +6762,10 @@ const DL = (() => {
     if (S.op && S.op.kind === 'create' && !inGrp(S.op.it)) cancelCreate();
     S.prim = makePrim();
     series.attachPrimitive(S.prim);
+    if (!$('dwGroups').firstChild) buildBar();
     bind(); refreshUI();
   }
+  buildBar(); refreshUI();
   const api = {
     attach,
     setTool(t) {
@@ -6611,7 +6793,16 @@ const DL = (() => {
     setWidth(w) { const it = S.items.find(i => i.id === S.sel); if (!it) return; it.w = w; save(); renderProps(); req(); },
     toggleExt() { const it = S.items.find(i => i.id === S.sel); if (!it) return; it.ext = !it.ext; save(); renderProps(); req(); },
     togglePanel() { $('drawBar').classList.toggle('open'); },
+    editText() {
+      const it = S.items.find(i => i.id === S.sel && i.type === 'text'); if (!it) return;
+      const t = prompt('文字註記內容（留空＝刪除）：', it.txt || ''); if (t == null) return;
+      if (!t.trim()) { removeSel(); return; }
+      it.txt = t.trim().slice(0, 60); save(); req();
+    },
+    grpClick(gid) { closeFly(); api.setTool(grpCur(gid)); },
+    openFly, pickTool,
     escape() {   // 回傳 true＝已處理（外部 Esc 不再清除回測）
+      if (closeFly()) return true;
       if (cancelCreate()) return true;
       if (S.tool !== 'cursor') { S.tool = 'cursor'; refreshUI(); req(); return true; }
       if (S.sel) { select(null); return true; }
@@ -6621,6 +6812,17 @@ const DL = (() => {
   };
   return api;
 })();
+
+// 左側工具列：通道／型態／回放 的亮燈狀態（原上方 chip 已隱藏），不論從按鈕或快捷鍵觸發都同步
+function dwSyncToggles() {
+  [['dwTrend', showTrend], ['dwPat', showPatterns], ['dwRp', rp.on]].forEach(([id, on]) => {
+    const b = document.getElementById(id); if (b) b.classList.toggle('on', !!on);
+  });
+}
+['toggleTrendChannel', 'togglePatterns', 'rpStart', 'rpStop'].forEach(n => {
+  const f = window[n];
+  if (typeof f === 'function') window[n] = function () { const r = f.apply(this, arguments); try { dwSyncToggles(); } catch {} return r; };
+});
 
 // ═══════════════════════════════════════
 //  KEYBOARD SHORTCUTS
