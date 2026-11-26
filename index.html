@@ -637,8 +637,18 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
   font-family:var(--mono);font-size:.65rem;padding:3px 9px;border-radius:10px;
   cursor:pointer;border:1px solid transparent;transition:opacity .15s;user-select:none;
 }
-.ma-chip-btn[data-off="1"]{opacity:.6;border-color:var(--border2);}
-.ma-chip-btn[data-off="1"]:hover{opacity:.9;}
+/* 開／關一眼看出：開＝色塊＋粗框＋粗體；關＝透明底＋虛線灰框＋淡化（!important 蓋過 inline 色） */
+.ma-chip-btn[data-off="0"]{
+  font-weight:700;border-width:1px;
+  background-image:linear-gradient(color-mix(in srgb,currentColor 30%,transparent),color-mix(in srgb,currentColor 30%,transparent));
+  box-shadow:inset 0 0 0 1px currentColor;
+}
+.ma-chip-btn[data-off="1"]{
+  opacity:.5;font-weight:400;
+  background:transparent !important;
+  border-style:dashed !important;border-color:var(--border2) !important;
+}
+.ma-chip-btn[data-off="1"]:hover{opacity:.85;}
 
 /* ── DATE RANGE ── */
 .date-range-bar{
