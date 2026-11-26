@@ -901,9 +901,10 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wlx-sym{grid-column:1;grid-row:1;min-width:0;overflow:hidden;white-space:nowrap;font-size:.88rem;font-weight:700;color:var(--text);}
 .wlx-px{grid-column:2;grid-row:1;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.88rem;font-weight:600;font-variant-numeric:tabular-nums;min-height:1.2em;}
 .wl-px.wlx-px{font-size:.88rem;padding:0 2px;}
-.wlx-name{grid-column:1;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem;color:var(--muted2);min-height:1.2em;display:flex;align-items:center;gap:6px;}
+/* 第二排：名稱＋損益並排；放不下時名稱自動換到被隱藏的下一行，只留損益（DOM 順序＝損益在前，用 row-reverse 讓畫面上名稱在左） */
+.wlx-name{grid-column:1;grid-row:2;min-width:0;overflow:hidden;white-space:nowrap;font-size:.7rem;color:var(--muted2);height:1.1rem;display:flex;flex-direction:row-reverse;flex-wrap:wrap;justify-content:flex-end;align-content:flex-start;align-items:center;gap:4px 6px;}
 .wlx-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;}
-.wlx-pnl{flex:none;font-family:var(--mono);font-size:.62rem;font-weight:600;line-height:1.45;padding:0 6px;border-radius:8px;border:1px solid currentColor;margin-left:6px;vertical-align:1px;}
+.wlx-pnl{flex:none;font-family:var(--mono);font-size:.62rem;font-weight:600;line-height:1.45;padding:0 6px;border-radius:8px;border:1px solid currentColor;}
 .wlx-chg{grid-column:2;grid-row:2;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.72rem;font-variant-numeric:tabular-nums;min-height:1.2em;}
 .wl-px.lim-up.wlx-px,.wl-px.lim-dn.wlx-px{color:#fff !important;padding:0 6px;border-radius:4px;opacity:1 !important;}
 .wl-px.lim-up.wlx-px{background:var(--up);}
@@ -2536,15 +2537,16 @@ function renderWatchlist() {
     const chgTxt = (qp.diff != null ? `${sg(qp.diff)}${f2(Math.abs(qp.diff))}` : '') + (qp.pct != null ? `&nbsp;&nbsp;${sg(qp.pct)}${Math.abs(qp.pct).toFixed(2)}%` : '');
     const pnl = pnlBadge(code).replace(/<[^>]+>/g, '');
     const name = nameOf(code) || '';
+    const pnlC = pnlChip(code);
     const lm = hasQ ? wlLimitState(code, qp) : null;
     const limTag = '';   // 只用價格格子填色表示，不再加標籤
     const limTip = lm ? `${lm.type === 'up' ? '漲停' : '跌停'}價 ${f2(lm.price)}（±${Math.round(lm.lim * 100)}%）` : '';
-    const rowTip = `拖曳可調整順序，點擊查看 ${code}${limTip ? '\n' + limTip : ''}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
+    const rowTip = `拖曳可調整順序，點擊查看 ${code}${pnlC && name ? '（' + name + '）' : ''}${limTip ? '\n' + limTip : ''}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
     return `
     <div class="wl-item wlx${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="${escHtml(rowTip)}">
-      <span class="wlx-sym">${escHtml(code)}${limTag}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}${pnlChip(code)}</span>
+      <span class="wlx-sym">${escHtml(code)}${limTag}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}</span>
       <span class="wlx-px wl-px${qp.flash}${lm ? (lm.type === 'up' ? ' lim-up' : ' lim-dn') : ''}" style="color:${hasQ ? color : 'var(--muted)'}${qp.tip && hasQ && /最近收盤/.test(qp.tip) ? ';opacity:.75' : ''}">${pxTxt}</span>
-      <span class="wlx-name"><span class="wlx-nm">${escHtml(name)}</span></span>
+      <span class="wlx-name">${pnlC}<span class="wlx-nm">${escHtml(name)}</span></span>
       <span class="wlx-chg" style="color:${color}">${chgTxt}</span>
       <span class="wlx-tools" onclick="event.stopPropagation()">${wlGroups.length > 1 ? `<span class="wl-mv" onclick="wlOpenMenu(event,'${code}')" title="放進／移出其他清單">⇄</span>` : ''}<span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span><span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span></span>
     </div>`;
