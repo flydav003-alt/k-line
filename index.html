@@ -2772,9 +2772,8 @@ function wlQuoteParts(code) {
   return { px, diff, pct, tip, flash };
 }
 // ── 漲跌停判斷：用前收算出理論漲跌停價（依檔位捨去／進位），不用百分比門檻 ──
-// 一般股票與一般 ETF ±10%；槓桿型／反向型 ETF（正2、反1，代號常以 L／R 結尾）±20%
-const WL_LIM_NORMAL = 0.10, WL_LIM_LEV = 0.20;
-function wlTick(p, etf) {
+// 一般股票與一般 ETF ±10%；槓桿型／反向型 ETF（正2、反1，代號常以 L／R 結尾）±20%（見 wlLimitState 內的 lim）
+function wlLimTick(p, etf) {
   if (etf) return p < 50 ? 0.01 : 0.05;
   return p < 10 ? 0.01 : p < 50 ? 0.05 : p < 100 ? 0.1 : p < 500 ? 0.5 : p < 1000 ? 1 : 5;
 }
@@ -2785,9 +2784,9 @@ function wlLimitState(code, qp) {
   if (!/^\d{4,6}[A-Za-z]?$/.test(code) || qp.px == null || qp.diff == null) return null;   // 排除指數、加密幣、美股
   const px = qp.px, prev = Math.round((px - qp.diff) * 100) / 100;
   if (!(prev > 0)) return null;
-  const etf = /^00/.test(code), lim = wlIsLevEtf(code, nameOf(code)) ? WL_LIM_LEV : WL_LIM_NORMAL;
+  const etf = /^00/.test(code), lim = wlIsLevEtf(code, nameOf(code)) ? 0.20 : 0.10;   // 槓桿／反向 ETF ±20%，其餘 ±10%
   const upRaw = prev * (1 + lim), dnRaw = prev * (1 - lim);
-  const tu = wlTick(upRaw, etf), td = wlTick(dnRaw, etf);
+  const tu = wlLimTick(upRaw, etf), td = wlLimTick(dnRaw, etf);
   const up = Math.floor(upRaw / tu + 1e-9) * tu, dn = Math.ceil(dnRaw / td - 1e-9) * td;
   const k = v => Math.round(v * 1000);
   if (k(px) >= k(up)) return { type: 'up', price: up, lim };
