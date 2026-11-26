@@ -349,7 +349,7 @@ body.us-mode #stockInput{ width:110px; }
 }
 /* ── 當日走勢圖 ── */
 #intradayWrap{
-  display:none;position:absolute;left:0;right:0;bottom:0;top:42px;
+  display:none;position:absolute;left:0;right:0;bottom:0;top:30px;
   background:var(--bg);z-index:20;flex-direction:column;
 }
 #intradayWrap.show{display:flex;}
@@ -359,7 +359,7 @@ body.us-mode #stockInput{ width:110px; }
 @media(max-width:700px){.htf-note{display:none !important;}
   #tfRow .chart-tabs{min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;padding:0 6px;-webkit-overflow-scrolling:touch;}
   #tfRow .chart-tabs::-webkit-scrollbar{display:none;}
-  #tfRow .chart-tabs .pt,#tfRow .chart-tabs .chart-tab{flex:none;padding:10px 9px;}}
+  #tfRow .chart-tabs .pt,#tfRow .chart-tabs .chart-tab{flex:none;padding:0 9px;}}
 #idHead{
   padding:8px 14px 4px;font-family:var(--mono);font-size:.78rem;
   color:var(--muted2);display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;
@@ -394,6 +394,10 @@ body.us-mode #stockInput{ width:110px; }
 }
 .pt.active{color:var(--gold);border-bottom-color:var(--gold);}
 .pt:hover:not(.active){color:var(--text);}
+/* 週期列：仿 TV 的低高度（半年／1年／2年／5年按鈕已移除，改拖曳／滾輪縮放） */
+#tfRow{height:30px;box-sizing:border-box;}
+#tfRow .chart-tabs{height:30px;align-items:stretch;}
+#tfRow .pt{padding:0 11px;height:30px;box-sizing:border-box;display:flex;align-items:center;font-size:.74rem;}
 
 .chart-block{flex:1;position:relative;min-height:0;}
 #klineChart{width:100%;height:100%;}
@@ -776,7 +780,7 @@ body.crypto-mode #secChip, body.crypto-mode #secRevenue{ display:none; }
 /* ═════════ 第1階段：TradingView 式版面骨架 ═════════ */
 header{height:48px;padding:0 12px;gap:10px;}
 .logo{font-size:.9rem;letter-spacing:2px;}
-.search-wrap{max-width:none;flex:1;min-width:0;}
+.search-wrap{max-width:none;flex:0 0 auto;min-width:0;}
 .more-wrap{position:relative;margin-left:auto;flex-shrink:0;}
 .more-btn{background:var(--s2);border:1px solid var(--border2);color:var(--muted2);width:34px;height:32px;border-radius:6px;font-size:1.1rem;line-height:1;cursor:pointer;}
 .more-btn:hover{border-color:var(--gold);color:var(--gold);}
@@ -794,7 +798,9 @@ header{height:48px;padding:0 12px;gap:10px;}
 #metaBar .stock-title{font-size:1rem;}
 #metaBar .price-main{font-size:1.15rem;}
 #metaBar .price-chg{padding:2px 8px;}
-.layout{height:calc(100vh - 48px - 40px);min-height:480px;}
+.layout{height:calc(100vh - 48px);min-height:480px;}
+/* 頂列與股票摘要合併成同一排 */
+header #metaBar{position:static;flex:1 1 0;min-width:0;height:100%;padding:0 6px;gap:12px;background:transparent;border:none;align-items:center;}
 body.no-stock .layout{height:calc(100vh - 48px);}
 
 /* 載入股票前：圖表區只顯示 splash，右側欄照常可用 */
@@ -832,6 +838,17 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wl-chg{font-size:.72rem;opacity:.9;margin:0 2px 0 4px;}
 .wl-sub{grid-column:2 / -1;min-width:0;}
 .wl-sub .wl-alert{margin-left:0;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
+/* 自選清單：完全仿 TV —— 固定兩行（第一行 代號＋價格；第二行 名稱＋漲跌＋漲跌%），不隨內容變高 */
+.wl-item.wlx{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:1px 12px;align-items:center;position:relative;padding:7px 14px;height:50px;box-sizing:border-box;cursor:pointer;}
+.wlx-sym{grid-column:1;grid-row:1;min-width:0;overflow:hidden;white-space:nowrap;font-size:.88rem;font-weight:700;color:var(--text);}
+.wlx-px{grid-column:2;grid-row:1;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.88rem;font-weight:600;font-variant-numeric:tabular-nums;min-height:1.2em;}
+.wl-px.wlx-px{font-size:.88rem;padding:0 2px;}
+.wlx-name{grid-column:1;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem;color:var(--muted2);min-height:1.2em;}
+.wlx-chg{grid-column:2;grid-row:2;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.72rem;font-variant-numeric:tabular-nums;min-height:1.2em;}
+.wlx-alert{margin-left:6px;font-size:.72rem;color:#ff9f40;cursor:help;font-weight:400;}
+.wlx-stop{margin-left:5px;font-size:.7rem;color:var(--warn,#e8a317);font-weight:400;}
+.wlx-tools{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);gap:8px;align-items:center;padding:3px 8px;border-radius:5px;background:var(--s2);border:1px solid var(--border2);}
+.wl-item.wlx:hover .wlx-tools{display:flex;}
 #rpWatch .recent-bar{display:flex;border-top:1px solid var(--border);border-bottom:none;padding:10px 12px;background:transparent;}
 
 /* ── 手機：右欄在圖表下方，頁面捲動，不橫向捲動 ── */
@@ -842,7 +859,10 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
   .logo{font-size:.8rem;letter-spacing:1px;}
   #stockInput{width:84px;padding:7px 8px;letter-spacing:1px;}
   .btn-analyze,.btn-realtime{padding:7px 9px;font-size:.74rem;}
-  #metaBar{height:auto;min-height:40px;padding:6px 10px;gap:4px 10px;flex-wrap:wrap;overflow:visible;white-space:normal;}
+  header{height:auto;flex-wrap:wrap;padding:6px 8px;}
+  header #metaBar{order:9;flex:1 0 100%;height:auto;min-height:36px;padding:4px 2px;gap:4px 10px;flex-wrap:wrap;overflow:visible;white-space:normal;}
+  .search-wrap{flex:1 1 auto;}
+  .more-wrap{margin-left:auto;}
   .layout{height:auto;min-height:0;}
   body.no-stock .layout{height:auto;}
   body.no-stock .charts-col{height:auto;min-height:0;}
@@ -963,6 +983,9 @@ body.sub-collapsed .sub-charts{display:none;}
     <button class="btn-realtime" id="btnWall" onclick="wallToggle()" title="看盤牆：1／2／4 格同時看多檔日K，十字線可連動">▦ 看盤牆</button>
   </div>
 
+  <!-- 選到的股票（與頂列合併成同一排，仿 TV） -->
+  <div id="metaBar"></div>
+
   <div class="more-wrap" id="moreWrap">
     <button class="more-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="設定">⋯</button>
     <div class="more-menu" id="moreMenu">
@@ -1007,8 +1030,6 @@ body.sub-collapsed .sub-charts{display:none;}
 <!-- STATUS -->
 <div id="statusBar"></div>
 <div id="btBanner"></div>
-<!-- META BAR -->
-<div id="metaBar"></div>
 
 <!-- MAIN CONTENT -->
 <div id="mainContent">
@@ -1058,11 +1079,6 @@ body.sub-collapsed .sub-charts{display:none;}
           <div class="pt tf active" data-tf="D" onclick="setTF('D')">日K</div>
           <div class="pt tf" data-tf="W" onclick="setTF('W')">週K</div>
           <div class="pt tf" data-tf="M" onclick="setTF('M')">月K</div>
-          <span style="display:inline-block;width:10px;"></span>
-          <div class="pt active" data-p="120" onclick="setActivePeriod(120)">半年</div>
-          <div class="pt" data-p="240" onclick="setActivePeriod(240)">1年</div>
-          <div class="pt" data-p="480" onclick="setActivePeriod(480)">2年</div>
-          <div class="pt" data-p="1200" onclick="setActivePeriod(1200)">5年</div>
           <span class="htf-note" id="htfNote" style="display:none"></span>
         </div>
       </div>
@@ -1374,6 +1390,15 @@ function vd(){
   if (key !== _vdKey) { _vdVal = aggBars(priceData, currentTF); _vdKey = key; }
   return _vdVal;
 }
+// 圖上載入的歷史根數（可自由拖曳／滾輪縮放）；currentPeriod 仍是「預設顯示根數＋分析視窗」，分析數字不受拖曳影響
+const CHART_BARS = { D:1500, W:400, M:120, H1:960, H4:480 };
+function chartSlice(){ return vd().slice(-(CHART_BARS[currentTF] || 1500)); }
+let _chartN = 0;
+function zoomBars(n){   // 快捷鍵 1–4：只調整可視範圍，不重算分析
+  if (!kChart || !_chartN) return;
+  const w = Math.min(n, _chartN);
+  try { kChart.timeScale().setVisibleLogicalRange({ from: _chartN - w - 0.5, to: _chartN + 4 }); } catch {}
+}
 const TF_WIN = { D:[[120,'半年'],[240,'1年'],[480,'2年'],[1200,'5年']], W:[[26,'半年'],[52,'1年'],[104,'2年'],[260,'5年']], M:[[24,'24月'],[36,'36月'],[60,'60月'],[120,'120月']],
   H1:[[120,'120根'],[240,'240根'],[480,'480根'],[960,'960根']], H4:[[60,'60根'],[120,'120根'],[240,'240根'],[480,'480根']] };
 const TF_DEF_IDX = { D:0, W:1, M:1, H1:1, H4:2 };
@@ -1517,7 +1542,7 @@ async function loadHTF(opts = {}){
 }
 function refreshHTF(){
   if (hBusy || Date.now() - hLastTry < 20000 || !isHTF()) return;
-  loadHTF({ force: true }).then(r => { if (r === 1 && isHTF()) buildCharts(vd().slice(-currentPeriod), true); });
+  loadHTF({ force: true }).then(r => { if (r === 1 && isHTF()) buildCharts(chartSlice(), true); });
 }
 // 右側「個股摘要」永遠是日線分析：小時線模式下，換股時才用日線重算一次
 function runDailyAnalysis(){
@@ -1534,13 +1559,13 @@ function redrawHTF(keepRange){
   const key = htfKey();
   if (_anaKey !== anaKeyNow()) { runDailyAnalysis(); _anaKey = anaKeyNow(); }
   if (hKey === key && hBars.length) {
-    buildCharts(hBars.slice(-currentPeriod), keepRange);
+    buildCharts(hBars.slice(-(CHART_BARS[currentTF] || 960)), keepRange);
     const c = htfCache[key]; if (!c || Date.now() - c.t > 60000) refreshHTF();
     return;
   }
   loadHTF().then(r => {
     if (!isHTF() || htfKey() !== key) return;
-    if (r === 1) buildCharts(vd().slice(-currentPeriod), false);
+    if (r === 1) buildCharts(chartSlice(), false);
     else if (r === -1) setTF('D');   // 抓不到小時線：退回日K（錯誤訊息保留在狀態列），避免「1時」分頁下顯示的其實是日線
   });
 }
@@ -2092,7 +2117,7 @@ async function scanWatchlistAlerts(force) {
     try { localStorage.setItem('kline_wl_alerts', JSON.stringify(wlAlerts)); localStorage.setItem('kline_wl_last', JSON.stringify(wlLast)); } catch {}
   } finally { wlScanBusy = false; if (!_wlDragCode) renderWatchlist(); }
 }
-function alertBadge(code) {
+function alertBadge(code, icon) {
   const r = wlAlerts[code]; if (!r || !r.list || !r.list.length) return '';
   const x = r.list[0], f2 = v => (+v).toFixed(2);
   const tag = x.status === 'reached' ? `⚠${x.name}·已達${x.farR}` : `⚠${x.name}`;
@@ -2100,6 +2125,7 @@ function alertBadge(code) {
   const tip = r.list.map(y => `${y.name}｜突破日 ${y.date}（${y.ago} 根前）\n頸線 ${f2(y.neck)}｜停損（右${y.name === 'M頭' ? '峰' : '肩'}）${f2(y.stop)}\n目標 ` +
     y.targets.map(t => `${t.r}→${f2(t.price)}（${t.hit}%）${t.reached ? '✓' : ''}`).join('｜')).join('\n\n')
     + `\n\n持股警示，不是進場訊號；括號＝台股約450檔10年回測先到價率（✓＝已到價）\n資料日 ${r.d}`;
+  if (icon) return `<span class="wlx-alert" title="${escHtml(tag + more + '\n\n' + tip)}">⚠</span>`;
   return `<span class="wl-alert" title="${escHtml(tip)}">${escHtml(tag + more)}</span>`;
 }
 function renderWlAlertSum() {
@@ -2200,16 +2226,25 @@ function editStop(ev, code) {
 function renderWatchlist() {
   const items = document.getElementById('wlItems');
   if (!items) return;
+  const f2 = v => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const sg = v => v > 0 ? '+' : v < 0 ? '\u2212' : '';
   items.innerHTML = watchlist.length ? watchlist.map(code => {
-    const al = alertBadge(code);
+    const qp = wlQuoteParts(code);
+    const up = qp.pct != null ? qp.pct > 0 : qp.diff > 0, dn = qp.pct != null ? qp.pct < 0 : qp.diff < 0;
+    const color = up ? 'var(--up)' : dn ? 'var(--green)' : 'var(--muted2)';
+    const hasQ = qp.px != null;
+    const pxTxt = hasQ ? f2(qp.px) : ((wlTried && (/^\d/.test(code) || code === 'TWII')) ? '—' : '');
+    const chgTxt = (qp.diff != null ? `${sg(qp.diff)}${f2(Math.abs(qp.diff))}` : '') + (qp.pct != null ? `&nbsp;&nbsp;${sg(qp.pct)}${Math.abs(qp.pct).toFixed(2)}%` : '');
+    const pnl = pnlBadge(code).replace(/<[^>]+>/g, '');
+    const name = nameOf(code) || '';
+    const rowTip = `拖曳可調整順序，點擊查看 ${code}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
     return `
-    <div class="wl-item${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="拖曳可調整順序，點擊查看 ${code}">
-      <span class="wl-grip" onmousedown="event.stopPropagation()">⠿</span>
-      <span class="wl-main">${displayLabel(code)}</span>
-      <span class="wl-right">${quoteBadge(code)}${pnlBadge(code)}</span>
-      <span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span>
-      <span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span>
-      ${al ? `<span class="wl-sub">${al}</span>` : ''}
+    <div class="wl-item wlx${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="${escHtml(rowTip)}">
+      <span class="wlx-sym">${escHtml(code)}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}</span>
+      <span class="wlx-px wl-px${qp.flash}" style="color:${hasQ ? color : 'var(--muted)'}${qp.tip && hasQ && /最近收盤/.test(qp.tip) ? ';opacity:.75' : ''}">${pxTxt}</span>
+      <span class="wlx-name">${escHtml(name)}</span>
+      <span class="wlx-chg" style="color:${color}">${chgTxt}</span>
+      <span class="wlx-tools" onclick="event.stopPropagation()"><span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span><span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span></span>
     </div>`;
   }).join('') : '<span id="wlEmpty" style="font-size:.72rem;color:var(--muted);font-style:italic;">（輸入代號後按「＋ 加入目前代號」，列可拖曳排序）</span>';
   initWatchlistDrag();
@@ -2478,6 +2513,23 @@ function wlPushFromBars(id) {
   renderWatchlist();
 }
 let wlLastPx = {};   // code -> 上次渲染的價格，用來判斷是否需要閃爍提示
+// 自選清單（仿 TV）：把報價拆成 價格／漲跌／漲跌% 三個固定欄位
+function wlQuoteParts(code) {
+  const q = wlQuotes[code];
+  let px = null, diff = null, pct = null, tip = '', flash = '';
+  if ((!q || q.price == null) && wlLast[code] && wlLast[code].close != null) {
+    const L = wlLast[code];
+    px = L.close; tip = `最近收盤 ${L.d}（尚無即時報價）`;
+    if (L.prev) { diff = L.close - L.prev; pct = diff / L.prev * 100; }
+  } else if (q && q.price != null) {
+    px = q.price; diff = q.diff; pct = q.chg;
+    tip = q.approx ? '尚無成交，顯示買賣中價' : q.src === 'yahoo' ? 'Yahoo 報價（台股約延遲20分）' : '';
+    const prevPx = wlLastPx[code];
+    if (prevPx != null && prevPx !== q.price) flash = q.price > prevPx ? ' flash-up' : ' flash-dn';
+    wlLastPx[code] = q.price;
+  }
+  return { px, diff, pct, tip, flash };
+}
 function quoteBadge(code) {
   const q = wlQuotes[code];
   if ((!q || q.price == null) && wlLast[code] && wlLast[code].close != null) {
@@ -3559,7 +3611,7 @@ function redraw(keepRange = false) {
   if (isHTF()) { redrawHTF(keepRange); return; }
   _anaKey = anaKeyNow();
   const sliced = vd().slice(-currentPeriod);
-  buildCharts(sliced, keepRange);
+  buildCharts(chartSlice(), keepRange);
   runAnalysis(sliced, twiiData);
   if (currentMarket === 'TW') {
     renderRevenue(revenueData, epsData);
@@ -3830,7 +3882,7 @@ function buildCharts(data, keepRange = false) {
   // VWAP
   {
     let cumPV = 0, cumV = 0;
-    const vwapData = data.map(d => {
+    const vwapData = data.slice(Math.max(0, data.length - currentPeriod)).map(d => {   // 仍由「預設顯示區間」第一根起算（圖上多載入的歷史不影響）
       const typicalPrice = (d.max + d.min + d.close) / 3;
       cumPV += typicalPrice * d.Trading_Volume;
       cumV  += d.Trading_Volume;
@@ -3993,8 +4045,8 @@ function buildCharts(data, keepRange = false) {
     }
   }
 
-  try { rsSetup(data); } catch (e) { console.warn('[RS]', e); }   // 相對強弱線（疊在主圖下方，獨立刻度）
-  try { cmpSetup(data); } catch (e) { console.warn('[比較疊圖]', e); }   // 比較疊圖
+  try { rsSetup(data.slice(-currentPeriod)); } catch (e) { console.warn('[RS]', e); }   // 相對強弱線（疊在主圖下方，獨立刻度）
+  try { cmpSetup(data.slice(-currentPeriod)); } catch (e) { console.warn('[比較疊圖]', e); }   // 比較疊圖
 
   // 同步十字線 & 時間軸
   const allCharts = [
@@ -4030,6 +4082,9 @@ function buildCharts(data, keepRange = false) {
   allCharts.forEach(({ c }) => { c.timeScale().subscribeVisibleLogicalRangeChange(() => syncRange(c)); });
 
   allCharts.forEach(({ c }) => c.timeScale().fitContent());
+  // 預設只顯示最近 currentPeriod 根（日K＝半年），更早的歷史已載入，直接拖曳／滾輪即可看
+  _chartN = data.length + fut.length;
+  try { allCharts.forEach(({ c }) => c.timeScale().setVisibleLogicalRange({ from: _chartN - Math.min(currentPeriod, _chartN) - 0.5, to: _chartN + 4 })); } catch {}
   if (savedRange) allCharts.forEach(({ c }) => { try { c.timeScale().setVisibleLogicalRange(savedRange); } catch {} });
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -4038,7 +4093,7 @@ function buildCharts(data, keepRange = false) {
     });
   });
 
-  if(showTrend && !isHTF()) drawTrendChannel(data);
+  if(showTrend && !isHTF()) drawTrendChannel(data.slice(-currentPeriod));
   try { DL.attach(kChart, candleSeries, data); } catch (e) { console.error('DL.attach', e); }
 }
 
@@ -6580,10 +6635,10 @@ document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { rpStop(true); return; }
   }
   switch(e.key){
-    case '1': document.querySelectorAll('.pt:not(.tf)')[0]?.click(); break;
-    case '2': document.querySelectorAll('.pt:not(.tf)')[1]?.click(); break;
-    case '3': document.querySelectorAll('.pt:not(.tf)')[2]?.click(); break;
-    case '4': document.querySelectorAll('.pt:not(.tf)')[3]?.click(); break;
+    case '1': zoomBars((TF_WIN[currentTF] || TF_WIN.D)[0][0]); break;
+    case '2': zoomBars((TF_WIN[currentTF] || TF_WIN.D)[1][0]); break;
+    case '3': zoomBars((TF_WIN[currentTF] || TF_WIN.D)[2][0]); break;
+    case '4': zoomBars((TF_WIN[currentTF] || TF_WIN.D)[3][0]); break;
     case 'Escape':
       if (DL.escape()) break;
       document.getElementById('dateTo').value = '';
@@ -6993,7 +7048,7 @@ function rpStart() {
 function rpRender() {
   if (!rp.on) return;
   priceData = rp.full.slice(0, rp.idx + 1); futureBars = [];
-  try { buildCharts(vd().slice(-currentPeriod), false); } catch (e) { console.warn('[回放]', e); }
+  try { buildCharts(chartSlice(), false); } catch (e) { console.warn('[回放]', e); }
   try { renderMeta(currentStockId, (document.querySelector('#metaBar .stock-name-tag') || {}).textContent || '', currentMarket); } catch (e) {}   // 上方報價列跟著當根走，不洩漏之後的價格
   rpHud();
 }
