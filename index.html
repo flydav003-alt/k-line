@@ -893,7 +893,7 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wl-sub{grid-column:2 / -1;min-width:0;}
 .wl-sub .wl-alert{margin-left:0;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;}
 /* 自選清單：完全仿 TV —— 固定兩行（第一行 代號＋價格；第二行 名稱＋漲跌＋漲跌%），不隨內容變高 */
-.wl-item.wlx{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:1px 12px;align-items:center;position:relative;padding:7px 14px;height:50px;box-sizing:border-box;cursor:pointer;}
+.wl-item.wlx{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto;gap:0 12px;align-items:center;position:relative;padding:4px 14px;height:44px;box-sizing:border-box;cursor:pointer;}
 .wlx-sym{grid-column:1;grid-row:1;min-width:0;overflow:hidden;white-space:nowrap;font-size:.88rem;font-weight:700;color:var(--text);}
 .wlx-px{grid-column:2;grid-row:1;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.88rem;font-weight:600;font-variant-numeric:tabular-nums;min-height:1.2em;}
 .wl-px.wlx-px{font-size:.88rem;padding:0 2px;}
@@ -901,6 +901,12 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wlx-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;}
 .wlx-pnl{flex:none;font-family:var(--mono);font-size:.64rem;font-weight:600;line-height:1.5;padding:0 6px;border-radius:8px;border:1px solid currentColor;}
 .wlx-chg{grid-column:2;grid-row:2;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.72rem;font-variant-numeric:tabular-nums;min-height:1.2em;}
+.wl-px.lim-up.wlx-px,.wl-px.lim-dn.wlx-px{color:#fff !important;padding:0 6px;border-radius:4px;opacity:1 !important;}
+.wl-px.lim-up.wlx-px{background:var(--up);}
+.wl-px.lim-dn.wlx-px{background:var(--green);}
+.wlx-lim{margin-left:6px;font-size:.62rem;font-weight:700;line-height:1.5;padding:0 5px;border-radius:4px;color:#fff;vertical-align:1px;}
+.wlx-lim.up{background:var(--up);}
+.wlx-lim.dn{background:var(--green);}
 .wlx-alert{margin-left:6px;font-size:.72rem;color:#ff9f40;cursor:help;font-weight:400;}
 .wlx-stop{margin-left:5px;font-size:.7rem;color:var(--warn,#e8a317);font-weight:400;}
 .wlx-tools{display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);gap:8px;align-items:center;padding:3px 8px;border-radius:5px;background:var(--s2);border:1px solid var(--border2);}
@@ -2469,11 +2475,13 @@ function renderWatchlist() {
     const chgTxt = (qp.diff != null ? `${sg(qp.diff)}${f2(Math.abs(qp.diff))}` : '') + (qp.pct != null ? `&nbsp;&nbsp;${sg(qp.pct)}${Math.abs(qp.pct).toFixed(2)}%` : '');
     const pnl = pnlBadge(code).replace(/<[^>]+>/g, '');
     const name = nameOf(code) || '';
+    const lm = hasQ ? wlLimitState(code, qp) : null;
+    const limTag = lm ? `<span class="wlx-lim ${lm.type}" title="${lm.type === 'up' ? '漲停' : '跌停'}價 ${f2(lm.price)}（±${Math.round(lm.lim * 100)}%）">${lm.type === 'up' ? '漲停' : '跌停'}</span>` : '';
     const rowTip = `拖曳可調整順序，點擊查看 ${code}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
     return `
     <div class="wl-item wlx${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="${escHtml(rowTip)}">
-      <span class="wlx-sym">${escHtml(code)}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}</span>
-      <span class="wlx-px wl-px${qp.flash}" style="color:${hasQ ? color : 'var(--muted)'}${qp.tip && hasQ && /最近收盤/.test(qp.tip) ? ';opacity:.75' : ''}">${pxTxt}</span>
+      <span class="wlx-sym">${escHtml(code)}${limTag}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}</span>
+      <span class="wlx-px wl-px${qp.flash}${lm ? (lm.type === 'up' ? ' lim-up' : ' lim-dn') : ''}" style="color:${hasQ ? color : 'var(--muted)'}${qp.tip && hasQ && /最近收盤/.test(qp.tip) ? ';opacity:.75' : ''}">${pxTxt}</span>
       <span class="wlx-name"><span class="wlx-nm">${escHtml(name)}</span>${pnlChip(code)}</span>
       <span class="wlx-chg" style="color:${color}">${chgTxt}</span>
       <span class="wlx-tools" onclick="event.stopPropagation()">${wlGroups.length > 1 ? `<span class="wl-mv" onclick="wlOpenMenu(event,'${code}')" title="放進／移出其他清單">⇄</span>` : ''}<span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span><span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span></span>
@@ -2762,6 +2770,29 @@ function wlQuoteParts(code) {
     wlLastPx[code] = q.price;
   }
   return { px, diff, pct, tip, flash };
+}
+// ── 漲跌停判斷：用前收算出理論漲跌停價（依檔位捨去／進位），不用百分比門檻 ──
+// 一般股票與一般 ETF ±10%；槓桿型／反向型 ETF（正2、反1，代號常以 L／R 結尾）±20%
+const WL_LIM_NORMAL = 0.10, WL_LIM_LEV = 0.20;
+function wlTick(p, etf) {
+  if (etf) return p < 50 ? 0.01 : 0.05;
+  return p < 10 ? 0.01 : p < 50 ? 0.05 : p < 100 ? 0.1 : p < 500 ? 0.5 : p < 1000 ? 1 : 5;
+}
+function wlIsLevEtf(code, name) {
+  return /^00\d{2,4}[LR]$/i.test(code) || /正2|正二|反1|反一|槓桿|反向/.test(name || '');
+}
+function wlLimitState(code, qp) {
+  if (!/^\d{4,6}[A-Za-z]?$/.test(code) || qp.px == null || qp.diff == null) return null;   // 排除指數、加密幣、美股
+  const px = qp.px, prev = Math.round((px - qp.diff) * 100) / 100;
+  if (!(prev > 0)) return null;
+  const etf = /^00/.test(code), lim = wlIsLevEtf(code, nameOf(code)) ? WL_LIM_LEV : WL_LIM_NORMAL;
+  const upRaw = prev * (1 + lim), dnRaw = prev * (1 - lim);
+  const tu = wlTick(upRaw, etf), td = wlTick(dnRaw, etf);
+  const up = Math.floor(upRaw / tu + 1e-9) * tu, dn = Math.ceil(dnRaw / td - 1e-9) * td;
+  const k = v => Math.round(v * 1000);
+  if (k(px) >= k(up)) return { type: 'up', price: up, lim };
+  if (k(px) <= k(dn)) return { type: 'dn', price: dn, lim };
+  return null;
 }
 function quoteBadge(code) {
   const q = wlQuotes[code];
