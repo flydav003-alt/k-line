@@ -425,8 +425,9 @@ body.us-mode #stockInput{ width:100px; }
 .chart-label{
   position:absolute;top:6px;left:10px;
   font-family:var(--mono);font-size:.65rem;
-  color:var(--muted);z-index:10;pointer-events:none;
+  color:var(--muted2);z-index:10;pointer-events:none;
   display:flex;gap:10px;
+  padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--bg) 72%, transparent);
 }
 .cl-item{display:flex;align-items:center;gap:4px;}
 .cl-dot{width:8px;height:2px;border-radius:1px;}
@@ -633,7 +634,8 @@ html{scrollbar-width:thin;scrollbar-color:var(--border2) var(--bg);}
   font-family:var(--mono);font-size:.65rem;padding:3px 9px;border-radius:10px;
   cursor:pointer;border:1px solid transparent;transition:opacity .15s;user-select:none;
 }
-.ma-chip-btn[data-off="1"]{opacity:.3;}
+.ma-chip-btn[data-off="1"]{opacity:.6;border-color:var(--border2);}
+.ma-chip-btn[data-off="1"]:hover{opacity:.9;}
 
 /* ── DATE RANGE ── */
 .date-range-bar{
@@ -936,7 +938,7 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 
 /* ── 副圖：比例分配、可拖曳調整、可收合 ── */
 .chart-block{min-height:220px;}
-.sub-charts{flex:none;height:var(--subH, max(147px, min(clamp(213px, 46.3vh, 463px), calc(100vh - 440px))));overflow:hidden;}   /* 預設高度再降 1/3（原 69.4vh → 46.3vh）；上限為保留 K 線圖約 250px 以上 */
+.sub-charts{flex:none;height:var(--subH, max(130px, min(clamp(140px, 27vh, 280px), calc(100vh - 480px))));overflow:hidden;}   /* 預設高度再降 1/3（原 69.4vh → 46.3vh）；上限為保留 K 線圖約 250px 以上 */
 @media(max-width:960px){.sub-charts{height:var(--subH, clamp(107px, 23.1vh, 231px));}}
 @supports (height:1svh){@media(max-width:960px){.sub-charts{height:var(--subH, clamp(107px, 23.1svh, 231px));}}}
 @media(max-width:960px){#statusBar{position:fixed;left:0;right:0;bottom:0;z-index:300;max-height:40vh;overflow:auto;padding:8px 12px;box-shadow:0 -2px 8px rgba(0,0,0,.35);background-color:var(--s1);}}   /* 狀態列改浮動，出現/消失不再把整頁往下推 */   /* 手機版同步降低 1/3 */
@@ -957,9 +959,10 @@ body.sub-collapsed .sub-charts{display:none;}
 .draw-bar::-webkit-scrollbar{display:none;}
 .dw-tools{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;width:100%;}
 .dw-toggle{display:none;}
-.dw-btn{width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--muted2);cursor:pointer;padding:0;}
-.dw-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
-.dw-btn:hover{background:var(--s2);color:var(--text);}
+.dw-btn{width:32px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:6px;color:var(--text);opacity:.78;cursor:pointer;padding:0;}
+.dw-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;}
+.dw-btn:hover{background:var(--s2);color:var(--text);opacity:1;}
+.dw-btn.on{opacity:1;}
 .dw-btn:disabled{opacity:.3;cursor:default;pointer-events:none;}
 .dw-btn.on{background:rgba(232,184,75,.14);border-color:rgba(232,184,75,.55);color:var(--gold);}
 .rt-badge{flex:none;font-size:.72rem;font-weight:600;color:#00c896;white-space:nowrap;animation:rtPulse 1.6s ease-in-out infinite;}
@@ -1684,6 +1687,34 @@ let kdKSeries = null, kdDSeries = null;
 let bbVisible = false;      // 預設關閉
 let vwapVisible = true;
 let vwapSeries = null;
+let _axLast = null, _axVwap = null;   // 價格軸：現價／VWAP 標籤的價位（用來避開重疊的刻度字）
+// X 軸刻度：日K 顯示「月/日」，跨月顯示「N月」，跨年顯示年份；小時線顯示 HH:mm
+function kTickFmt(time, type) {
+  let y, m, d, hh = null, mm = null;
+  if (typeof time === 'string') { const a = time.split('-'); y = +a[0]; m = +a[1]; d = +(a[2] || 1); }
+  else if (typeof time === 'number') { const t = new Date(time * 1000); y = t.getUTCFullYear(); m = t.getUTCMonth() + 1; d = t.getUTCDate(); hh = t.getUTCHours(); mm = t.getUTCMinutes(); }
+  else if (time && time.year) { y = time.year; m = time.month; d = time.day; }
+  else return '';
+  const p2 = n => String(n).padStart(2, '0');
+  if (type === 0) return String(y);
+  if (type === 1) return m + '月';
+  if (type === 2) return m + '/' + d;
+  return hh == null ? m + '/' + d : p2(hh) + ':' + p2(mm);
+}
+// Y 軸：刻度字若與現價／VWAP 標籤垂直距離太近就不畫（標籤本身與十字線價位不受影響）
+function axFmt(p) {
+  const s = Number(p).toFixed(2);
+  try {
+    if (!candleSeries || !isFinite(p)) return s;
+    if (!(p >= 100 ? Number.isInteger(p) : Number.isInteger(p * 2))) return s;   // 只處理「整齊的刻度值」，十字線的任意價位不動
+    for (const r of [_axLast, vwapVisible ? _axVwap : null]) {
+      if (r == null || Math.abs(p - r) < 1e-9) continue;
+      const y1 = candleSeries.priceToCoordinate(p), y2 = candleSeries.priceToCoordinate(r);
+      if (y1 != null && y2 != null && Math.abs(y1 - y2) < 15) return '';
+    }
+  } catch {}
+  return s;
+}
 let showPatterns = false;   // K線型態標記，預設關閉
 let _markerArgs = null;
 let kdVisible = true;
@@ -2476,8 +2507,9 @@ function renderWatchlist() {
     const pnl = pnlBadge(code).replace(/<[^>]+>/g, '');
     const name = nameOf(code) || '';
     const lm = hasQ ? wlLimitState(code, qp) : null;
-    const limTag = lm ? `<span class="wlx-lim ${lm.type}" title="${lm.type === 'up' ? '漲停' : '跌停'}價 ${f2(lm.price)}（±${Math.round(lm.lim * 100)}%）">${lm.type === 'up' ? '漲停' : '跌停'}</span>` : '';
-    const rowTip = `拖曳可調整順序，點擊查看 ${code}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
+    const limTag = '';   // 只用價格格子填色表示，不再加標籤
+    const limTip = lm ? `${lm.type === 'up' ? '漲停' : '跌停'}價 ${f2(lm.price)}（±${Math.round(lm.lim * 100)}%）` : '';
+    const rowTip = `拖曳可調整順序，點擊查看 ${code}${limTip ? '\n' + limTip : ''}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
     return `
     <div class="wl-item wlx${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="${escHtml(rowTip)}">
       <span class="wlx-sym">${escHtml(code)}${limTag}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}</span>
@@ -4130,7 +4162,7 @@ function buildCharts(data, keepRange = false) {
 
   kChart = LightweightCharts.createChart(kEl, {
     ...lwChartOpts(kH),
-    timeScale:{ borderColor:cssv('--c-border'), visible:true, timeVisible:true, secondsVisible:false, textColor:cssv('--c-text2') },   // 日期軸放在K線正下方
+    timeScale:{ borderColor:cssv('--c-border'), visible:true, timeVisible:true, secondsVisible:false, textColor:cssv('--c-text2'), tickMarkFormatter:kTickFmt },   // 日期軸放在K線正下方
   });
 
   candleSeries = kChart.addCandlestickSeries({
@@ -4152,6 +4184,8 @@ function buildCharts(data, keepRange = false) {
   candleSeries.setData(data.map(d=>({
     time:d.date, open:d.open, high:d.max, low:d.min, close:d.close
   })));
+  _axLast = data.length ? data[data.length-1].close : null; _axVwap = null;
+  candleSeries.applyOptions({ priceFormat:{ type:'custom', minMove:0.01, formatter:axFmt } });
   // 回測：回測日之後的K棒用淡色畫在右側（只顯示，不參與任何指標計算）
   futureSeries = null; btPriceLines = [];
   const fut = (btDate() && btReveal && currentTF === 'D')
@@ -4203,6 +4237,7 @@ function buildCharts(data, keepRange = false) {
       crosshairMarkerVisible: false, title: 'VWAP', visible: vwapVisible,
     });
     vwapSeries.setData(vwapData);
+    _axVwap = vwapData.length ? vwapData[vwapData.length-1].value : null;
     document.getElementById('vwapChip')?.setAttribute('data-off', vwapVisible ? '0' : '1');
   }
 
@@ -4232,7 +4267,9 @@ function buildCharts(data, keepRange = false) {
     timeScale:{ borderColor:cssv('--c-border'), visible:false, timeVisible:true, secondsVisible:false },
     rightPriceScale:{ scaleMargins:{top:.1,bottom:0} },
   });
-  volSeries = volChart.addHistogramSeries({ priceFormat:{ type:'volume' }, priceScaleId:'' });
+  const _twVol = currentMarket === 'TW' && currentStockId !== 'TWII';   // 台股：股 → 張
+  volSeries = volChart.addHistogramSeries({ priceFormat: _twVol ? { type:'custom', minMove:1, formatter: v => Math.round(v / 1000).toLocaleString('en-US') } : { type:'volume' }, priceScaleId:'' });
+  try { const _vl = document.querySelector('#volLabel > span'); if (_vl) _vl.textContent = _twVol ? '成交量(張)' : '成交量'; } catch {}
   volSeries.priceScale().applyOptions({ scaleMargins:{top:.1,bottom:0} });
   volSeries.setData([...data.map(d=>({
     time:d.date, value:d.Trading_Volume,
