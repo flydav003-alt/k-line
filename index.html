@@ -86,7 +86,7 @@ body{
   color:var(--text);
   font-family:var(--font);
   min-height:100vh;
-  overflow-x:hidden;
+  overflow-x:clip;   /* 用 clip 不用 hidden：hidden 會讓 body 變成捲動容器，導致 header sticky 失效 */
 }
 
 /* ── HEADER ── */
@@ -920,14 +920,16 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 
 /* ── 手機：右欄在圖表下方，頁面捲動，不橫向捲動 ── */
 @media(max-width:960px){
-  html,body{overflow-x:hidden !important;}
+  html,body{overflow-x:clip !important;}   /* 同上：clip 才不會破壞 sticky */
   header{padding:0 8px;gap:6px;}
   .logo span{display:none;}
   .logo{font-size:.8rem;letter-spacing:1px;}
   #stockInput{width:84px;padding:7px 8px;letter-spacing:1px;}
   .btn-analyze,.btn-realtime{padding:7px 9px;font-size:.74rem;}
   header{height:auto;flex-wrap:wrap;padding:6px 8px;}
-  header #metaBar{order:9;flex:1 0 100%;height:auto;min-height:36px;padding:4px 2px;gap:4px 10px;flex-wrap:wrap;overflow:visible;white-space:normal;}
+  header #metaBar{order:9;flex:1 0 100%;height:36px;min-height:36px;padding:0 2px;gap:10px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;white-space:nowrap;scrollbar-width:none;}   /* 單行、可左右滑：鎖住時只佔 36px */
+  header #metaBar::-webkit-scrollbar{display:none;}
+  header{top:calc(-1 * var(--hdrOff, 0px));}   /* 搜尋列往上捲走，只留股票報價列黏在頂端 */
   .search-wrap{flex:1 1 auto;}
   .more-wrap{margin-left:auto;}
   .layout{height:auto;min-height:0;}
@@ -4057,6 +4059,21 @@ function fitMetaBar() {
   shrink(0.62);
   if (over()) hide('.mp-iv');
 }
+// 手機：header 往上捲時，只讓「代號/價格列(metaBar)」留在頂端
+function updateHdrOff() {
+  const h = document.querySelector('header'), m = document.getElementById('metaBar');
+  if (!h || !m) return;
+  let off = 0;
+  if (window.innerWidth <= 960 && m.classList.contains('show')) off = Math.max(0, h.offsetHeight - m.offsetHeight - 1);
+  document.documentElement.style.setProperty('--hdrOff', off + 'px');
+}
+(function () {
+  const h = document.querySelector('header');
+  window.addEventListener('resize', updateHdrOff);
+  if (h && typeof ResizeObserver !== 'undefined') new ResizeObserver(updateHdrOff).observe(h);
+  if (h && typeof MutationObserver !== 'undefined') new MutationObserver(updateHdrOff).observe(document.getElementById('metaBar'), { attributes: true, attributeFilter: ['class'] });
+  updateHdrOff();
+})();
 (function () {
   window.addEventListener('resize', () => { try { fitMetaBar(); } catch (e) {} });
   if (typeof ResizeObserver !== 'undefined') { const el = document.getElementById('metaBar'); if (el) new ResizeObserver(() => { try { fitMetaBar(); } catch (e) {} }).observe(el); }
