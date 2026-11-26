@@ -4020,7 +4020,7 @@ function renderMeta(stockId, stockName, market) {
     <span class="meta-pill mp-ohl">開 <b>${isUS ? '$'+last.open.toFixed(2) : (stockId === 'TWII' ? last.open.toFixed(2) : last.open)}</b></span>
     <span class="meta-pill mp-ohl">高 <b>${isUS ? '$'+last.max.toFixed(2) : (stockId === 'TWII' ? last.max.toFixed(2) : last.max)}</b></span>
     <span class="meta-pill mp-ohl">低 <b>${isUS ? '$'+last.min.toFixed(2) : (stockId === 'TWII' ? last.min.toFixed(2) : last.min)}</b></span>
-    ${stockId === 'TWII' ? '' : `<span class="meta-pill">量 <b>${volText}</b></span>`}
+    ${stockId === 'TWII' ? '' : `<span class="meta-pill">量 <b>${volText}</b>${isUS ? '' : ` <span style="opacity:.7;font-size:.9em" title="成交金額估算＝收盤價×成交股數">≈${volFmtAmt(last.Trading_Volume * last.close)}</span>`}</span>`}
     ${!isUS && liveMeta ? `<span class="meta-pill mp-src">📡 <b>${liveMeta.source}</b> ${liveMeta.time}</span>` : ''}
     ${!isUS && intradayVolInfo ? (() => {
       const { todayVol, prevDayVol, ratio, volShare, time } = intradayVolInfo;
