@@ -291,7 +291,8 @@ body.us-mode #stockInput{ width:100px; }
 
 /* ── 手機 / iPad 直向 ── */
 @media(max-width:960px){
-  html, body { overflow-y:auto !important; height:auto !important; }
+  html { overflow-y:auto !important; height:auto !important; }
+  body { overflow-y:visible !important; height:auto !important; }   /* body 不能有 overflow（auto/hidden），否則變捲動容器，header sticky 會失效 */
   .layout{
     flex-direction:column;
     height:auto;
