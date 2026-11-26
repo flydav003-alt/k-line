@@ -430,6 +430,8 @@ body.us-mode #stockInput{ width:100px; }
   padding:1px 6px;border-radius:4px;background:color-mix(in srgb, var(--bg) 72%, transparent);
 }
 .cl-item{display:flex;align-items:center;gap:4px;}
+.vol-mode-btn{position:absolute;top:4px;right:74px;z-index:12;font-family:var(--mono);font-size:.62rem;padding:1px 8px;border-radius:8px;border:1px solid var(--border2);background:var(--s1);color:var(--muted2);cursor:pointer;line-height:1.5;}
+.vol-mode-btn:hover{color:var(--gold);border-color:var(--gold);}
 .cl-dot{width:8px;height:2px;border-radius:1px;}
 
 /* ── RIGHT PANEL ── */
@@ -901,7 +903,7 @@ body.no-stock #splash{flex:1;grid-column:auto;overflow:auto;padding:40px 20px;}
 .wl-px.wlx-px{font-size:.88rem;padding:0 2px;}
 .wlx-name{grid-column:1;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.7rem;color:var(--muted2);min-height:1.2em;display:flex;align-items:center;gap:6px;}
 .wlx-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;}
-.wlx-pnl{flex:none;font-family:var(--mono);font-size:.64rem;font-weight:600;line-height:1.5;padding:0 6px;border-radius:8px;border:1px solid currentColor;}
+.wlx-pnl{flex:none;font-family:var(--mono);font-size:.62rem;font-weight:600;line-height:1.45;padding:0 6px;border-radius:8px;border:1px solid currentColor;margin-left:6px;vertical-align:1px;}
 .wlx-chg{grid-column:2;grid-row:2;text-align:right;white-space:nowrap;font-family:var(--mono);font-size:.72rem;font-variant-numeric:tabular-nums;min-height:1.2em;}
 .wl-px.lim-up.wlx-px,.wl-px.lim-dn.wlx-px{color:#fff !important;padding:0 6px;border-radius:4px;opacity:1 !important;}
 .wl-px.lim-up.wlx-px{background:var(--up);}
@@ -1236,6 +1238,7 @@ body.sub-collapsed .sub-charts{display:none;}
             <span>成交量</span>
             <span class="cl-item"><span class="cl-dot" style="background:#e8b84b"></span><span>量均20</span></span>
           </div>
+          <button class="vol-mode-btn" id="volModeBtn" onclick="toggleVolMode()" title="切換成交量單位：張／金額（收盤價×股數估算）" style="display:none">張 ⇄</button>
           <div id="volumeChart"></div>
         </div>
         <div class="sub-chart-wrap">
@@ -1687,7 +1690,25 @@ let kdKSeries = null, kdDSeries = null;
 let bbVisible = false;      // 預設關閉
 let vwapVisible = true;
 let vwapSeries = null;
-let _axLast = null, _axVwap = null;   // 價格軸：現價／VWAP 標籤的價位（用來避開重疊的刻度字）
+let _axLast = null, _axVwap = null;
+let volMode = 'qty', _volSrc = null;   // 台股成交量：qty＝張、amt＝金額（收盤×股數估算）
+try { if (localStorage.getItem('kline_vol_mode') === 'amt') volMode = 'amt'; } catch {}
+function volFmtAmt(v) { return v >= 1e8 ? (v / 1e8).toFixed(2) + '億' : v >= 1e4 ? Math.round(v / 1e4).toLocaleString('en-US') + '萬' : Math.round(v).toLocaleString('en-US'); }
+function volApply() {
+  const btn = document.getElementById('volModeBtn');
+  if (!_volSrc || !volSeries || !volMaSeries) return;
+  const { data, fut, tw } = _volSrc, amt = tw && volMode === 'amt';
+  if (btn) { btn.style.display = tw ? '' : 'none'; btn.textContent = amt ? '金額 ⇄' : '張 ⇄'; }
+  try { const vl = document.querySelector('#volLabel > span'); if (vl) vl.textContent = tw ? (amt ? '成交金額(估)' : '成交量(張)') : '成交量'; } catch {}
+  if (!tw) return;
+  const val = d => amt ? d.Trading_Volume * d.close : d.Trading_Volume;
+  const col = (d, a) => d.close >= d.open ? `rgba(255,77,109,${a})` : `rgba(0,200,150,${a})`;
+  volSeries.applyOptions({ priceFormat: { type:'custom', minMove:1, formatter: amt ? volFmtAmt : (v => Math.round(v / 1000).toLocaleString('en-US')) } });
+  volSeries.setData([...data.map(d => ({ time:d.date, value:val(d), color:col(d, .65) })), ...fut.map(d => ({ time:d.date, value:val(d), color:col(d, .25) }))]);
+  if (amt) { const arr = data.map(val), out = []; for (let i = 19; i < arr.length; i++) { let t = 0; for (let j = i - 19; j <= i; j++) t += arr[j]; out.push({ time:data[i].date, value:t / 20 }); } volMaSeries.setData(out); }
+  else volMaSeries.setData(calcAvgVol(data, 20));
+}
+function toggleVolMode() { volMode = volMode === 'amt' ? 'qty' : 'amt'; try { localStorage.setItem('kline_vol_mode', volMode); } catch {} volApply(); }   // 價格軸：現價／VWAP 標籤的價位（用來避開重疊的刻度字）
 // X 軸刻度：日K 顯示「月/日」，跨月顯示「N月」，跨年顯示年份；小時線顯示 HH:mm
 function kTickFmt(time, type) {
   let y, m, d, hh = null, mm = null;
@@ -1700,6 +1721,15 @@ function kTickFmt(time, type) {
   if (type === 1) return m + '月';
   if (type === 2) return m + '/' + d;
   return hh == null ? m + '/' + d : p2(hh) + ':' + p2(mm);
+}
+function kCrossFmt(time) {
+  let y, m, d, hh = null, mm = null;
+  if (typeof time === 'string') { const a = time.split('-'); y = +a[0]; m = +a[1]; d = +(a[2] || 1); }
+  else if (typeof time === 'number') { const t = new Date(time * 1000); y = t.getUTCFullYear(); m = t.getUTCMonth() + 1; d = t.getUTCDate(); hh = t.getUTCHours(); mm = t.getUTCMinutes(); }
+  else if (time && time.year) { y = time.year; m = time.month; d = time.day; }
+  else return '';
+  const p2 = n => String(n).padStart(2, '0'), wd = '日一二三四五六'[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${y}/${p2(m)}/${p2(d)}（${wd}）` + (hh == null ? '' : ` ${p2(hh)}:${p2(mm)}`);
 }
 // Y 軸：刻度字若與現價／VWAP 標籤垂直距離太近就不畫（標籤本身與十字線價位不受影響）
 function axFmt(p) {
@@ -2512,9 +2542,9 @@ function renderWatchlist() {
     const rowTip = `拖曳可調整順序，點擊查看 ${code}${limTip ? '\n' + limTip : ''}${pnl ? '\n' + pnl : ''}${qp.tip ? '\n' + qp.tip : ''}`;
     return `
     <div class="wl-item wlx${code === currentStockId ? ' active' : ''}" draggable="true" data-code="${code}" onclick="loadFromWatchlist('${code}')" title="${escHtml(rowTip)}">
-      <span class="wlx-sym">${escHtml(code)}${limTag}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}</span>
+      <span class="wlx-sym">${escHtml(code)}${limTag}${alertBadge(code, true)}${stopOf(code) ? `<span class="wlx-stop" title="${escHtml(stopTip(code))}">⚑</span>` : ''}${pnlChip(code)}</span>
       <span class="wlx-px wl-px${qp.flash}${lm ? (lm.type === 'up' ? ' lim-up' : ' lim-dn') : ''}" style="color:${hasQ ? color : 'var(--muted)'}${qp.tip && hasQ && /最近收盤/.test(qp.tip) ? ';opacity:.75' : ''}">${pxTxt}</span>
-      <span class="wlx-name"><span class="wlx-nm">${escHtml(name)}</span>${pnlChip(code)}</span>
+      <span class="wlx-name"><span class="wlx-nm">${escHtml(name)}</span></span>
       <span class="wlx-chg" style="color:${color}">${chgTxt}</span>
       <span class="wlx-tools" onclick="event.stopPropagation()">${wlGroups.length > 1 ? `<span class="wl-mv" onclick="wlOpenMenu(event,'${code}')" title="放進／移出其他清單">⇄</span>` : ''}<span class="wl-flag${stopOf(code) ? ' on' : ''}" onclick="editStop(event,'${code}')" title="${escHtml(stopTip(code))}">⚑</span><span class="wl-del" onclick="removeFromWatchlist(event,'${code}')" title="移除">✕</span></span>
     </div>`;
@@ -4162,7 +4192,8 @@ function buildCharts(data, keepRange = false) {
 
   kChart = LightweightCharts.createChart(kEl, {
     ...lwChartOpts(kH),
-    timeScale:{ borderColor:cssv('--c-border'), visible:true, timeVisible:true, secondsVisible:false, textColor:cssv('--c-text2'), tickMarkFormatter:kTickFmt },   // 日期軸放在K線正下方
+    timeScale:{ borderColor:cssv('--c-border'), visible:true, timeVisible:true, secondsVisible:false, textColor:cssv('--c-text2'), tickMarkFormatter:kTickFmt },
+    localization:{ timeFormatter:kCrossFmt },   // 日期軸放在K線正下方
   });
 
   candleSeries = kChart.addCandlestickSeries({
@@ -4280,6 +4311,7 @@ function buildCharts(data, keepRange = false) {
   }))]);
   volMaSeries = volChart.addLineSeries({ color:cssv('--gold'), lineWidth:1, priceScaleId:'', priceLineVisible:false, lastValueVisible:false, crosshairMarkerVisible:false });
   volMaSeries.setData(calcAvgVol(data, 20));
+  _volSrc = { data, fut, tw: _twVol }; volApply();
 
   // MACD Chart — 使用固定 priceScaleId 確保不干擾 K 線圖
   macdChartObj = LightweightCharts.createChart(mEl, {
@@ -6354,7 +6386,7 @@ function addVolumeMarkers(data, avgVolArr) {
         time: d.date, position: isBull ? 'belowBar' : 'aboveBar',
         color: isBull ? 'rgba(255,77,109,0.9)' : 'rgba(0,200,150,0.9)',
         shape: isBull ? 'arrowUp' : 'arrowDown',
-        text: `爆量×${ratio.toFixed(1)}`, size: 1,
+        text: `量×${ratio.toFixed(1)}`, size: 1,
       });
     } else if(ratio < 0.35 && i > 0 && i - lastSmall >= 6){   // 縮量標記至少相隔6根，避免連成一排
       lastSmall = i;
