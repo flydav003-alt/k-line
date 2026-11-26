@@ -397,6 +397,11 @@ body.us-mode #stockInput{ width:110px; }
 /* 週期列：仿 TV 的低高度（半年／1年／2年／5年按鈕已移除，改拖曳／滾輪縮放） */
 #tfRow{height:30px;box-sizing:border-box;}
 #tfRow .chart-tabs{height:30px;align-items:stretch;}
+#tfRow .tf-sep{flex:none;width:1px;height:14px;background:var(--border2);margin:0 8px;align-self:center;}
+#tfRow .tf-tool{flex:none;height:30px;box-sizing:border-box;padding:0 11px;display:flex;align-items:center;font-size:.74rem;font-family:var(--mono);font-weight:500;color:var(--muted2);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;user-select:none;}
+#tfRow .tf-tool:hover{color:var(--text);}
+#tfRow .tf-tool.on{color:var(--gold);border-bottom-color:var(--gold);}
+#tfRow.id-on .tf-tool,#tfRow.id-on .tf-sep{display:none;}
 #tfRow .pt{padding:0 11px;height:30px;box-sizing:border-box;display:flex;align-items:center;font-size:.74rem;}
 
 .chart-block{flex:1;position:relative;min-height:0;}
@@ -898,6 +903,9 @@ body.sub-collapsed .sub-charts{display:none;}
 .dw-btn:hover{background:var(--s2);color:var(--text);}
 .dw-btn:disabled{opacity:.3;cursor:default;pointer-events:none;}
 .dw-btn.on{background:rgba(232,184,75,.14);border-color:rgba(232,184,75,.55);color:var(--gold);}
+.rt-badge{flex:none;font-size:.72rem;font-weight:600;color:#00c896;white-space:nowrap;animation:rtPulse 1.6s ease-in-out infinite;}
+@keyframes rtPulse{0%,100%{opacity:1}50%{opacity:.45}}
+#btnRealtime{display:none !important;}   /* 即時改為自動啟動，不再需要按鈕 */
 .dw-sep{display:block;width:22px;height:1px;background:var(--border2);margin:5px 0;flex:none;}
 .dw-props{position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:7;display:none;align-items:center;gap:5px;padding:4px 8px;background:var(--panel-a);border:1px solid var(--border2);border-radius:8px;max-width:calc(100% - 16px);flex-wrap:wrap;font-size:.7rem;color:var(--muted2);}
 .dw-props.show{display:flex;}
@@ -998,6 +1006,8 @@ body.sub-collapsed .sub-charts{display:none;}
   <!-- 選到的股票（與頂列合併成同一排，仿 TV） -->
   <div id="metaBar"></div>
 
+  <span id="rtBadge" class="rt-badge" style="display:none" title="台股盤中：每 15 秒自動更新即時行情（開任何股票都會自動啟動）">● 即時</span>
+
   <div class="more-wrap" id="moreWrap">
     <button class="more-btn" id="moreBtn" onclick="toggleMoreMenu(event)" title="設定">⋯</button>
     <div class="more-menu" id="moreMenu">
@@ -1091,6 +1101,10 @@ body.sub-collapsed .sub-charts{display:none;}
           <div class="pt tf active" data-tf="D" onclick="setTF('D')">日K</div>
           <div class="pt tf" data-tf="W" onclick="setTF('W')">週K</div>
           <div class="pt tf" data-tf="M" onclick="setTF('M')">月K</div>
+          <span class="tf-sep"></span>
+          <div class="tf-tool" id="dwTrend" onclick="toggleTrendChannel()" title="自動趨勢通道：斜線趨勢線、支撐壓力、圖形型態（T）">通道</div>
+          <div class="tf-tool" id="dwPat" onclick="togglePatterns()" title="在K線圖上標示偵測到的K線型態（P）">型態</div>
+          <div class="tf-tool" id="dwRp" onclick="rpStart()" title="逐根回放：一根一根看走勢（先猜再看）。空白鍵播放／暫停，← → 前後一根，Esc 結束">▶ 回放</div>
           <span class="htf-note" id="htfNote" style="display:none"></span>
         </div>
       </div>
@@ -1142,10 +1156,6 @@ body.sub-collapsed .sub-charts{display:none;}
             <button class="dw-btn" id="dwVis" onclick="DL.toggleVis()" title="顯示／隱藏全部繪圖"><svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
             <button class="dw-btn" id="dwPaste" onclick="DL.paste()" title="貼上已複製的圖形（Ctrl+V；可貼到別的代號，滑鼠在圖上時貼在游標位置）" disabled><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h6"/></svg></button>
             <button class="dw-btn" onclick="DL.clearAll()" title="刪除這檔的全部繪圖"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg></button>
-            <i class="dw-sep"></i>
-            <button class="dw-btn" id="dwTrend" onclick="toggleTrendChannel()" title="自動趨勢通道：斜線趨勢線、支撐壓力、圖形型態（T）"><svg viewBox="0 0 24 24"><path d="M3 17L21 9"/><path d="M3 11L21 3" stroke-dasharray="2 2.5"/><path d="M3 21L21 13" stroke-dasharray="2 2.5"/></svg></button>
-            <button class="dw-btn" id="dwPat" onclick="togglePatterns()" title="K線型態標記（P）"><svg viewBox="0 0 24 24"><path d="M4 18l4-7 4 4 4-9 4 6"/><circle cx="8" cy="11" r="1.3"/><circle cx="16" cy="6" r="1.3"/></svg></button>
-            <button class="dw-btn" id="dwRp" onclick="rpStart()" title="逐根回放：一根一根看走勢（空白鍵播放／暫停）"><svg viewBox="0 0 24 24"><path d="M8 5l11 7-11 7z"/></svg></button>
           </div>
         </div>
         <div class="kline-wrap" id="klineWrap">
@@ -3056,6 +3066,7 @@ function setRtButton(on) {
   if (!b) return;
   b.classList.toggle('rt-active', on);
   b.textContent = on ? '📡 即時中（點擊停止）' : '📡 即時';
+  const bd = document.getElementById('rtBadge'); if (bd) bd.style.display = on ? '' : 'none';
 }
 
 function stopRealtime(msg) {
@@ -3103,7 +3114,8 @@ async function analyzeRealtime() {
   const res = await applyLiveBar(pd, stockId);
   if (pd !== priceData) return;                            // 抓取期間切換了個股
   if (res.status === 'failed') {
-    setStatus('即時行情抓取失敗（圖表仍是 FinMind 日線，可稍後再按一次）。各來源失敗原因：<br>'
+    if (isTWMarketOpen() && !rtTimer) { setRtButton(true); rtTimer = setInterval(rtTick, RT_INTERVAL_MS); }   // 盤中失敗也保持自動重試
+    setStatus('即時行情暫時抓取失敗（圖表先用 FinMind 日線，盤中會自動重試）。各來源失敗原因：<br>'
       + (diagSummary() || '沒有收到任何回應紀錄（整體逾時）'), 'error');
     return;
   }
@@ -3494,6 +3506,18 @@ function autoLiveAfterAnalyze() {
   if (rtTimer) stopRealtime();                       // 換股：舊的自動更新先停，新股重新啟動
   setTimeout(() => { analyzeRealtime().catch(e => console.warn('[自動即時]', e)); }, 0);
 }
+
+// 保證即時一直在跑：開盤後／換股後／上一輪被中斷時，盤中每 15 秒檢查，沒在跑就自動啟動（不需要手動按鈕）
+setInterval(() => {
+  try {
+    if (document.hidden || rtTimer || rtBusy || rp.on) return;
+    if (currentMarket !== 'TW' || !priceData.length || !currentStockId || !isTWMarketOpen()) return;
+    if (document.getElementById('dateTo')?.value) return;
+    const inp = document.getElementById('stockInput');
+    if (inp && resolveStockInput(inp.value) !== currentStockId) return;   // 使用者正在輸入別檔，不要攔截
+    analyzeRealtime().catch(e => console.warn('[自動即時]', e));
+  } catch (e) { console.warn('[自動即時監看]', e); }
+}, 15000);
 
 // ── 加權指數（^TWII）：只有價量K線，沒有籌碼／營收／EPS／大戶持股 ──
 async function analyzeIndex() {
